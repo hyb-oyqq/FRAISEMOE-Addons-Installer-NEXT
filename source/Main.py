@@ -13,7 +13,7 @@ from PySide6.QtGui import QIcon, QPixmap
 from pic_data import img_data
 from GUI import Ui_mainwin
 
-Msgboxtitle = "@FRAISEMOE Addons Installer V4.3.0.29456"
+Msgboxtitle = "@FRAISEMOE Addons Installer V4.5.0.30988"
 
 Packfolder = "./addons"
 
@@ -89,6 +89,24 @@ class MyWindow(QWidget, Ui_mainwin):
             # event.accept()
             shutil.rmtree(Packfolder)
             sys.exit()
+
+    def download_config(self) -> dict:
+        config_url = 'https://cn-sy1.rains3.com/cloudfile/cloudfile/uploads/2025/01/25/xyXGNdvF_download_config.json'
+
+        try:
+            response = requests.get(config_url, timeout=10)
+            response = response.json()
+
+            url_v1 = response['vol.1.data']['url']
+            url_v2 = response['vol.2.data']['url']
+            url_v3 = response['vol.3.data']['url']
+            url_v4 = response['vol.4.data']['url']
+        except Exception:
+            QMessageBox.critical(self, f"错误 {Msgboxtitle}",f"\n获取下载配置失败\n检查网络状态,或服务器故障\n")
+            return {}
+        return {'vol1':url_v1,'vol2':url_v2,'vol3':url_v3,'vol4':url_v4}
+
+    
 
     def CheckFileStat(self, basedic):
         pass
@@ -200,22 +218,27 @@ class MyWindow(QWidget, Ui_mainwin):
     def PackParameter(self):
         # Get the installing stat
         self.CheckFileStat(self.tgtfolder)
-
+        config = self.download_config()
+        if not config:
+            QMessageBox.critical(self, f'错误 {Msgboxtitle}',
+                                     '\n网络连接错误,重启应用再试\n')
+            return
+        
         # Download
         self.DownloadParameter(
-            'https://disk.ovofish.com/f/QOHL/vol.1.7z',
+            config['vol1'],
             f'{self.tgtfolder}/NEKOPARA Vol. 1', 'NEKOPARA Vol.1',
             './addons/vol.1.7z', './addons/vol.1/adultsonly.xp3')
         self.DownloadParameter(
-            'https://disk.ovofish.com/f/ZqfE/vol.2.7z',
+            config['vol2'],
             f'{self.tgtfolder}/NEKOPARA Vol. 2', 'NEKOPARA Vol.2',
             './addons/vol.2.7z', './addons/vol.2/adultsonly.xp3')
         self.DownloadParameter(
-            'https://disk.ovofish.com/f/WkIY/vol.3.7z',
+            config['vol3'],
             f'{self.tgtfolder}/NEKOPARA Vol. 3', 'NEKOPARA Vol.3',
             './addons/vol.3.7z', './addons/vol.3/update00.int')
         self.DownloadParameter(
-            'https://disk.ovofish.com/f/M6FY/vol.4.7z',
+            config['vol4'],
             f'{self.tgtfolder}/NEKOPARA Vol. 4', 'NEKOPARA Vol.4',
             './addons/vol.4.7z', './addons/vol.4/vol4adult.xp3')
         if not self.CompareHash():
