@@ -19,15 +19,10 @@
 
 <p align="center">
   <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer">
-    <img src="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/introduction_imgs/icon.png" alt="Logo" width="80" height="80">
+    <img src="https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/refs/heads/master/introduction_imgs/main.png"
   </a>
-  <h3 align="center">"FRAISEMOE Addons Installer"</h3>
   	<br />
   		<p align="center">
-    		<br />
-      			一个简单的为Nekopara系列游戏安装补丁的应用。
-    		<br />
-      	<br />
       如果本工具对您有有帮助，欢迎Star⭐~
     <br />
     	<br />
@@ -41,8 +36,10 @@
     ·
     <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/issues">提出新特性</a>
     ·
-    <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/FAQ.md">👉使用须知&常见问题👈</a>
+    <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/FAQ.md">👉【用前必看】使用须知👈</a>
   </p>
+
+
 
 
 
@@ -68,7 +65,7 @@
 
 下载[Release](https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/releases)中的应用。
 
-![preview](https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/introduction_imgs/preview.png)
+![preview](https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/refs/heads/master/introduction_imgs/preview.png)
 
 ### **使用步骤**
 
