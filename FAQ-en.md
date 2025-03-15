@@ -44,14 +44,24 @@
 
 ⚠️ **Special Notice:**
 
-> **NEKOPARA Vol. 0 & NEKOPARA Extra are not supported for patch installation ❗**
+> **1. NEKOPARA Vol. 0 & NEKOPARA Extra are not supported for patch installation ❗**
 
-> **Patches will not be installed for games you do not own ❗**
+> **2. Patches will not be installed for games you do not own ❗**
 
-> **This tool is only for patch installation and does not install games ❗ It is limited to Windows systems ❗**
+> **3. This tool is only for patch installation and does not install games ❗ It is limited to Windows systems ❗**
 
-> **The tool requires administrator privileges to run ❗
+> **4. The tool requires administrator privileges to run ❗
 > Reason: To prevent users from running the game while using this tool, which can affect the installation process, the tool checks and closes any running game processes before proceeding ❗**
+
+> **5. Before using this tool, you need to understand the basic knowledge of patch installation:**
+>
+> **5-1. Why is it necessary to install patches? What content is included in the patches?**
+>
+> **5-2. Based on the information provided in the documentation, consider why these errors occur or why the installation fails?**
+>
+> **5-3. After successfully installing the patch, how do you troubleshoot related settings to confirm if the installation was successful?**
+>
+> **_If you are completely unfamiliar with the above knowledge, please refrain from using this tool or refer to tutorial videos. If you have already downloaded this tool, it is recommended to move it to the recycle bin and delete it._**
 
 ---
 
@@ -104,6 +114,7 @@
 </table>
 
 8. Confirm the final installation result, then choose "Exit".
+9. Go to the game and check if there are more options in the "Settings" section. Or if you have previously entered an additional episode and have it in the "EXTRA" option, the patch has been successfully installed. If none of the above happens, repeat the installation steps.
 
 ---
 
@@ -134,11 +145,11 @@
         <td><h5>Error Information</h5></td>
     </tr>
     <tr>
-        <td>Contains "403"</td>
+        <td>Contains "403"/"Access is denied by the server"</td>
         <td>Access denied by the server. Check if a network proxy (VPN) is set up and reset the network proxy (or exit the relevant VPN proxy program), then "Restart the application" and try again.</td>
     </tr>
     <tr>
-        <td>Contains "port=443"</td>
+        <td>Contains "port=443"/"The remote host forcibly closes an existing connection"</td>
         <td>Download interruption. Wait for other tasks to complete file integrity checks/download tasks, then use "Start Install" again, selecting the previously input "parent directory of the game" to install.</td>
     </tr>
     <tr>
