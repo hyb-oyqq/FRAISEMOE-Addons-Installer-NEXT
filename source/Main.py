@@ -7,7 +7,6 @@ import sys
 import base64
 import psutil
 import ctypes
-import base64
 import concurrent.futures
 
 from PySide6 import QtWidgets, QtCore
@@ -33,7 +32,7 @@ app_data = {
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
     "CONFIG_URL": "aHR0cHM6Ly9hcmNoaXZlLm92b2Zpc2guY29tL2FwaS93aWRnZXQvbmVrb3BhcmEvZG93bmxvYWRfdXJsLmpzb24=",
-    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIFB5dGhvbi1BY2NlcHQpIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTE0LjA=",
+    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZS1BY2NlcHQpIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTE0LjA=",
     "game_info": {
         "NEKOPARA Vol.1": {
             "exe": "nekopara_vol1.exe",
@@ -75,8 +74,8 @@ PLUGIN = os.path.join(CACHE, app_data["PLUGIN"])
 CONFIG_URL = decode_base64(app_data["CONFIG_URL"])
 UA = decode_base64(app_data["UA"])
 GAME_INFO = app_data["game_info"]
-BLOCK_SIZE = 64 * 1024
-HASH_SIZE = 128 * 1024
+BLOCK_SIZE = 67108864
+HASH_SIZE = 134217728
 PLUGIN_HASH = {game: info["hash"] for game, info in GAME_INFO.items()}
 PROCESS_INFO = {info["exe"]: game for game, info in GAME_INFO.items()}
 
