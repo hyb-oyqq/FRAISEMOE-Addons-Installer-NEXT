@@ -384,11 +384,29 @@ class MyWindow(QWidget, Ui_mainwin):
             return {
                 f"vol{i+1}": config_data[f"vol.{i+1}.data"]["url"] for i in range(4)
             }
-        except (requests.exceptions.RequestException, ValueError) as e:
+        except requests.exceptions.RequestException as e:
+            # 获取 HTTP 状态码
+            status_code = e.response.status_code if e.response is not None else "未知"
+            try:
+                # 尝试从响应中解析 JSON 并提取 title 和 message
+                error_response = e.response.json() if e.response else {}
+                json_title = error_response.get("title", "无错误类型")
+                json_message = error_response.get("message", "无附加错误信息")
+            except (ValueError, AttributeError):
+                json_title = "配置文件异常，无法解析错误类型"
+                json_message = "配置文件异常，无法解析错误信息"
+
             QMessageBox.critical(
                 self,
                 f"错误 {APP_NAME}",
-                f"\n下载配置获取失败\n\n【错误信息】：{e}\n",
+                f"\n下载配置获取失败\n\n【HTTP状态】：{status_code}\n【错误类型】：{json_title}\n【错误信息】：{json_message}\n",
+            )
+            return {}
+        except ValueError as e:
+            QMessageBox.critical(
+                self,
+                f"错误 {APP_NAME}",
+                f"\n配置文件格式异常\n\n【错误信息】：{e}\n",
             )
             return {}
 
