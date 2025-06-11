@@ -27,6 +27,7 @@ from GUI import Ui_mainwin
 
 # 配置信息
 app_data = {
+    "APP_VERSION": "4.10.0.17496",
     "APP_NAME": "@FRAISEMOE Addons Installer",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
@@ -67,12 +68,13 @@ def decode_base64(encoded_str):
     return base64.b64decode(encoded_str).decode("utf-8")
 
 
+APP_VERSION = app_data["APP_VERSION"]
 APP_NAME = app_data["APP_NAME"]
 TEMP = os.getenv(app_data["TEMP"])
 CACHE = os.path.join(TEMP, app_data["CACHE"])
 PLUGIN = os.path.join(CACHE, app_data["PLUGIN"])
 CONFIG_URL = decode_base64(app_data["CONFIG_URL"])
-UA = decode_base64(app_data["UA"])
+UA = decode_base64(app_data["UA"]) + f" FraiseMoe/{APP_VERSION}"
 GAME_INFO = app_data["game_info"]
 BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
