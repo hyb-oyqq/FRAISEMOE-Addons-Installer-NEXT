@@ -12,12 +12,12 @@
     <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/releases/latest" class="shield">
         <img src="https://img.shields.io/github/v/release/Yanam1Anna/FRAISEMOE-Addons-Installer?style=flat-square&label=%F0%9F%92%AF%20Latest%20Release&color=blue" alt="Latest Release">
     </a>
-    <img src="https://img.shields.io/github/downloads/Yanam1Anna/FRAISEMOE-Addons-Installer/latest/total?style=flat-square&label=%F0%9F%93%A5%20Download%20Count&color=blue" alt="Download Count" class="shield">
+    <img src="https://img.shields.io/github/downloads/Yanam1Anna/FRAISEMOE-Addons-Installer/total?style=flat-square&label=%F0%9F%93%A5%20Download%20Count&color=blue" alt="Download Count" class="shield">
     <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/LICENSE" class="shield">
         <img src="https://img.shields.io/github/license/Yanam1Anna/FRAISEMOE-Addons-Installer?style=flat-square&label=%F0%9F%93%96%20License&color=blue" alt="License">
     </a>
     </a>
-        <img src="https://img.shields.io/badge/Python-3.12.9-blue?style=flat-square&logo=python" alt="Python" class="shield">
+        <img src="https://img.shields.io/badge/Python-3.12.10-blue?style=flat-square&logo=python" alt="Python" class="shield">
 </p>
 
 <!-- PROJECT LOGO -->
