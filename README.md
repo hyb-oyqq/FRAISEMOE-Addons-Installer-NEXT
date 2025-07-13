@@ -1,5 +1,15 @@
 # 🍓FRAISEMOE Addons Installer🍓
 
+```
+
+🔊 通知：“FraiseMoe Addons Installer”完成了其作为测试版本的用途，感谢广大用户的支持与陪伴。
+    将于2025年7月14日00时00分起，“FraiseMoe Addons Installer”GitHub仓库将进行归档，下载服务将永久停止使用。
+    本应用程式的完全重构版本将于2025年7月14日23时59分，将在“https://github.com/Yanam1Anna/FRAISEMOE-Addons-Manager”发布。
+    因原 CDN 服务成本高且服务器长期高负载，我们无力继续提供免费服务。且此版本开源效果不佳，故全新版本采用闭源方式发布。
+    自新版本发布，此版本归档之日起，为维持服务器收支平衡，可能引入收费机制以保障持续运营，或项目将进入生命周期管理阶段。
+
+```
+
 <!-- PROJECT SHIELDS -->
 
 <p align="center">

@@ -1,5 +1,16 @@
 # 🍓FRAISEMOE Addons Installer🍓
 
+```
+
+🔊 Notice: "FraiseMoe Addons Installer" has fulfilled its purpose as a beta version. Thank you for the support and companionship of our users.
+    Starting July 14, 2025 at 00:00, the "FraiseMoe Addons Installer" GitHub repository will be archived, and the download service will be permanently discontinued.
+    A completely reconstructed version of this application will be released at "https://github.com/Yanam1Anna/FRAISEMOE-Addons-Manager" on July 14, 2025 at 23:59.
+    Due to high CDN service costs and long-term high server load, we are unable to continue providing free services. Additionally, due to poor open-source effectiveness of this version, the new version will be released in a closed-source manner.
+    From the release of the new version and the archival of this version, to maintain server revenue balance, a fee mechanism may be introduced to ensure continued operation, or the project will enter a lifecycle management phase.
+
+```
+
+
 <!-- PROJECT SHIELDS -->
 
 <p align="center">
