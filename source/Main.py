@@ -8,7 +8,8 @@ import base64
 import psutil
 import ctypes
 import concurrent.futures
-from PySide6.QtGui import QIcon
+import webbrowser
+from PySide6.QtGui import QIcon, QAction
 from collections import deque
 from pic_data import img_data
 
@@ -364,6 +365,11 @@ class MainWindow(QMainWindow):
         # 连接信号 (使用Ui_install.py中的组件名称)
         self.ui.start_install_btn.clicked.connect(self.file_dialog)
         self.ui.exit_btn.clicked.connect(self.shutdown_app)
+
+        # “关于”菜单
+        about_action = QAction("项目主页", self)
+        about_action.triggered.connect(self.open_about_page)
+        self.ui.menu_2.addAction(about_action)
         
         # 在窗口显示前设置初始状态
         self.animator.initialize()
@@ -589,6 +595,9 @@ class MainWindow(QMainWindow):
             f"\n安装结果：\n安装成功数：{len(installed_version.splitlines())}      安装失败数：{len(failed_ver.splitlines())}\n"
             f"安装成功的版本：\n{installed_version}\n尚未持有或未使用本工具安装补丁的版本：\n{failed_ver}\n",
         )
+
+    def open_about_page(self):
+        webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT")
 
     def closeEvent(self, event):
         self.shutdown_app(event)
