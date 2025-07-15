@@ -8,27 +8,30 @@ import base64
 import psutil
 import ctypes
 import concurrent.futures
-
-from PySide6 import QtWidgets, QtCore
-from PySide6.QtCore import Qt, QByteArray, QThread, Signal
-from PySide6.QtWidgets import (
-    QApplication,
-    QWidget,
-    QMessageBox,
-    QProgressBar,
-    QVBoxLayout,
-    QLabel,
-    QDialog,
-)
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon
 from collections import deque
 from pic_data import img_data
-from GUI import Ui_mainwin
+
+from PySide6.QtCore import ( Qt, 
+    Signal, QThread, QTimer)
+from PySide6.QtGui import (QIcon, QPixmap, )
+from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QMessageBox, 
+    QProgressBar, QVBoxLayout, QFileDialog, QDialog)
+
+from Ui_install import Ui_MainWindows
+from animations import MultiStageAnimations
+import sys
+import os
+
+def load_base64_image(base64_str):
+    pixmap = QPixmap()
+    pixmap.loadFromData(base64.b64decode(base64_str))
+    return pixmap
 
 # 配置信息
 app_data = {
     "APP_VERSION": "4.10.0.17496",
-    "APP_NAME": "@FRAISEMOE Addons Installer",
+    "APP_NAME": "@FRAISEMOE2 Addons Installer",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
@@ -59,15 +62,21 @@ app_data = {
             "install_path": "NEKOPARA Vol. 4/vol4adult.xp3",
             "plugin_path": "vol.4/vol4adult.xp3",
         },
+        "NEKOPARA After": {
+            "exe": "nekopara_after.exe",
+            "hash": "eb26ff6850096a240af8340ba21c5c3232e90f29fb8191e24b6ce701acae0aa9",
+            "install_path": "NEKOPARA After/afteradult.xp3",
+            "plugin_path": "after/afteradult.xp3",
+            "sig_path": "after/afteradult.xp3.sig"
+        },
     },
 }
-
 
 # Base64解码
 def decode_base64(encoded_str):
     return base64.b64decode(encoded_str).decode("utf-8")
 
-
+# 全局变量
 APP_VERSION = app_data["APP_VERSION"]
 APP_NAME = app_data["APP_NAME"]
 TEMP = os.getenv(app_data["TEMP"])
@@ -81,26 +90,29 @@ HASH_SIZE = 134217728
 PLUGIN_HASH = {game: info["hash"] for game, info in GAME_INFO.items()}
 PROCESS_INFO = {info["exe"]: game for game, info in GAME_INFO.items()}
 
-
-# 弹窗框架
 def msgbox_frame(title, text, buttons=QMessageBox.StandardButton.NoButton):
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
-    pixmap = QPixmap()
-    pixmap.loadFromData(QByteArray(base64.b64decode(img_data["icon"])))
-    icon = QIcon(pixmap)
-    msg_box.setWindowIcon(icon)
+    
+    # 设置弹窗图标
+    icon_data = img_data.get("icon")
+    if icon_data:
+        pixmap = load_base64_image(icon_data)
+        if not pixmap.isNull():
+            msg_box.setWindowIcon(QIcon(pixmap))
+            msg_box.setIconPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio))
+    else:
+        msg_box.setIcon(QMessageBox.Information)
+        
     msg_box.setText(text)
     msg_box.setStandardButtons(buttons)
     return msg_box
-
 
 # 哈希值计算类
 class HashManager:
     def __init__(self, HASH_SIZE):
         self.HASH_SIZE = HASH_SIZE
 
-    # 哈希值计算
     def hash_calculate(self, file_path):
         sha256_hash = hashlib.sha256()
         with open(file_path, "rb") as f:
@@ -108,7 +120,6 @@ class HashManager:
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
 
-    # 使用多线程优化哈希值计算
     def calculate_hashes_in_parallel(self, file_paths):
         with concurrent.futures.ThreadPoolExecutor() as executor:
             future_to_file = {
@@ -129,17 +140,13 @@ class HashManager:
                     msg_box.exec()
         return results
 
-    # 哈希值计算时的窗口
     def hash_pop_window(self):
         msg_box = msgbox_frame(f"通知 {APP_NAME}", "\n正在检验文件状态...\n")
         msg_box.show()
         QApplication.processEvents()
         return msg_box
 
-    # 下载前比对已有文件哈希值
-    def cfg_pre_hash_compare(
-        self, install_path, game_version, plugin_hash, installed_status
-    ):
+    def cfg_pre_hash_compare(self, install_path, game_version, plugin_hash, installed_status):
         if not os.path.exists(install_path):
             installed_status[game_version] = False
             return
@@ -157,7 +164,6 @@ class HashManager:
             else:
                 installed_status[game_version] = True
 
-    # 下载完成后比对哈希值
     def cfg_after_hash_compare(self, install_paths, plugin_hash, installed_status):
         passed = True
         file_paths = [
@@ -180,26 +186,23 @@ class HashManager:
                     break
         return passed
 
-
 # 管理员权限检查类
 class AdminPrivileges:
-    # 进程列表
     def __init__(self):
         self.required_exes = [
             "nekopara_vol1.exe",
             "nekopara_vol2.exe",
             "NEKOPARAvol3.exe",
             "nekopara_vol4.exe",
+            "nekopara_after.exe",
         ]
 
-    # 检查管理员权限
     def is_admin(self):
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()
         except:
             return False
 
-    # 请求管理员权限
     def request_admin_privileges(self):
         if not self.is_admin():
             msg_box = msgbox_frame(
@@ -226,11 +229,10 @@ class AdminPrivileges:
                     f"权限检测 {APP_NAME}",
                     "\n无法获取管理员权限，程序将退出\n",
                     QMessageBox.StandardButton.Ok,
-                )
+                    )
                 msg_box.exec()
                 sys.exit(1)
 
-    # 检查并终止进程
     def check_and_terminate_processes(self):
         for proc in psutil.process_iter(["pid", "name"]):
             if proc.info["name"] in self.required_exes:
@@ -261,18 +263,16 @@ class AdminPrivileges:
                     msg_box.exec()
                     sys.exit(1)
 
-
 # 下载线程类
 class DownloadThread(QThread):
-    progress = Signal(int)  # 进度信号
-    finished = Signal(bool, str)  # 完成信号
+    progress = Signal(int)
+    finished = Signal(bool, str)
 
     def __init__(self, url, _7z_path, parent=None):
         super().__init__(parent)
-        self.url = url  # 下载地址
-        self._7z_path = _7z_path  # 7z文件路径
+        self.url = url
+        self._7z_path = _7z_path
 
-    # 下载线程运行
     def run(self):
         try:
             headers = {"User-Agent": UA}
@@ -282,13 +282,12 @@ class DownloadThread(QThread):
             with open(self._7z_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=BLOCK_SIZE):
                     f.write(chunk)
-                    self.progress.emit(f.tell() * 100 // total_size)  # 发送进度信号
-            self.finished.emit(True, "")  # 发送完成信号
+                    self.progress.emit(f.tell() * 100 // total_size)
+            self.finished.emit(True, "")
         except requests.exceptions.RequestException as e:
             self.finished.emit(False, f"\n网络请求错误\n\n【错误信息】: {e}\n")
         except Exception as e:
             self.finished.emit(False, f"\n未知错误\n\n【错误信息】: {e}\n")
-
 
 # 下载进度窗口类
 class ProgressWindow(QDialog):
@@ -297,12 +296,8 @@ class ProgressWindow(QDialog):
         self.setWindowTitle(f"下载进度 {APP_NAME}")
         self.resize(400, 100)
         self.progress_bar_max = 100
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowCloseButtonHint
-        )  # 禁用关闭按钮
-        self.setWindowFlags(
-            self.windowFlags() & ~Qt.WindowSystemMenuHint
-        )  # 禁用系统菜单
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowCloseButtonHint)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowSystemMenuHint)
 
         layout = QVBoxLayout()
         self.progress_bar = QProgressBar()
@@ -312,34 +307,48 @@ class ProgressWindow(QDialog):
         layout.addWidget(self.progress_bar)
         self.setLayout(layout)
 
-    # 设置进度条最大值
     def setmaxvalue(self, value):
         self.progress_bar_max = value
         self.progress_bar.setMaximum(value)
 
-    # 设置进度条值
     def setprogressbarval(self, value):
         self.progress_bar.setValue(value)
-        if value == self.progress_bar_max:  # 下载完成后关闭窗口
-            QtCore.QTimer.singleShot(2000, self.close)
-
+        if value == self.progress_bar_max:
+            QTimer.singleShot(2000, self.close)
 
 # 主窗口类
-class MyWindow(QWidget, Ui_mainwin):
-
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setupUi(self)
+        
+        # 初始化UI (从Ui_install.py导入)
+        self.ui = Ui_MainWindows()
+        self.ui.setupUi(self)
+
+        icon_data = img_data.get("icon")
+        if icon_data:
+            pixmap = load_base64_image(icon_data)
+        self.setWindowIcon(QIcon(pixmap))
+
+        # 设置窗口标题为APP_NAME加版本号
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        
+        # 初始化动画系统 (从animations.py导入)
+        self.animator = MultiStageAnimations(self.ui)
+        
+        # 初始化功能变量
         self.selected_folder = ""
         self.installed_status = {f"NEKOPARA Vol.{i}": False for i in range(1, 5)}
+        self.installed_status["NEKOPARA After"] = False  # 添加After的状态
         self.download_queue = deque()
         self.current_download_thread = None
         self.hash_manager = HashManager(BLOCK_SIZE)
-
+        
         # 检查管理员权限和进程
         admin_privileges = AdminPrivileges()
         admin_privileges.request_admin_privileges()
         admin_privileges.check_and_terminate_processes()
+        
         # 创建缓存目录
         if not os.path.exists(PLUGIN):
             try:
@@ -351,20 +360,28 @@ class MyWindow(QWidget, Ui_mainwin):
                     f"\n无法创建缓存位置\n\n使用管理员身份运行或检查文件读写权限\n\n【错误信息】：{e}\n",
                 )
                 sys.exit(1)
-        # 连接信号 & UI按钮
-        self.startbtn.clicked.connect(self.file_dialog)
-        self.exitbtn.clicked.connect(self.shutdown_app)
-
-    # 获取游戏安装路径
+        
+        # 连接信号 (使用Ui_install.py中的组件名称)
+        self.ui.start_install_btn.clicked.connect(self.file_dialog)
+        self.ui.exit_btn.clicked.connect(self.shutdown_app)
+        
+        # 在窗口显示前设置初始状态
+        self.animator.initialize()
+        
+        # 窗口显示后延迟100ms启动动画
+        QTimer.singleShot(100, self.start_animations)
+    
+    def start_animations(self):
+        self.animator.start_animations()
+        
     def get_install_paths(self):
         return {
             game: os.path.join(self.selected_folder, info["install_path"])
             for game, info in GAME_INFO.items()
         }
 
-    # 获取游戏目录
     def file_dialog(self):
-        self.selected_folder = QtWidgets.QFileDialog.getExistingDirectory(
+        self.selected_folder = QFileDialog.getExistingDirectory(
             self, f"选择游戏所在【上级目录】 {APP_NAME}"
         )
         if not self.selected_folder:
@@ -374,23 +391,22 @@ class MyWindow(QWidget, Ui_mainwin):
             return
         self.download_action()
 
-    # 获取下载配置文件
     def get_download_url(self) -> dict:
         try:
             headers = {"User-Agent": UA}
             response = requests.get(CONFIG_URL, headers=headers, timeout=10)
             response.raise_for_status()
             config_data = response.json()
-            if not all(f"vol.{i+1}.data" in config_data for i in range(4)):
+            if not all(f"vol.{i+1}.data" in config_data for i in range(4)) or "after.data" not in config_data:
                 raise ValueError("配置文件数据异常")
             return {
                 f"vol{i+1}": config_data[f"vol.{i+1}.data"]["url"] for i in range(4)
+            } | {
+                "after": config_data["after.data"]["url"]
             }
         except requests.exceptions.RequestException as e:
-            # 获取 HTTP 状态码
             status_code = e.response.status_code if e.response is not None else "未知"
             try:
-                # 尝试从响应中解析 JSON 并提取 title 和 message
                 error_response = e.response.json() if e.response else {}
                 json_title = error_response.get("title", "无错误类型")
                 json_message = error_response.get("message", "无附加错误信息")
@@ -412,7 +428,6 @@ class MyWindow(QWidget, Ui_mainwin):
             )
             return {}
 
-    # 下载参数设置
     def download_setting(self, url, game_folder, game_version, _7z_path, plugin_path):
         game_exe = {
             game: os.path.join(
@@ -420,7 +435,7 @@ class MyWindow(QWidget, Ui_mainwin):
             )
             for game, info in GAME_INFO.items()
         }
-        # 判断游戏是否存在，不存在则跳过
+        
         if (
             game_version not in game_exe
             or not os.path.exists(game_exe[game_version])
@@ -429,10 +444,10 @@ class MyWindow(QWidget, Ui_mainwin):
             self.installed_status[game_version] = False
             self.show_result()
             return
-        # 下载时显示进度窗口
+            
         progress_window = ProgressWindow(self)
         progress_window.show()
-        # 启用下载线程
+        
         self.current_download_thread = DownloadThread(url, _7z_path, self)
         self.current_download_thread.progress.connect(progress_window.setprogressbarval)
         self.current_download_thread.finished.connect(
@@ -448,7 +463,6 @@ class MyWindow(QWidget, Ui_mainwin):
         )
         self.current_download_thread.start()
 
-    # 安装设置
     def install_setting(
         self,
         success,
@@ -466,7 +480,18 @@ class MyWindow(QWidget, Ui_mainwin):
                 QApplication.processEvents()
                 with py7zr.SevenZipFile(_7z_path, mode="r") as archive:
                     archive.extractall(path=PLUGIN)
+                
+                # 创建游戏目录(如果不存在)
+                os.makedirs(game_folder, exist_ok=True)
+                
+                # 复制主文件
                 shutil.copy(plugin_path, game_folder)
+                
+                # 如果是After版本，还需要复制签名文件
+                if game_version == "NEKOPARA After":
+                    sig_path = os.path.join(PLUGIN, GAME_INFO[game_version]["sig_path"])
+                    shutil.copy(sig_path, game_folder)
+                    
                 self.installed_status[game_version] = True
                 QMessageBox.information(
                     self, f"通知 {APP_NAME}", f"\n{game_version} 补丁已安装\n"
@@ -487,7 +512,6 @@ class MyWindow(QWidget, Ui_mainwin):
             )
         self.next_download_task()
 
-    # 下载前比对已有文件哈希值
     def pre_hash_compare(self, install_path, game_version, plugin_hash):
         msg_box = self.hash_manager.hash_pop_window()
         self.hash_manager.cfg_pre_hash_compare(
@@ -495,7 +519,6 @@ class MyWindow(QWidget, Ui_mainwin):
         )
         msg_box.close()
 
-    # 开始下载文件
     def download_action(self):
         install_paths = self.get_install_paths()
         for game_version, install_path in install_paths.items():
@@ -508,6 +531,7 @@ class MyWindow(QWidget, Ui_mainwin):
             )
             return
 
+        # 处理1-4卷
         for i in range(1, 5):
             game_version = f"NEKOPARA Vol.{i}"
             if not self.installed_status[game_version]:
@@ -520,20 +544,29 @@ class MyWindow(QWidget, Ui_mainwin):
                 self.download_queue.append(
                     (url, game_folder, game_version, _7z_path, plugin_path)
                 )
+        
+        # 处理After
+        game_version = "NEKOPARA After"
+        if not self.installed_status[game_version]:
+            url = config["after"]
+            game_folder = os.path.join(self.selected_folder, "NEKOPARA After")
+            _7z_path = os.path.join(PLUGIN, "after.7z")
+            plugin_path = os.path.join(
+                PLUGIN, GAME_INFO[game_version]["plugin_path"]
+            )
+            self.download_queue.append(
+                (url, game_folder, game_version, _7z_path, plugin_path)
+            )
 
         self.next_download_task()
 
-    # 开始下载队列中的下一个任务
     def next_download_task(self):
         if not self.download_queue:
             self.after_hash_compare(PLUGIN_HASH)
             return
-        url, game_folder, game_version, _7z_path, plugin_path = (
-            self.download_queue.popleft()
-        )
+        url, game_folder, game_version, _7z_path, plugin_path = self.download_queue.popleft()
         self.download_setting(url, game_folder, game_version, _7z_path, plugin_path)
 
-    # 下载完成后比对哈希值
     def after_hash_compare(self, plugin_hash):
         msg_box = self.hash_manager.hash_pop_window()
         result = self.hash_manager.cfg_after_hash_compare(
@@ -543,7 +576,6 @@ class MyWindow(QWidget, Ui_mainwin):
         self.show_result()
         return result
 
-    # 显示最终安装结果
     def show_result(self):
         installed_version = "\n".join(
             [i for i in self.installed_status if self.installed_status[i]]
@@ -558,11 +590,9 @@ class MyWindow(QWidget, Ui_mainwin):
             f"安装成功的版本：\n{installed_version}\n尚未持有或未使用本工具安装补丁的版本：\n{failed_ver}\n",
         )
 
-    # 关闭程序-窗口
     def closeEvent(self, event):
         self.shutdown_app(event)
 
-    # 关闭程序-按钮
     def shutdown_app(self, event=None):
         reply = QMessageBox.question(
             self,
@@ -609,9 +639,8 @@ class MyWindow(QWidget, Ui_mainwin):
             if event:
                 event.ignore()
 
-
 if __name__ == "__main__":
     app = QApplication([])
-    window = MyWindow()
+    window = MainWindow()
     window.show()
     sys.exit(app.exec())
