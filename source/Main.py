@@ -24,6 +24,15 @@ from animations import MultiStageAnimations
 import sys
 import os
 
+def resource_path(relative_path):
+    """获取资源的绝对路径，适用于开发环境和PyInstaller打包环境"""
+    try:
+        # PyInstaller创建的临时文件夹
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
 def load_base64_image(base64_str):
     pixmap = QPixmap()
     pixmap.loadFromData(base64.b64decode(base64_str))
@@ -31,13 +40,13 @@ def load_base64_image(base64_str):
 
 # 配置信息
 app_data = {
-    "APP_VERSION": "4.10.0.17496",
-    "APP_NAME": "@FRAISEMOE2 Addons Installer",
+    "APP_VERSION": "1.0.0",
+    "APP_NAME": "FRAISEMOE Addons Installer NEXT",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
-    "CONFIG_URL": "aHR0cHM6Ly9hcmNoaXZlLm92b2Zpc2guY29tL2FwaS93aWRnZXQvbmVrb3BhcmEvZG93bmxvYWRfdXJsLmpzb24=",
-    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZS1BY2NlcHQpIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTE0LjA=",
+    "CONFIG_URL": "aHR0cHM6Ly9hcmNoaXZlLm92b2Zpc2guY29tL2FwaS93aWRnZXQvbmVrb3BhcmEvZG93bmxvYWRfdXJsX2RlYnVnLmpzb24=",
+    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZTItQWNjZXB0KSBHZWNrby8yMDEwMDEwMSBGaXJlZm94LzExNC4wIEZyYWlzZU1vZTIvMS4wLjA=",
     "game_info": {
         "NEKOPARA Vol.1": {
             "exe": "nekopara_vol1.exe",
@@ -84,7 +93,7 @@ TEMP = os.getenv(app_data["TEMP"]) or app_data["TEMP"]
 CACHE = os.path.join(TEMP, app_data["CACHE"])
 PLUGIN = os.path.join(CACHE, app_data["PLUGIN"])
 CONFIG_URL = decode_base64(app_data["CONFIG_URL"])
-UA = decode_base64(app_data["UA"]) + f" FraiseMoe/{APP_VERSION}"
+UA = decode_base64(app_data["UA"])
 GAME_INFO = app_data["game_info"]
 BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
@@ -266,56 +275,170 @@ class AdminPrivileges:
 
 # 下载线程类
 class DownloadThread(QThread):
-    progress = Signal(int)
+    progress = Signal(dict)
     finished = Signal(bool, str)
 
-    def __init__(self, url, _7z_path, parent=None):
+    def __init__(self, url, _7z_path, game_version, parent=None):
         super().__init__(parent)
         self.url = url
         self._7z_path = _7z_path
+        self.game_version = game_version
+        self.process = None
+        self.is_running = True
+
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            self.is_running = False
+            # 使用 taskkill 强制终止进程及其子进程
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True)
+            self.finished.emit(False, "下载已手动停止。")
 
     def run(self):
+        import subprocess
+        import re
+        from urllib.parse import urlparse
+        
         try:
-            headers = {"User-Agent": UA}
-            r = requests.get(self.url, headers=headers, stream=True, timeout=10)
-            r.raise_for_status()
-            total_size = int(r.headers.get("content-length", 0))
-            with open(self._7z_path, "wb") as f:
-                for chunk in r.iter_content(chunk_size=BLOCK_SIZE):
-                    f.write(chunk)
-                    self.progress.emit(f.tell() * 100 // total_size)
-            self.finished.emit(True, "")
-        except requests.exceptions.RequestException as e:
-            self.finished.emit(False, f"\n网络请求错误\n\n【错误信息】: {e}\n")
+            aria2c_path = resource_path("aria2c.exe")
+            download_dir = os.path.dirname(self._7z_path)
+            file_name = os.path.basename(self._7z_path)
+            
+            parsed_url = urlparse(self.url)
+            referer = f"{parsed_url.scheme}://{parsed_url.netloc}/"
+            
+            command = [
+                aria2c_path,
+                '--dir', download_dir,
+                '--out', file_name,
+                '--user-agent', UA,
+                '--referer', referer,
+                '--header', f'Origin: {referer.rstrip("/")}',
+                '--header', 'Accept: */*',
+                '--header', 'Accept-Language: zh-CN,zh;q=0.9,en;q=0.8',
+                '--header', 'Accept-Encoding: gzip, deflate, br',
+                '--header', 'Cache-Control: no-cache',
+                '--header', 'Pragma: no-cache',
+                '--header', 'DNT: 1',
+                '--header', 'Sec-Fetch-Dest: empty',
+                '--header', 'Sec-Fetch-Mode: cors',
+                '--header', 'Sec-Fetch-Site: same-origin',
+                '--http-accept-gzip=true',
+                '--min-tls-version=TLSv1.2',
+                '--console-log-level=info',
+                '--summary-interval=1',
+                '--log-level=info',
+                '--allow-overwrite=true',
+                '--max-tries=3',
+                '--retry-wait=2',
+                '--connect-timeout=60',
+                '--timeout=60',
+                '--auto-file-renaming=false',
+                self.url
+            ]
+            
+            creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+            self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creation_flags)
+
+            # 正则表达式用于解析aria2c的输出
+            # 例如: #1 GID[...](  5%) CN:1 DL:10.5MiB/s ETA:1m30s
+            progress_pattern = re.compile(r'\((\d+)%\).*?CN:(\d+).*?DL:([\d\.]+[KMG]?i?B/s).*?ETA:([\w\d]+)')
+
+            full_output = []
+            while self.is_running and self.process.poll() is None:
+                line = self.process.stdout.readline()
+                if not line:
+                    break
+                
+                full_output.append(line)
+                print(line.strip()) # 在控制台输出实时日志
+
+                match = progress_pattern.search(line)
+                if match:
+                    percent = int(match.group(1))
+                    threads = match.group(2)
+                    speed = match.group(3)
+                    eta = match.group(4)
+                    self.progress.emit({
+                        "game": self.game_version,
+                        "percent": percent,
+                        "threads": threads,
+                        "speed": speed,
+                        "eta": eta
+                    })
+
+            return_code = self.process.wait()
+            
+            if not self.is_running: # 如果是手动停止的
+                return
+
+            if return_code == 0:
+                self.progress.emit({
+                    "game": self.game_version,
+                    "percent": 100,
+                    "threads": "N/A",
+                    "speed": "N/A",
+                    "eta": "完成"
+                })
+                self.finished.emit(True, "")
+            else:
+                error_message = f"\nAria2c下载失败，退出码: {return_code}\n\n--- Aria2c 输出 ---\n{''.join(full_output)}\n---------------------\n"
+                self.finished.emit(False, error_message)
+
         except Exception as e:
-            self.finished.emit(False, f"\n未知错误\n\n【错误信息】: {e}\n")
+            if self.is_running:
+                self.finished.emit(False, f"\n下载时发生未知错误\n\n【错误信息】: {e}\n")
 
 # 下载进度窗口类
 class ProgressWindow(QDialog):
+    # 添加一个信号，用于通知主窗口下载已停止
+    download_stopped = Signal()
+
     def __init__(self, parent=None):
         super(ProgressWindow, self).__init__(parent)
         self.setWindowTitle(f"下载进度 {APP_NAME}")
-        self.resize(400, 100)
-        self.progress_bar_max = 100
+        self.resize(450, 180)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowSystemMenuHint)
 
         layout = QVBoxLayout()
+        self.game_label = QLabel("正在准备下载...")
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
-        self.label = QLabel("\n正在下载...\n")
-        layout.addWidget(self.label)
+        self.stats_label = QLabel("速度: - | 线程: - | 剩余时间: -")
+        self.stop_button = QtWidgets.QPushButton("停止下载")
+
+        layout.addWidget(self.game_label)
         layout.addWidget(self.progress_bar)
+        layout.addWidget(self.stats_label)
+        layout.addWidget(self.stop_button)
         self.setLayout(layout)
 
-    def setmaxvalue(self, value):
-        self.progress_bar_max = value
-        self.progress_bar.setMaximum(value)
+    def update_progress(self, data):
+        game_version = data.get("game", "未知游戏")
+        percent = data.get("percent", 0)
+        speed = data.get("speed", "-")
+        threads = data.get("threads", "-")
+        eta = data.get("eta", "-")
 
-    def setprogressbarval(self, value):
-        self.progress_bar.setValue(value)
-        if value == self.progress_bar_max:
-            QTimer.singleShot(2000, self.close)
+        self.game_label.setText(f"正在下载: {game_version}")
+        self.progress_bar.setValue(int(percent))
+        self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
+
+        if percent == 100:
+            self.stop_button.setEnabled(False)
+            self.stop_button.setText("下载完成")
+            QTimer.singleShot(1500, self.accept)
+
+    def closeEvent(self, event):
+        # 覆盖默认的关闭事件，防止用户通过其他方式关闭窗口
+        # 如果需要，可以在这里添加逻辑，例如询问用户是否要停止下载
+        event.ignore()
+
+    def on_stop_clicked(self):
+        self.stop_button.setEnabled(False)
+        self.stop_button.setText("正在停止...")
+        self.download_stopped.emit()
+        self.reject() # 关闭窗口并返回一个QDialog.Rejected值
 
 # 主窗口类
 class MainWindow(QMainWindow):
@@ -332,7 +455,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(pixmap))
 
         # 设置窗口标题为APP_NAME加版本号
-        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        self.setWindowTitle(f"{APP_NAME} vFraiseMoe2/1.0.0")
         
         # 初始化动画系统 (从animations.py导入)
         self.animator = MultiStageAnimations(self.ui)
@@ -403,8 +526,13 @@ class MainWindow(QMainWindow):
             response = requests.get(CONFIG_URL, headers=headers, timeout=10)
             response.raise_for_status()
             config_data = response.json()
-            if not all(f"vol.{i+1}.data" in config_data for i in range(4)) or "after.data" not in config_data:
-                raise ValueError("配置文件数据异常")
+            # 修正键名检查，确保所有必需的键都存在
+            required_keys = [f"vol.{i+1}.data" for i in range(4)] + ["after.data"]
+            if not all(key in config_data for key in required_keys):
+                missing_keys = [key for key in required_keys if key not in config_data]
+                raise ValueError(f"配置文件缺少必要的键: {', '.join(missing_keys)}")
+            
+            # 修正提取URL的逻辑，确保使用正确的键
             return {
                 f"vol{i+1}": config_data[f"vol.{i+1}.data"]["url"] for i in range(4)
             } | {
@@ -451,35 +579,49 @@ class MainWindow(QMainWindow):
             self.show_result()
             return
             
-        progress_window = ProgressWindow(self)
-        progress_window.show()
+        self.progress_window = ProgressWindow(self)
         
-        self.current_download_thread = DownloadThread(url, _7z_path, self)
-        self.current_download_thread.progress.connect(progress_window.setprogressbarval)
+        self.current_download_thread = DownloadThread(url, _7z_path, game_version, self)
+        self.current_download_thread.progress.connect(self.progress_window.update_progress)
         self.current_download_thread.finished.connect(
             lambda success, error: self.install_setting(
                 success,
                 error,
-                progress_window,
+                self.progress_window,
+                url,
                 game_folder,
                 game_version,
                 _7z_path,
                 plugin_path,
             )
         )
+        
+        # 连接停止按钮的信号
+        self.progress_window.stop_button.clicked.connect(self.current_download_thread.stop)
+        # 连接窗口关闭信号，以处理用户手动停止的情况
+        self.progress_window.download_stopped.connect(self.on_download_stopped)
+
         self.current_download_thread.start()
+        self.progress_window.exec() # 使用exec()以模态方式显示对话框
 
     def install_setting(
         self,
         success,
         error,
         progress_window,
+        url,
         game_folder,
         game_version,
         _7z_path,
         plugin_path,
     ):
-        progress_window.close()
+        if not success and error == "下载已手动停止。":
+            # 用户手动停止了下载，不需要进行后续操作
+            return
+
+        if self.progress_window.isVisible():
+            self.progress_window.close()
+            
         if success:
             try:
                 msg_box = self.hash_manager.hash_pop_window()
@@ -499,9 +641,6 @@ class MainWindow(QMainWindow):
                     shutil.copy(sig_path, game_folder)
                     
                 self.installed_status[game_version] = True
-                QtWidgets.QMessageBox.information(
-                    self, f"通知 {APP_NAME}", f"\n{game_version} 补丁已安装\n"
-                )
             except (py7zr.Bad7zFile, FileNotFoundError, Exception) as e:
                 QtWidgets.QMessageBox.critical(
                     self,
@@ -510,13 +649,35 @@ class MainWindow(QMainWindow):
                 )
             finally:
                 msg_box.close()
+            self.next_download_task()
         else:
-            QtWidgets.QMessageBox.critical(
-                self,
-                f"错误 {APP_NAME}",
-                f"\n文件获取失败\n网络状态异常或服务器故障\n\n【错误信息】：{error}\n",
-            )
-        self.next_download_task()
+            print(f"--- Download Failed: {game_version} ---")
+            print(error)
+            print("------------------------------------")
+            msg_box = QtWidgets.QMessageBox(self)
+            msg_box.setWindowTitle(f"下载失败 {APP_NAME}")
+            msg_box.setText(f"\n文件获取失败: {game_version}\n\n是否重试？")
+            
+            retry_button = msg_box.addButton("重试", QtWidgets.QMessageBox.ButtonRole.YesRole)
+            next_button = msg_box.addButton("下一个", QtWidgets.QMessageBox.ButtonRole.NoRole)
+            end_button = msg_box.addButton("结束", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+            
+            icon_data = img_data.get("icon")
+            if icon_data:
+                pixmap = load_base64_image(icon_data)
+                if not pixmap.isNull():
+                    msg_box.setWindowIcon(QIcon(pixmap))
+
+            msg_box.exec()
+            clicked_button = msg_box.clickedButton()
+
+            if clicked_button == retry_button:
+                self.download_setting(url, game_folder, game_version, _7z_path, plugin_path)
+            elif clicked_button == next_button:
+                self.next_download_task()
+            else: # End button or closed dialog
+                self.download_queue.clear()
+                self.after_hash_compare(PLUGIN_HASH)
 
     def pre_hash_compare(self, install_path, game_version, plugin_hash):
         msg_box = self.hash_manager.hash_pop_window()
@@ -570,8 +731,18 @@ class MainWindow(QMainWindow):
         if not self.download_queue:
             self.after_hash_compare(PLUGIN_HASH)
             return
+        # 检查下载线程是否仍在运行，以避免在手动停止后立即开始下一个任务
+        if self.current_download_thread and self.current_download_thread.isRunning():
+            return
         url, game_folder, game_version, _7z_path, plugin_path = self.download_queue.popleft()
         self.download_setting(url, game_folder, game_version, _7z_path, plugin_path)
+
+    def on_download_stopped(self):
+        """当用户点击停止按钮时调用的槽函数"""
+        # 清空下载队列，因为用户决定停止
+        self.download_queue.clear()
+        # 可以在这里决定是否立即进行哈希比较或显示结果
+        self.after_hash_compare(PLUGIN_HASH)
 
     def after_hash_compare(self, plugin_hash):
         msg_box = self.hash_manager.hash_pop_window()

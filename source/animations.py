@@ -84,7 +84,7 @@ class MultiStageAnimations:
         pos_anim.setDuration(duration)
         pos_anim.setStartValue(QPoint(-widget.width(), end_pos.y()))
         pos_anim.setEndValue(end_pos)
-        pos_anim.setEasingCurve(QEasingCurve.OutBack)
+        pos_anim.setEasingCurve(QEasingCurve.Type.OutBack)
         
         # 透明度动画
         opacity_anim = QPropertyAnimation(widget.graphicsEffect(), b"opacity")
@@ -106,16 +106,6 @@ class MultiStageAnimations:
         
         anim_group.start()
         self.animations.append(anim_group)
-
-    def start_mainbg_animation(self):
-        """启动主背景淡入动画"""
-        main_anim = QPropertyAnimation(self.ui.Mainbg.graphicsEffect(), b"opacity")
-        main_anim.setDuration(800)
-        main_anim.setStartValue(0)
-        main_anim.setEndValue(1)
-        main_anim.finished.connect(self.start_menu_animations)
-        main_anim.start()
-        self.animations.append(main_anim)
 
     def start_mainbg_animation(self):
         """启动主背景淡入动画（带延迟）"""
@@ -141,7 +131,7 @@ class MultiStageAnimations:
             pos_anim.setDuration(item["duration"])
             pos_anim.setStartValue(QPoint(item["end_pos"].x(), self.canvas_height + 100))
             pos_anim.setEndValue(item["end_pos"])
-            pos_anim.setEasingCurve(QEasingCurve.OutBack)
+            pos_anim.setEasingCurve(QEasingCurve.Type.OutBack)
             
             # 透明度动画
             opacity_anim = QPropertyAnimation(item["widget"].graphicsEffect(), b"opacity")
