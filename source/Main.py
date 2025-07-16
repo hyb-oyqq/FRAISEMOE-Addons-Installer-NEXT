@@ -25,11 +25,17 @@ import sys
 import os
 
 def resource_path(relative_path):
-    """获取资源的绝对路径，适用于开发环境和PyInstaller打包环境"""
-    try:
-        # PyInstaller创建的临时文件夹
-        base_path = sys._MEIPASS  # type: ignore
-    except Exception:
+    """获取资源的绝对路径，适用于开发环境和Nuitka/PyInstaller打包环境"""
+    if getattr(sys, 'frozen', False):
+        # 如果是打包后的环境（Nuitka或PyInstaller）
+        if hasattr(sys, '_MEIPASS'):
+            # PyInstaller的临时路径
+            base_path = sys._MEIPASS  # type: ignore
+        else:
+            # Nuitka的路径或PyInstaller --onefile模式
+            base_path = os.path.dirname(sys.executable)
+    else:
+        # 开发环境
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 

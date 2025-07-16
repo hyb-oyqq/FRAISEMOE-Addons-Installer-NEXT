@@ -171,3 +171,4 @@ cython_debug/
 .pypirc
 
 nuitka-crash-report.xml
+build.bat
