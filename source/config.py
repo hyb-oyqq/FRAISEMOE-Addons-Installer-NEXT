@@ -8,7 +8,7 @@ app_data = {
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
-    "CONFIG_URL": "aHR0cHM6Ly9hcmNoaXZlLm92b2Zpc2guY29tL2FwaS93aWRnZXQvbmVrb3BhcmEvZG93bmxvYWRfdXJsX2RlYnVnLmpzb24=",
+    "CONFIG_URL": "aHR0cHM6Ly9hcGkuMncyLnRvcC9hcGkvb3V5YW5ncWlxaS9uZWtvcGFyYS9kb3dubG9hZF91cmwuanNvbg==",
     "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZTItQWNjZXB0LU5leHQpIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTE0LjAgRnJhaXNlTW9lMi8xLjAuMA==",
     "game_info": {
         "NEKOPARA Vol.1": {
