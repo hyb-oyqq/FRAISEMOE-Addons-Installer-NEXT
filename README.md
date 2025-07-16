@@ -26,8 +26,8 @@
 <br>
 
 <p align="center">
-  <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer">
-    <img src="https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/master/introduction_imgs/main.png" alt="Logo">
+  <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT">
+    <img src="./introduction_imgs/main.png" alt="Logo">
   </a>
   <br />
     <br />

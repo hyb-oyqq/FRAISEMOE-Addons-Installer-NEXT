@@ -1,5 +1,5 @@
 <div align="center" style="margin-top: 20px; margin-bottom: 20px;">
-  <img src="https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/master/introduction_imgs/main.png" alt="FRAISEMOE Logo" />
+  <img src="./introduction_imgs/main.png" alt="FRAISEMOE Logo" />
   <h2 style="margin: 10px 0 5px 0; font-weight: bold; color: #e75480;">🍓 FRAISEMOE NEKOPARA Addons Installer NEXT🍓</h2>
   <p style="font-size: 1.1em; color: #555;">一个为 Nekopara 系列游戏安装补丁的应用。</p>
   <p>
