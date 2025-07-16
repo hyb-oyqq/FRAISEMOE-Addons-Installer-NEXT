@@ -25,17 +25,12 @@ import sys
 import os
 
 def resource_path(relative_path):
-    """获取资源的绝对路径，适用于开发环境和Nuitka/PyInstaller打包环境"""
     if getattr(sys, 'frozen', False):
-        # 如果是打包后的环境（Nuitka或PyInstaller）
         if hasattr(sys, '_MEIPASS'):
-            # PyInstaller的临时路径
             base_path = sys._MEIPASS  # type: ignore
         else:
-            # Nuitka的路径或PyInstaller --onefile模式
             base_path = os.path.dirname(sys.executable)
     else:
-        # 开发环境
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
@@ -109,6 +104,7 @@ PROCESS_INFO = {info["exe"]: game for game, info in GAME_INFO.items()}
 def msgbox_frame(title, text, buttons=QtWidgets.QMessageBox.StandardButton.NoButton):
     msg_box = QtWidgets.QMessageBox()
     msg_box.setWindowTitle(title)
+    msg_box.setWindowModality(Qt.WindowModality.WindowModal)
     
     # 设置弹窗图标
     icon_data = img_data.get("icon")
@@ -149,7 +145,7 @@ class HashManager:
                 except Exception as e:
                     results[file_path] = None
                     msg_box = msgbox_frame(
-                        f"错误 {APP_NAME}",
+                        f"错误 - {APP_NAME}",
                         f"\n文件哈希值计算失败\n\n【错误信息】：{e}\n",
                         QtWidgets.QMessageBox.StandardButton.Ok,
                     )
@@ -157,8 +153,8 @@ class HashManager:
         return results
 
     def hash_pop_window(self):
-        msg_box = msgbox_frame(f"通知 {APP_NAME}", "\n正在检验文件状态...\n")
-        msg_box.show()
+        msg_box = msgbox_frame(f"通知 - {APP_NAME}", "\n正在检验文件状态...\n")
+        msg_box.open()
         QApplication.processEvents()
         return msg_box
 
@@ -171,7 +167,7 @@ class HashManager:
             installed_status[game_version] = True
         else:
             reply = msgbox_frame(
-                f"文件校验 {APP_NAME}",
+                f"文件校验 - {APP_NAME}",
                 f"\n检测到 {game_version} 的文件哈希值不匹配，是否重新安装？\n",
                 QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
             ).exec()
@@ -192,7 +188,7 @@ class HashManager:
                 file_hash = hash_results.get(install_paths[game])
                 if file_hash != hash_value:
                     msg_box = msgbox_frame(
-                        f"文件校验 {APP_NAME}",
+                        f"文件校验 - {APP_NAME}",
                         f"\n检测到 {game} 的文件哈希值不匹配\n",
                         QtWidgets.QMessageBox.StandardButton.Ok,
                     )
@@ -222,7 +218,7 @@ class AdminPrivileges:
     def request_admin_privileges(self):
         if not self.is_admin():
             msg_box = msgbox_frame(
-                f"权限检测 {APP_NAME}",
+                f"权限检测 - {APP_NAME}",
                 "\n需要管理员权限运行此程序\n",
                 QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
             )
@@ -234,7 +230,7 @@ class AdminPrivileges:
                     )
                 except Exception as e:
                     msg_box = msgbox_frame(
-                        f"错误 {APP_NAME}",
+                        f"错误 - {APP_NAME}",
                         f"\n请求管理员权限失败\n\n【错误信息】：{e}\n",
                         QtWidgets.QMessageBox.StandardButton.Ok,
                     )
@@ -242,7 +238,7 @@ class AdminPrivileges:
                 sys.exit(1)
             else:
                 msg_box = msgbox_frame(
-                    f"权限检测 {APP_NAME}",
+                    f"权限检测 - {APP_NAME}",
                     "\n无法获取管理员权限，程序将退出\n",
                     QtWidgets.QMessageBox.StandardButton.Ok,
                     )
@@ -253,7 +249,7 @@ class AdminPrivileges:
         for proc in psutil.process_iter(["pid", "name"]):
             if proc.info["name"] in self.required_exes:
                 msg_box = msgbox_frame(
-                    f"进程检测 {APP_NAME}",
+                    f"进程检测 - {APP_NAME}",
                     f"\n检测到游戏正在运行： {proc.info['name']} \n\n是否终止？\n",
                     QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                 )
@@ -264,7 +260,7 @@ class AdminPrivileges:
                         proc.wait(timeout=3)
                     except psutil.AccessDenied:
                         msg_box = msgbox_frame(
-                            f"错误 {APP_NAME}",
+                            f"错误 - {APP_NAME}",
                             f"\n无法关闭游戏： {proc.info['name']} \n\n请手动关闭后重启应用\n",
                             QtWidgets.QMessageBox.StandardButton.Ok,
                         )
@@ -272,7 +268,7 @@ class AdminPrivileges:
                         sys.exit(1)
                 else:
                     msg_box = msgbox_frame(
-                        f"进程检测 {APP_NAME}",
+                        f"进程检测 - {APP_NAME}",
                         f"\n未关闭的游戏： {proc.info['name']} \n\n请手动关闭后重启应用\n",
                         QtWidgets.QMessageBox.StandardButton.Ok,
                     )
@@ -296,8 +292,8 @@ class DownloadThread(QThread):
         if self.process and self.process.poll() is None:
             self.is_running = False
             import subprocess
-            # 使用 taskkill 强制终止进程及其子进程
-            subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True)
+            # 使用 taskkill 强制终止进程及其子进程，并隐藏窗口
+            subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             self.finished.emit(False, "下载已手动停止。")
 
     def run(self):
@@ -333,7 +329,6 @@ class DownloadThread(QThread):
                 '--console-log-level=info',
                 '--summary-interval=1',
                 '--log-level=info',
-                '--allow-overwrite=true',
                 '--max-tries=3',
                 '--retry-wait=2',
                 '--connect-timeout=60',
@@ -403,7 +398,7 @@ class DownloadThread(QThread):
 class ProgressWindow(QDialog):
     def __init__(self, parent=None):
         super(ProgressWindow, self).__init__(parent)
-        self.setWindowTitle(f"下载进度 {APP_NAME}")
+        self.setWindowTitle(f"下载进度 - {APP_NAME}")
         self.resize(450, 180)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowCloseButtonHint)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowSystemMenuHint)
@@ -458,7 +453,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(pixmap))
 
         # 设置窗口标题为APP_NAME加版本号
-        self.setWindowTitle(f"{APP_NAME} vFraiseMoe2/1.0.0")
+        self.setWindowTitle(f"{APP_NAME} v1.0.0")
         
         # 初始化动画系统 (从animations.py导入)
         self.animator = MultiStageAnimations(self.ui)
@@ -483,7 +478,7 @@ class MainWindow(QMainWindow):
             except OSError as e:
                 QtWidgets.QMessageBox.critical(
                     self,
-                    f"错误 {APP_NAME}",
+                    f"错误 - {APP_NAME}",
                     f"\n无法创建缓存位置\n\n使用管理员身份运行或检查文件读写权限\n\n【错误信息】：{e}\n",
                 )
                 sys.exit(1)
@@ -495,6 +490,9 @@ class MainWindow(QMainWindow):
         # “关于”菜单
         about_action = QAction("项目主页", self)
         about_action.triggered.connect(self.open_about_page)
+        version_action = QAction("版本信息", self)
+        version_action.triggered.connect(self.show_version_info)
+        self.ui.menu_2.addAction(version_action)
         self.ui.menu_2.addAction(about_action)
         
         # 在窗口显示前设置初始状态
@@ -518,7 +516,7 @@ class MainWindow(QMainWindow):
         )
         if not self.selected_folder:
             QtWidgets.QMessageBox.warning(
-                self, f"通知 {APP_NAME}", "\n未选择任何目录,请重新选择\n"
+                self, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
             )
             return
         self.download_action()
@@ -554,14 +552,14 @@ class MainWindow(QMainWindow):
             print(f"获取下载配置时出错: {e}") # 添加详细错误日志
             QtWidgets.QMessageBox.critical(
                 self,
-                f"错误 {APP_NAME}",
+                f"错误 - {APP_NAME}",
                 f"\n下载配置获取失败\n\n【HTTP状态】：{status_code}\n【错误类型】：{json_title}\n【错误信息】：{json_message}\n",
             )
             return {}
         except ValueError as e:
             QtWidgets.QMessageBox.critical(
                 self,
-                f"错误 {APP_NAME}",
+                f"错误 - {APP_NAME}",
                 f"\n配置文件格式异常\n\n【错误信息】：{e}\n",
             )
             return {}
@@ -624,7 +622,7 @@ class MainWindow(QMainWindow):
             print(error)
             print("------------------------------------")
             msg_box = QtWidgets.QMessageBox(self)
-            msg_box.setWindowTitle(f"下载失败 {APP_NAME}")
+            msg_box.setWindowTitle(f"下载失败 - {APP_NAME}")
             # 如果是手动停止，显示特定信息
             if error == "下载已手动停止。":
                 msg_box.setText(f"\n下载已手动终止: {game_version}\n\n是否重试？")
@@ -675,7 +673,7 @@ class MainWindow(QMainWindow):
             except (py7zr.Bad7zFile, FileNotFoundError, Exception) as e:
                 QtWidgets.QMessageBox.critical(
                     self,
-                    f"错误 {APP_NAME}",
+                    f"错误 - {APP_NAME}",
                     f"\n文件操作失败，请重试\n\n【错误信息】：{e}\n",
                 )
             finally:
@@ -705,7 +703,7 @@ class MainWindow(QMainWindow):
             except (py7zr.Bad7zFile, FileNotFoundError, Exception) as e:
                 QtWidgets.QMessageBox.critical(
                     self,
-                    f"错误 {APP_NAME}",
+                    f"错误 - {APP_NAME}",
                     f"\n文件操作失败，请重试\n\n【错误信息】：{e}\n",
                 )
             finally:
@@ -755,7 +753,7 @@ class MainWindow(QMainWindow):
         config = self.get_download_url()
         if not config:
             QtWidgets.QMessageBox.critical(
-                self, f"错误 {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
+                self, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             return
 
@@ -823,10 +821,19 @@ class MainWindow(QMainWindow):
         )
         QtWidgets.QMessageBox.information(
             self,
-            f"完成 {APP_NAME}",
+            f"完成 - {APP_NAME}",
             f"\n安装结果：\n安装成功数：{len(installed_version.splitlines())}      安装失败数：{len(failed_ver.splitlines())}\n"
             f"安装成功的版本：\n{installed_version}\n尚未持有或未使用本工具安装补丁的版本：\n{failed_ver}\n",
         )
+
+    def show_version_info(self):
+        """显示版本信息对话框"""
+        msg_box = msgbox_frame(
+            f"版本信息 - {APP_NAME}",
+            f"\n{APP_NAME}\n\n版本: {APP_VERSION}\n",
+            QtWidgets.QMessageBox.StandardButton.Ok,
+        )
+        msg_box.exec()
 
     def open_about_page(self):
         webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT")
@@ -850,7 +857,7 @@ class MainWindow(QMainWindow):
             ):
                 QtWidgets.QMessageBox.critical(
                     self,
-                    f"错误 {APP_NAME}",
+                    f"错误 - {APP_NAME}",
                     "\n当前有下载任务正在进行，完成后再试\n",
                 )
                 if event:
@@ -866,7 +873,7 @@ class MainWindow(QMainWindow):
                         if attempt == 2:
                             QtWidgets.QMessageBox.critical(
                                 self,
-                                f"错误 {APP_NAME}",
+                                f"错误 - {APP_NAME}",
                                 f"\n清理缓存失败\n\n【错误信息】：{e}\n",
                             )
                             if event:
