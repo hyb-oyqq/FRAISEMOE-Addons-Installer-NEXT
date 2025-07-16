@@ -28,7 +28,7 @@ def resource_path(relative_path):
     """获取资源的绝对路径，适用于开发环境和PyInstaller打包环境"""
     try:
         # PyInstaller创建的临时文件夹
-        base_path = sys._MEIPASS
+        base_path = sys._MEIPASS  # type: ignore
     except Exception:
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
@@ -289,6 +289,7 @@ class DownloadThread(QThread):
     def stop(self):
         if self.process and self.process.poll() is None:
             self.is_running = False
+            import subprocess
             # 使用 taskkill 强制终止进程及其子进程
             subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True)
             self.finished.emit(False, "下载已手动停止。")
@@ -323,7 +324,6 @@ class DownloadThread(QThread):
                 '--header', 'Sec-Fetch-Mode: cors',
                 '--header', 'Sec-Fetch-Site: same-origin',
                 '--http-accept-gzip=true',
-                '--min-tls-version=TLSv1.2',
                 '--console-log-level=info',
                 '--summary-interval=1',
                 '--log-level=info',
@@ -333,6 +333,8 @@ class DownloadThread(QThread):
                 '--connect-timeout=60',
                 '--timeout=60',
                 '--auto-file-renaming=false',
+                '--split=16',
+                '--max-connection-per-server=16',
                 self.url
             ]
             
@@ -341,12 +343,15 @@ class DownloadThread(QThread):
 
             # 正则表达式用于解析aria2c的输出
             # 例如: #1 GID[...](  5%) CN:1 DL:10.5MiB/s ETA:1m30s
-            progress_pattern = re.compile(r'\((\d+)%\).*?CN:(\d+).*?DL:([\d\.]+[KMG]?i?B/s).*?ETA:([\w\d]+)')
+            progress_pattern = re.compile(r'\((\d{1,3})%\).*?CN:(\d+).*?DL:\s*([^\s]+).*?ETA:\s*([^\s]+)')
 
             full_output = []
             while self.is_running and self.process.poll() is None:
-                line = self.process.stdout.readline()
-                if not line:
+                if self.process.stdout:
+                    line = self.process.stdout.readline()
+                    if not line:
+                        break
+                else:
                     break
                 
                 full_output.append(line)
@@ -390,9 +395,6 @@ class DownloadThread(QThread):
 
 # 下载进度窗口类
 class ProgressWindow(QDialog):
-    # 添加一个信号，用于通知主窗口下载已停止
-    download_stopped = Signal()
-
     def __init__(self, parent=None):
         super(ProgressWindow, self).__init__(parent)
         self.setWindowTitle(f"下载进度 {APP_NAME}")
@@ -434,11 +436,6 @@ class ProgressWindow(QDialog):
         # 如果需要，可以在这里添加逻辑，例如询问用户是否要停止下载
         event.ignore()
 
-    def on_stop_clicked(self):
-        self.stop_button.setEnabled(False)
-        self.stop_button.setText("正在停止...")
-        self.download_stopped.emit()
-        self.reject() # 关闭窗口并返回一个QDialog.Rejected值
 
 # 主窗口类
 class MainWindow(QMainWindow):
@@ -548,6 +545,7 @@ class MainWindow(QMainWindow):
                 json_title = "配置文件异常，无法解析错误类型"
                 json_message = "配置文件异常，无法解析错误信息"
 
+            print(f"获取下载配置时出错: {e}") # 添加详细错误日志
             QtWidgets.QMessageBox.critical(
                 self,
                 f"错误 {APP_NAME}",
@@ -598,9 +596,6 @@ class MainWindow(QMainWindow):
         
         # 连接停止按钮的信号
         self.progress_window.stop_button.clicked.connect(self.current_download_thread.stop)
-        # 连接窗口关闭信号，以处理用户手动停止的情况
-        self.progress_window.download_stopped.connect(self.on_download_stopped)
-
         self.current_download_thread.start()
         self.progress_window.exec() # 使用exec()以模态方式显示对话框
 
@@ -615,11 +610,71 @@ class MainWindow(QMainWindow):
         _7z_path,
         plugin_path,
     ):
-        if not success and error == "下载已手动停止。":
-            # 用户手动停止了下载，不需要进行后续操作
-            return
+        if progress_window.isVisible():
+            progress_window.reject()
 
-        if self.progress_window.isVisible():
+        if not success: # 处理所有失败情况，包括手动停止
+            print(f"--- Download Failed: {game_version} ---")
+            print(error)
+            print("------------------------------------")
+            msg_box = QtWidgets.QMessageBox(self)
+            msg_box.setWindowTitle(f"下载失败 {APP_NAME}")
+            # 如果是手动停止，显示特定信息
+            if error == "下载已手动停止。":
+                msg_box.setText(f"\n下载已手动终止: {game_version}\n\n是否重试？")
+            else:
+                msg_box.setText(f"\n文件获取失败: {game_version}\n\n是否重试？")
+            
+            retry_button = msg_box.addButton("重试", QtWidgets.QMessageBox.ButtonRole.YesRole)
+            next_button = msg_box.addButton("下一个", QtWidgets.QMessageBox.ButtonRole.NoRole)
+            end_button = msg_box.addButton("结束", QtWidgets.QMessageBox.ButtonRole.RejectRole)
+            
+            icon_data = img_data.get("icon")
+            if icon_data:
+                pixmap = load_base64_image(icon_data)
+                if not pixmap.isNull():
+                    msg_box.setWindowIcon(QIcon(pixmap))
+
+            msg_box.exec()
+            clicked_button = msg_box.clickedButton()
+
+            if clicked_button == retry_button:
+                self.download_setting(url, game_folder, game_version, _7z_path, plugin_path)
+            elif clicked_button == next_button:
+                self.next_download_task()
+            else: # End button or closed dialog
+                self.download_queue.clear()
+                self.after_hash_compare(PLUGIN_HASH)
+            return # 确保失败后不再执行成功逻辑
+
+        if success:
+            try:
+                msg_box = self.hash_manager.hash_pop_window()
+                QApplication.processEvents()
+                with py7zr.SevenZipFile(_7z_path, mode="r") as archive:
+                    archive.extractall(path=PLUGIN)
+                
+                # 创建游戏目录(如果不存在)
+                os.makedirs(game_folder, exist_ok=True)
+                
+                # 复制主文件
+                shutil.copy(plugin_path, game_folder)
+                
+                # 如果是After版本，还需要复制签名文件
+                if game_version == "NEKOPARA After":
+                    sig_path = os.path.join(PLUGIN, GAME_INFO[game_version]["sig_path"])
+                    shutil.copy(sig_path, game_folder)
+                    
+                self.installed_status[game_version] = True
+            except (py7zr.Bad7zFile, FileNotFoundError, Exception) as e:
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    f"错误 {APP_NAME}",
+                    f"\n文件操作失败，请重试\n\n【错误信息】：{e}\n",
+                )
+            finally:
+                msg_box.close()
+            self.next_download_task()
             self.progress_window.close()
             
         if success:
