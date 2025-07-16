@@ -1,15 +1,7 @@
-<!-- TOP TITLE -->
-
-<div style="text-align: center;">
-    <h1>🍓FRAISEMOE NEKOPARA Addons Installer🍓</h1>
-    <h3>一个简单的为 Nekopara 系列游戏安装补丁的应用。</h3>
-</div>
-
-<!-- INTRODUCTION -->
 <div align="center" style="margin-top: 20px; margin-bottom: 20px;">
   <img src="https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/master/introduction_imgs/main.png" alt="FRAISEMOE Logo" />
-  <h2 style="margin: 10px 0 5px 0; font-weight: bold; color: #e75480;">🍓 FRAISEMOE NEKOPARA Addons Installer 🍓</h2>
-  <p style="font-size: 1.1em; color: #555;">一个简单的为 Nekopara 系列游戏安装补丁的应用。</p>
+  <h2 style="margin: 10px 0 5px 0; font-weight: bold; color: #e75480;">🍓 FRAISEMOE NEKOPARA Addons Installer NEXT🍓</h2>
+  <p style="font-size: 1.1em; color: #555;">一个为 Nekopara 系列游戏安装补丁的应用。</p>
   <p>
     <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/" style="margin-right: 15px;">
       <img src="https://img.shields.io/github/stars/Yanam1Anna/FRAISEMOE-Addons-Installer?style=social" alt="GitHub stars" />
@@ -38,6 +30,7 @@
 - **NEKOPARA Vol. 2**
 - **NEKOPARA Vol. 3**
 - **NEKOPARA Vol. 4**
+- **NEKOPARA After**
 
 ---
 
@@ -47,7 +40,7 @@
 
 > **2. 尚未拥有的游戏将不会进行补丁安装 ❗**
 
-> **3. 本工具仅适用于补丁安装，不适用于安装游戏 ❗ 且仅限于在 Windows 系统上运行 ❗**
+> **3. 本工具仅适用于补丁安装，不适用于安装游戏 ❗ 且仅限于在 Windows x64 系统上运行 ❗**
 
 > **4. 工具需要使用管理员权限运行 ❗
 > 原因：为了防止用户在没有关闭正在运行的游戏而影响本工具的安装效果，启用应用前会获取游戏进程信息从而关闭游戏 ❗**
@@ -68,7 +61,7 @@
 
 ## **🔄 使用方式/流程：**
 
-1. 下载仓库中的"FRAISEMOE Addons Installer.exe"。
+1. 下载仓库中的"FRAISEMOE Addons Installer NEXT.exe"。
 2. **关闭[“适用游戏”中](#适用游戏)正在运行的游戏。**
 3. 若应用询问是否使用管理员身份运行，给予管理员身份运行即可。**若无法获取管理员权限，应用无法运行并自动退出。**
 4. 若应用询问是否关闭正在运行的游戏，选择"Yes"即可。**若无法关闭正在运行的游戏，应用无法运行并自动退出。**
