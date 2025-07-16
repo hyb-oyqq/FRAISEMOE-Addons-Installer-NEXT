@@ -164,6 +164,6 @@ class Ui_MainWindows(object):
         self.exit_btn.setText("")
         self.menubg.setText("")
         self.menu.setTitle(QCoreApplication.translate("MainWindows", u"\u8bbe\u7f6e", None))
-        self.menu_2.setTitle(QCoreApplication.translate("MainWindows", u"\u5173\u4e8e", None))
+        self.menu_2.setTitle(QCoreApplication.translate("MainWindows", u"\u5e2e\u52a9", None))
     # retranslateUi
 

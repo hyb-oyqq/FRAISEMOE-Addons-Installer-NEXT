@@ -3,7 +3,7 @@
   <h2 style="margin: 10px 0 5px 0; font-weight: bold; color: #e75480;">🍓 FRAISEMOE NEKOPARA Addons Installer NEXT🍓</h2>
   <p style="font-size: 1.1em; color: #555;">一个为 Nekopara 系列游戏安装补丁的应用。</p>
   <p>
-    <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/" style="margin-right: 15px;">
+    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/" style="margin-right: 15px;">
       <img src="https://img.shields.io/github/stars/Yanam1Anna/FRAISEMOE-Addons-Installer?style=social" alt="GitHub stars" />
       GitHub
     </a>
@@ -13,11 +13,11 @@
     </a>
   </p>
   <p>
-    <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/FAQ.md">中文</a> | 
-    <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/FAQ-en.md">English</a>
+    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ.md">中文</a> | 
+    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ-en.md">English</a>
   </p>
   <blockquote style="color: #c00; font-weight: bold; border-left: 4px solid #e75480; background: #fff0f5; padding: 10px;">
-    请严格遵守 <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/blob/master/FAQ.md">使用须知文档</a> 的所有条例，如有违反，全体开发人员不承担任何责任。<br>
+    请严格遵守 <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ.md">使用须知文档</a> 的所有条例，如有违反，全体开发人员不承担任何责任。<br>
     本工具的使用性质仅供学习交流使用，请勿用于商业用途。
   </blockquote>
 </div>
@@ -129,7 +129,7 @@
 2. 请检查所选择的文件夹中是否存在[游戏文件夹](#使用方式/流程)（参考使用流程中的第五条），若游戏文件夹不存在则无法正常工作。若不一致则无法正常工作。若此条故障已经排除，请继续下一步。
 3. 请检查网络环境是否正常，网络连接是否通畅。 若此条故障已经排除，请继续下一步。
 4. 如果直接显示安装结果（即跳过了安装步骤），则证明路径有误，无法识别游戏存在，请再次检查路径并重试。<b>如果你使用的是非Steam版本，请自行寻找相关资源进行安装.</b>
-5. 请到[GitHub](https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer)或[国内镜像站博客](https://blog.ovofish.com/posts/c54d3755.html)中，<b>检查使用的是否是最新版本，若应用不是为最新版本则无法正常工作。</b>
+5. 请到[GitHub](https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT)或[国内镜像站博客](https://blog.ovofish.com/posts/c54d3755.html)中，<b>检查使用的是否是最新版本，若应用不是为最新版本则无法正常工作。</b>
 
 ---
 
@@ -137,7 +137,7 @@
 
 1. 首先，每个人都会有没空的时候，请耐心等待回复或问题处理。
 2. 其次，文档和视频中已详细介绍了使用方法和常见问题解决方式，请检查你遇到的问题，或相似类别的问题是否存在于文档中，如果存在，一般不回复处理。
-3. 最后，如果遇到了未提及的问题，<b>请勿在视频站内或博客站内以评论，私信等方式报告你的问题，请到[GitHub中提交Issues](https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer/issues)。</b>
+3. 最后，如果遇到了未提及的问题，<b>请勿在视频站内或博客站内以评论，私信等方式报告你的问题，请到[GitHub中提交Issues](https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/issues)。</b>
 4. 提交问题报告时，<b>请附上下载报错窗口的报错信息，而不是安装最终结果显示，</b>安装结果显示是给用户看的，不是给开发者看的。
 ![issues_main](https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/refs/heads/master/introduction_imgs/issues_main.png)
 

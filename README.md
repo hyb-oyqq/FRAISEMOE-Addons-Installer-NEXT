@@ -50,7 +50,7 @@
 
 <!-- LANGUAGE -->
 <p align="center">
-    <a href="https://github.com/Yanam1Anna/FRAISEMOE-Addons-Installer">中文</a> | 
+    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT">中文</a> | 
     <a href="#">English</a>
 </p>
 

@@ -6,7 +6,7 @@ import requests
 import py7zr
 from collections import deque
 from PySide6 import QtWidgets
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtWidgets import QMainWindow, QFileDialog, QApplication
 
@@ -70,12 +70,12 @@ class MainWindow(QMainWindow):
         self.ui.start_install_btn.clicked.connect(self.file_dialog)
         self.ui.exit_btn.clicked.connect(self.shutdown_app)
 
-        # “关于”菜单
-        about_action = QAction("项目主页", self)
-        about_action.triggered.connect(self.open_about_page)
-        version_action = QAction("版本信息", self)
-        version_action.triggered.connect(self.show_version_info)
-        self.ui.menu_2.addAction(version_action)
+        # “帮助”菜单
+        project_home_action = QAction("项目主页", self)
+        project_home_action.triggered.connect(self.open_project_home_page)
+        about_action = QAction("关于", self)
+        about_action.triggered.connect(self.show_about_dialog)
+        self.ui.menu_2.addAction(project_home_action)
         self.ui.menu_2.addAction(about_action)
         
         # 在窗口显示前设置初始状态
@@ -409,16 +409,23 @@ class MainWindow(QMainWindow):
             f"安装成功的版本：\n{installed_version}\n尚未持有或未使用本工具安装补丁的版本：\n{failed_ver}\n",
         )
 
-    def show_version_info(self):
-        """显示版本信息对话框"""
+    def show_about_dialog(self):
+        """显示关于对话框"""
+        about_text = f"""
+            <p><b>{APP_NAME} v{APP_VERSION}</b></p>
+            <p>原作: <a href="https://github.com/Yanam1Anna">Yanam1Anna</a></p>
+            <p>此应用根据 <a href="https://github.com/hyb-oyqq/FRAISEMOE2-Installer/blob/master/LICENSE">GPL-3.0 许可证</a> 授权。</p>
+        """
         msg_box = msgbox_frame(
-            f"版本信息 - {APP_NAME}",
-            f"\n{APP_NAME}\n\n版本: {APP_VERSION}\n",
+            f"关于 - {APP_NAME}",
+            about_text,
             QtWidgets.QMessageBox.StandardButton.Ok,
         )
+        msg_box.setTextFormat(Qt.TextFormat.RichText)  # 启用富文本
         msg_box.exec()
 
-    def open_about_page(self):
+    def open_project_home_page(self):
+        """打开项目主页"""
         webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT")
 
     def closeEvent(self, event):

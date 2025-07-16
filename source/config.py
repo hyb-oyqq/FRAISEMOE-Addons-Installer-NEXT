@@ -9,7 +9,7 @@ app_data = {
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
     "CONFIG_URL": "aHR0cHM6Ly9hcmNoaXZlLm92b2Zpc2guY29tL2FwaS93aWRnZXQvbmVrb3BhcmEvZG93bmxvYWRfdXJsX2RlYnVnLmpzb24=",
-    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZTItQWNjZXB0KSBHZWNrby8yMDEwMDEwMSBGaXJlZm94LzExNC4wIEZyYWlzZU1vZTIvMS4wLjA=",
+    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZTItQWNjZXB0LU5leHQpIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTE0LjAgRnJhaXNlTW9lMi8xLjAuMA==",
     "game_info": {
         "NEKOPARA Vol.1": {
             "exe": "nekopara_vol1.exe",
