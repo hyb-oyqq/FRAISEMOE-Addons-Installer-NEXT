@@ -55,7 +55,7 @@
 
 请从 [应用发布页面](https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/releases) 下载最新版本的应用程序。
 
-![preview](https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/master/introduction_imgs/preview.png)
+![preview](./introduction_imgs/preview.png)
 
 ### ❗ 使用步骤
 
