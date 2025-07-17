@@ -14,11 +14,12 @@ class DownloadThread(QThread):
     progress = Signal(dict)
     finished = Signal(bool, str)
 
-    def __init__(self, url, _7z_path, game_version, parent=None):
+    def __init__(self, url, _7z_path, game_version, preferred_ip=None, parent=None):
         super().__init__(parent)
         self.url = url
         self._7z_path = _7z_path
         self.game_version = game_version
+        self.preferred_ip = preferred_ip
         self.process = None
         self.is_running = True
 
@@ -40,6 +41,16 @@ class DownloadThread(QThread):
             
             command = [
                 aria2c_path,
+            ]
+
+            # 如果有优选IP，则添加到 aaric2 命令中
+            if self.preferred_ip:
+                hostname = parsed_url.hostname
+                port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
+                command.extend(['--resolve', f'{hostname}:{port}:{self.preferred_ip}'])
+                print(f"已应用优选IP: {hostname} -> {self.preferred_ip}")
+
+            command.extend([
                 '--dir', download_dir,
                 '--out', file_name,
                 '--user-agent', UA,
@@ -66,7 +77,7 @@ class DownloadThread(QThread):
                 '--split=16',
                 '--max-connection-per-server=16',
                 self.url
-            ]
+            ])
             
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creation_flags)

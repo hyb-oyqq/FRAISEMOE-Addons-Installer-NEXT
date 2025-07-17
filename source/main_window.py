@@ -20,6 +20,7 @@ from utils import (
     load_base64_image, HashManager, AdminPrivileges, msgbox_frame
 )
 from download import DownloadThread, ProgressWindow
+from ip_optimizer import get_optimal_ip
 from pic_data import img_data
 
 class MainWindow(QMainWindow):
@@ -165,8 +166,20 @@ class MainWindow(QMainWindow):
             return
             
         self.progress_window = ProgressWindow(self)
+
+        # --- IP 优选逻辑 ---
+        self.progress_window.game_label.setText("正在优化下载线路，请稍候...")
+        QApplication.processEvents() # 刷新UI以显示上述消息
         
-        self.current_download_thread = DownloadThread(url, _7z_path, game_version, self)
+        preferred_ip = get_optimal_ip(url)
+        
+        if preferred_ip:
+            print(f"已为 {game_version} 获取到优选IP: {preferred_ip}")
+        else:
+            print(f"未能为 {game_version} 获取优选IP，将使用默认线路。")
+        # --- IP 优选逻辑结束 ---
+
+        self.current_download_thread = DownloadThread(url, _7z_path, game_version, preferred_ip, self)
         self.current_download_thread.progress.connect(self.progress_window.update_progress)
         self.current_download_thread.finished.connect(
             lambda success, error: self.install_setting(
