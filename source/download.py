@@ -14,24 +14,30 @@ class DownloadThread(QThread):
     progress = Signal(dict)
     finished = Signal(bool, str)
 
-    def __init__(self, url, _7z_path, game_version, preferred_ip=None, parent=None):
+    def __init__(self, url, _7z_path, game_version, parent=None):
         super().__init__(parent)
         self.url = url
         self._7z_path = _7z_path
         self.game_version = game_version
-        self.preferred_ip = preferred_ip
         self.process = None
-        self.is_running = True
+        self._is_running = True
 
     def stop(self):
         if self.process and self.process.poll() is None:
-            self.is_running = False
-            # 使用 taskkill 强制终止进程及其子进程，并隐藏窗口
-            subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            self.finished.emit(False, "下载已手动停止。")
+            self._is_running = False
+            try:
+                # 使用 taskkill 强制终止进程及其子进程，并隐藏窗口
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            except (subprocess.CalledProcessError, FileNotFoundError) as e:
+                print(f"停止下载进程时出错: {e}")
+
 
     def run(self):
         try:
+            if not self._is_running:
+                self.finished.emit(False, "下载已手动停止。")
+                return
+
             aria2c_path = resource_path("aria2c.exe")
             download_dir = os.path.dirname(self._7z_path)
             file_name = os.path.basename(self._7z_path)
@@ -42,13 +48,6 @@ class DownloadThread(QThread):
             command = [
                 aria2c_path,
             ]
-
-            # 如果有优选IP，则添加到 aaric2 命令中
-            if self.preferred_ip:
-                hostname = parsed_url.hostname
-                port = parsed_url.port or (443 if parsed_url.scheme == 'https' else 80)
-                command.extend(['--resolve', f'{hostname}:{port}:{self.preferred_ip}'])
-                print(f"已应用优选IP: {hostname} -> {self.preferred_ip}")
 
             command.extend([
                 '--dir', download_dir,
@@ -74,11 +73,19 @@ class DownloadThread(QThread):
                 '--connect-timeout=60',
                 '--timeout=60',
                 '--auto-file-renaming=false',
+                '--allow-overwrite=true',
                 '--split=16',
-                '--max-connection-per-server=16',
-                self.url
+                '--max-connection-per-server=16'
             ])
             
+            # 证书验证现在总是需要，因为我们依赖hosts文件
+            command.append('--check-certificate=false')
+            
+            command.append(self.url)
+            
+            # 打印将要执行的命令，用于调试
+            print(f"即将执行的 Aria2c 命令: {' '.join(command)}")
+
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creation_flags)
 
@@ -87,7 +94,7 @@ class DownloadThread(QThread):
             progress_pattern = re.compile(r'\((\d{1,3})%\).*?CN:(\d+).*?DL:\s*([^\s]+).*?ETA:\s*([^\s]+)')
 
             full_output = []
-            while self.is_running and self.process.poll() is None:
+            while self._is_running and self.process.poll() is None:
                 if self.process.stdout:
                     line = self.process.stdout.readline()
                     if not line:
@@ -114,7 +121,8 @@ class DownloadThread(QThread):
 
             return_code = self.process.wait()
             
-            if not self.is_running: # 如果是手动停止的
+            if not self._is_running: # 如果是手动停止的
+                self.finished.emit(False, "下载已手动停止。")
                 return
 
             if return_code == 0:
@@ -131,7 +139,7 @@ class DownloadThread(QThread):
                 self.finished.emit(False, error_message)
 
         except Exception as e:
-            if self.is_running:
+            if self._is_running:
                 self.finished.emit(False, f"\n下载时发生未知错误\n\n【错误信息】: {e}\n")
 
 # 下载进度窗口类
@@ -144,7 +152,7 @@ class ProgressWindow(QDialog):
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowSystemMenuHint)
 
         layout = QVBoxLayout()
-        self.game_label = QLabel("正在准备下载...")
+        self.game_label = QLabel("正在启动下载，请稍后...")
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         self.stats_label = QLabel("速度: - | 线程: - | 剩余时间: -")

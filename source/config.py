@@ -3,13 +3,13 @@ import base64
 
 # 配置信息
 app_data = {
-    "APP_VERSION": "1.0.0",
+    "APP_VERSION": "1.1.0",
     "APP_NAME": "FRAISEMOE Addons Installer NEXT",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
     "CONFIG_URL": "aHR0cHM6Ly9hcGkuMncyLnRvcC9hcGkvb3V5YW5ncWlxaS9uZWtvcGFyYS9kb3dubG9hZF91cmwuanNvbg==",
-    "UA": "TW96aWxsYS81LjAgKExpbnV4IGRlYmlhbjEyIEZyYWlzZU1vZTItQWNjZXB0LU5leHQpIEdlY2tvLzIwMTAwMTAxIEZpcmVmb3gvMTE0LjAgRnJhaXNlTW9lMi8xLjAuMA==",
+    "UA_TEMPLATE": "Mozilla/5.0 (Linux debian12 FraiseMoe2-Accept-Next) Gecko/20100101 Firefox/114.0 FraiseMoe2/{}",
     "game_info": {
         "NEKOPARA Vol.1": {
             "exe": "nekopara_vol1.exe",
@@ -54,9 +54,11 @@ APP_VERSION = app_data["APP_VERSION"]
 APP_NAME = app_data["APP_NAME"]
 TEMP = os.getenv(app_data["TEMP"]) or app_data["TEMP"]
 CACHE = os.path.join(TEMP, app_data["CACHE"])
+CONFIG_FILE = os.path.join(CACHE, "config.json")
+LOG_FILE = "log.txt"
 PLUGIN = os.path.join(CACHE, app_data["PLUGIN"])
 CONFIG_URL = decode_base64(app_data["CONFIG_URL"])
-UA = decode_base64(app_data["UA"])
+UA = app_data["UA_TEMPLATE"].format(APP_VERSION)
 GAME_INFO = app_data["game_info"]
 BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
