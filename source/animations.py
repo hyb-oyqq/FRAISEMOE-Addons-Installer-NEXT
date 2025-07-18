@@ -1,9 +1,11 @@
-from PySide6.QtCore import (QPropertyAnimation, QParallelAnimationGroup,
-                          QPoint, QEasingCurve, QTimer)
+from PySide6.QtCore import (QObject, QPropertyAnimation, QParallelAnimationGroup,
+                          QPoint, QEasingCurve, QTimer, Signal)
 from PySide6.QtWidgets import QGraphicsOpacityEffect
 
-class MultiStageAnimations:
-    def __init__(self, ui):
+class MultiStageAnimations(QObject):
+    animation_finished = Signal()
+    def __init__(self, ui, parent=None):
+        super().__init__(parent)
         self.ui = ui
         # 获取画布尺寸
         self.canvas_width = ui.centralwidget.width()
@@ -141,6 +143,10 @@ class MultiStageAnimations:
             
             anim_group.addAnimation(pos_anim)
             anim_group.addAnimation(opacity_anim)
+
+            if item["widget"] == self.ui.exit_btn:
+                anim_group.finished.connect(self.animation_finished.emit)
+
             anim_group.start()
             self.animations.append(anim_group)
     def start_animations(self):

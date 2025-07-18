@@ -1,12 +1,3 @@
-# -*- coding: utf-8 -*-
-
-################################################################################
-## Form generated from reading UI file 'install.ui'
-##
-## Created by: Qt User Interface Compiler version 6.9.1
-##
-## WARNING! All changes made in this file will be lost when recompiling UI file!
-################################################################################
 from pic_data import img_data
 from PySide6.QtGui import QPixmap
 import base64
@@ -42,8 +33,6 @@ class Ui_MainWindows(object):
         MainWindows.setAnimated(True)
         MainWindows.setDocumentMode(False)
         MainWindows.setDockNestingEnabled(False)
-        self.action_2 = QAction(MainWindows)
-        self.action_2.setObjectName(u"action_2")
         self.centralwidget = QWidget(MainWindows)
         self.centralwidget.setObjectName(u"centralwidget")
         self.centralwidget.setAutoFillBackground(True)
@@ -140,8 +129,6 @@ class Ui_MainWindows(object):
         self.menubar.addAction(self.menu.menuAction())
         self.menubar.addAction(self.menu_2.menuAction())
         self.menu.addSeparator()
-        self.menu.addAction(self.action_2)
-
         self.retranslateUi(MainWindows)
 
         QMetaObject.connectSlotsByName(MainWindows)
@@ -149,7 +136,6 @@ class Ui_MainWindows(object):
 
     def retranslateUi(self, MainWindows):
         MainWindows.setWindowTitle(QCoreApplication.translate("MainWindows", u" UI Test", None))
-        self.action_2.setText(QCoreApplication.translate("MainWindows", u"\u68c0\u67e5\u66f4\u65b0(\u672a\u5b8c\u6210)", None))
         self.loadbg.setText("")
         self.vol1bg.setText("")
         self.vol2bg.setText("")

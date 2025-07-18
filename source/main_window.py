@@ -113,6 +113,56 @@ class ExtractionThread(QThread):
             self.finished.emit(False, f"\n文件操作失败，请重试\n\n【错误信息】：{e}\n", self.game_version)
 
 
+class ConfigFetchThread(QThread):
+    finished = Signal(object, str)  # data, error_message
+
+    def __init__(self, url, headers, debug_mode=False, parent=None):
+        super().__init__(parent)
+        self.url = url
+        self.headers = headers
+        self.debug_mode = debug_mode
+
+    def run(self):
+        try:
+            if self.debug_mode:
+                print("--- Starting to fetch cloud config ---")
+                print(f"DEBUG: Requesting URL: {self.url}")
+                print(f"DEBUG: Using Headers: {self.headers}")
+
+            response = requests.get(self.url, headers=self.headers, timeout=10)
+
+            if self.debug_mode:
+                print(f"DEBUG: Response Status Code: {response.status_code}")
+                print(f"DEBUG: Response Headers: {response.headers}")
+                print(f"DEBUG: Response Text: {response.text}")
+
+            response.raise_for_status()
+            
+            # 首先，总是尝试解析JSON
+            config_data = response.json()
+
+            # 检查是否是要求更新的错误信息
+            if config_data.get("message") == "请使用最新版本的FRAISEMOE Addons Installer NEXT进行下载安装":
+                self.finished.emit(None, "update_required")
+                return
+
+            # 检查是否是有效的配置文件
+            required_keys = [f"vol.{i+1}.data" for i in range(4)] + ["after.data"]
+            missing_keys = [key for key in required_keys if key not in config_data]
+            if missing_keys:
+                self.finished.emit(None, f"missing_keys:{','.join(missing_keys)}")
+                return
+
+            self.finished.emit(config_data, "")
+        except requests.exceptions.RequestException as e:
+            self.finished.emit(None, f"网络请求失败: {e}")
+        except (ValueError, json.JSONDecodeError) as e:
+            self.finished.emit(None, f"JSON解析失败: {e}")
+        finally:
+            if self.debug_mode:
+                print("--- Finished fetching cloud config ---")
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -130,7 +180,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         
         # 初始化动画系统 (从animations.py导入)
-        self.animator = MultiStageAnimations(self.ui)
+        self.animator = MultiStageAnimations(self.ui, self)
         
         # 初始化功能变量
         self.selected_folder = ""
@@ -146,6 +196,8 @@ class MainWindow(QMainWindow):
         self.optimization_done = False # 标记是否已执行过优选
         self.logger = None
         self.hosts_manager = HostsManager() # 实例化HostsManager
+        self.cloud_config = None
+        self.config_fetch_thread = None
         
         # 加载配置
         self.config = load_config()
@@ -188,6 +240,11 @@ class MainWindow(QMainWindow):
         self.debug_action.triggered.connect(self.toggle_debug_mode)
         self.ui.menu.addAction(self.debug_action)
 
+        # 为未来功能预留的“切换下载源”按钮
+        self.switch_source_action = QAction("切换下载源", self)
+        self.switch_source_action.setEnabled(False)  # 暂时禁用
+        self.ui.menu.addAction(self.switch_source_action)
+
         # 根据初始配置决定是否开启Debug模式
         if self.debug_action.isChecked():
             self.start_logging()
@@ -199,7 +256,49 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(100, self.start_animations)
     
     def start_animations(self):
+        self.ui.exit_btn.setEnabled(False)
+        self.animator.animation_finished.connect(self.on_animations_finished)
         self.animator.start_animations()
+        self.fetch_cloud_config()
+
+    def on_animations_finished(self):
+        self.ui.exit_btn.setEnabled(True)
+
+    def fetch_cloud_config(self):
+        headers = {"User-Agent": UA}
+        debug_mode = self.debug_action.isChecked()
+        self.config_fetch_thread = ConfigFetchThread(CONFIG_URL, headers, debug_mode, self)
+        self.config_fetch_thread.finished.connect(self.on_config_fetched)
+        self.config_fetch_thread.start()
+
+    def on_config_fetched(self, data, error_message):
+        if error_message:
+            if error_message == "update_required":
+                msg_box = msgbox_frame(
+                    f"更新提示 - {APP_NAME}",
+                    "\n当前版本过低，请及时更新。\n",
+                    QtWidgets.QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+                self.open_project_home_page()
+                self.shutdown_app(force_exit=True)
+            elif "missing_keys" in error_message:
+                missing_versions = error_message.split(":")[1]
+                msg_box = msgbox_frame(
+                    f"配置缺失 - {APP_NAME}",
+                    f'\n云端缺失下载链接，可能云服务器正在维护，不影响其他版本下载。\n当前缺失版本:"{missing_versions}"\n',
+                    QtWidgets.QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+            else:
+                # 其他错误暂时只在debug模式下打印
+                if self.debug_action.isChecked():
+                    print(f"获取云端配置失败: {error_message}")
+        else:
+            self.cloud_config = data
+            if self.debug_action.isChecked():
+                print("--- Cloud config fetched successfully ---")
+                print(json.dumps(data, indent=2))
 
     def toggle_debug_mode(self, checked):
         self.config["debug_mode"] = checked
@@ -253,45 +352,51 @@ class MainWindow(QMainWindow):
 
     def get_download_url(self) -> dict:
         try:
-            headers = {"User-Agent": UA}
-            if self.debug_action.isChecked():
-                print("--- Starting to get download URL ---")
-                print(f"DEBUG: Requesting URL: {CONFIG_URL}")
-                print(f"DEBUG: Using Headers: {headers}")
+            if self.cloud_config:
+                if self.debug_action.isChecked():
+                    print("--- Using pre-fetched cloud config ---")
+                config_data = self.cloud_config
+            else:
+                # 如果没有预加载的配置，则同步获取
+                headers = {"User-Agent": UA}
+                response = requests.get(CONFIG_URL, headers=headers, timeout=10)
+                response.raise_for_status()
+                config_data = response.json()
 
-            response = requests.get(CONFIG_URL, headers=headers, timeout=10)
+            if not config_data:
+                raise ValueError("未能获取或解析配置数据")
 
-            if self.debug_action.isChecked():
-                print(f"DEBUG: Response Status Code: {response.status_code}")
-                print(f"DEBUG: Response Headers: {response.headers}")
-                print(f"DEBUG: Response Text: {response.text}")
-
-            response.raise_for_status()
-
-            # 从响应文本中提取有效的 JSON 部分
-            response_text = response.text
-            json_start_index = response_text.find('{')
-            if json_start_index == -1:
-                raise ValueError("响应中未找到有效的 JSON 对象")
-
-            json_text = response_text[json_start_index:]
-            config_data = json.loads(json_text)
-            
             if self.debug_action.isChecked():
                 print(f"DEBUG: Parsed JSON data: {json.dumps(config_data, indent=2)}")
 
-            # 修正键名检查，确保所有必需的键都存在
-            required_keys = [f"vol.{i+1}.data" for i in range(4)] + ["after.data"]
-            if not all(key in config_data for key in required_keys):
-                missing_keys = [key for key in required_keys if key not in config_data]
-                raise ValueError(f"配置文件缺少必要的键: {', '.join(missing_keys)}")
+            # 统一处理URL提取，确保返回扁平化的字典
+            urls = {}
+            for i in range(4):
+                key = f"vol.{i+1}.data"
+                if key in config_data and "url" in config_data[key]:
+                    urls[f"vol{i+1}"] = config_data[key]["url"]
             
-            # 修正提取URL的逻辑，确保使用正确的键
-            urls = {
-                f"vol{i+1}": config_data[f"vol.{i+1}.data"]["url"] for i in range(4)
-            } | {
-                "after": config_data["after.data"]["url"]
-            }
+            if "after.data" in config_data and "url" in config_data["after.data"]:
+                urls["after"] = config_data["after.data"]["url"]
+
+            # 检查是否成功提取了所有URL
+            if len(urls) != 5:
+                missing_keys_map = {
+                    f"vol{i+1}": f"vol.{i+1}.data" for i in range(4)
+                }
+                missing_keys_map["after"] = "after.data"
+                
+                extracted_keys = set(urls.keys())
+                all_keys = set(missing_keys_map.keys())
+                missing_simple_keys = all_keys - extracted_keys
+                
+                missing_original_keys = [missing_keys_map[k] for k in missing_simple_keys]
+                raise ValueError(f"配置文件缺少必要的键: {', '.join(missing_original_keys)}")
+
+            if self.debug_action.isChecked():
+                print(f"DEBUG: Extracted URLs: {urls}")
+                print("--- Finished getting download URL successfully ---")
+            return urls
             if self.debug_action.isChecked():
                 print(f"DEBUG: Extracted URLs: {urls}")
                 print("--- Finished getting download URL successfully ---")
@@ -367,7 +472,6 @@ class MainWindow(QMainWindow):
                 else:
                     QtWidgets.QMessageBox.critical(self, f"错误 - {APP_NAME}", "\n修改hosts文件失败，请检查程序是否以管理员权限运行。\n")
         
-        self.setEnabled(True)
         self.next_download_task()
 
     def start_download_with_ip(self, preferred_ip, url, _7z_path, game_version, game_folder, plugin_path):
@@ -434,7 +538,6 @@ class MainWindow(QMainWindow):
 
         # --- Start Extraction in a new thread ---
         self.hash_msg_box = self.hash_manager.hash_pop_window()
-        self.setEnabled(False)
         
         self.extraction_thread = ExtractionThread(_7z_path, game_folder, plugin_path, game_version, self)
         self.extraction_thread.finished.connect(self.on_extraction_finished)
@@ -443,7 +546,6 @@ class MainWindow(QMainWindow):
     def on_extraction_finished(self, success, error_message, game_version):
         if self.hash_msg_box and self.hash_msg_box.isVisible():
             self.hash_msg_box.close()
-        self.setEnabled(True)
 
         if not success:
             QtWidgets.QMessageBox.critical(self, f"错误 - {APP_NAME}", error_message)
@@ -457,7 +559,7 @@ class MainWindow(QMainWindow):
         # 询问用户是否使用Cloudflare加速
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle(f"下载优化 - {APP_NAME}")
-        msg_box.setText("\n是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。")
+        msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。")
         msg_box.setIcon(QMessageBox.Icon.Question)
         
         yes_button = msg_box.addButton("是，开启加速", QMessageBox.ButtonRole.YesRole)
@@ -468,7 +570,6 @@ class MainWindow(QMainWindow):
         use_optimization = msg_box.clickedButton() == yes_button
 
         self.hash_msg_box = self.hash_manager.hash_pop_window()
-        self.setEnabled(False)
 
         install_paths = self.get_install_paths()
         
@@ -488,7 +589,6 @@ class MainWindow(QMainWindow):
             QtWidgets.QMessageBox.critical(
                 self, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
-            self.setEnabled(True)
             return
 
         # --- 填充下载队列 ---
@@ -532,7 +632,6 @@ class MainWindow(QMainWindow):
             self.ip_optimizer_thread.start()
         else:
             # 如果用户选择不优化，或已经优化过，直接开始下载
-            self.setEnabled(True)
             self.next_download_task()
 
     def next_download_task(self):
@@ -578,7 +677,6 @@ class MainWindow(QMainWindow):
 
     def after_hash_compare(self, plugin_hash):
         self.hash_msg_box = self.hash_manager.hash_pop_window()
-        self.setEnabled(False)
 
         install_paths = self.get_install_paths()
         
@@ -589,7 +687,6 @@ class MainWindow(QMainWindow):
     def on_after_hash_finished(self, result):
         if self.hash_msg_box and self.hash_msg_box.isVisible():
             self.hash_msg_box.close()
-        self.setEnabled(True)
 
         if not result["passed"]:
             game = result.get("game", "未知游戏")
@@ -639,50 +736,52 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         self.shutdown_app(event)
 
-    def shutdown_app(self, event=None):
+    def shutdown_app(self, event=None, force_exit=False):
         self.hosts_manager.restore() # 恢复hosts文件
         self.stop_logging()  # 确保在退出时停止日志记录
-        reply = QtWidgets.QMessageBox.question(
-            self,
-            "退出程序",
-            "\n是否确定退出?\n",
-            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-            QtWidgets.QMessageBox.StandardButton.No,
-        )
 
-        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-            if (
-                self.current_download_thread
-                and self.current_download_thread.isRunning()
-            ):
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    f"错误 - {APP_NAME}",
-                    "\n当前有下载任务正在进行，完成后再试\n",
-                )
+        if not force_exit:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                "退出程序",
+                "\n是否确定退出?\n",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if reply != QtWidgets.QMessageBox.StandardButton.Yes:
                 if event:
                     event.ignore()
                 return
 
-            if os.path.exists(PLUGIN):
-                for attempt in range(3):
-                    try:
-                        shutil.rmtree(PLUGIN)
-                        break
-                    except Exception as e:
-                        if attempt == 2:
-                            QtWidgets.QMessageBox.critical(
-                                self,
-                                f"错误 - {APP_NAME}",
-                                f"\n清理缓存失败\n\n【错误信息】：{e}\n",
-                            )
-                            if event:
-                                event.accept()
-                            sys.exit(1)
-            if event:
-                event.accept()
-            else:
-                sys.exit(0)
-        else:
+        if (
+            self.current_download_thread
+            and self.current_download_thread.isRunning()
+        ):
+            QtWidgets.QMessageBox.critical(
+                self,
+                f"错误 - {APP_NAME}",
+                "\n当前有下载任务正在进行，完成后再试\n",
+            )
             if event:
                 event.ignore()
+            return
+
+        if os.path.exists(PLUGIN):
+            for attempt in range(3):
+                try:
+                    shutil.rmtree(PLUGIN)
+                    break
+                except Exception as e:
+                    if attempt == 2:
+                        QtWidgets.QMessageBox.critical(
+                            self,
+                            f"错误 - {APP_NAME}",
+                            f"\n清理缓存失败\n\n【错误信息】：{e}\n",
+                        )
+                        if event:
+                            event.accept()
+                        sys.exit(1)
+        if event:
+            event.accept()
+        else:
+            sys.exit(0)
