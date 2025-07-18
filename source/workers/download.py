@@ -7,7 +7,7 @@ from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import (Qt, Signal, QThread, QTimer)
 from PySide6.QtWidgets import (QLabel, QProgressBar, QVBoxLayout, QDialog)
 from utils import resource_path
-from config import APP_NAME, UA
+from data.config import APP_NAME, UA
 
 # 下载线程类
 class DownloadThread(QThread):

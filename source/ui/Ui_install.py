@@ -1,4 +1,4 @@
-from pic_data import img_data
+from data.pic_data import img_data
 from PySide6.QtGui import QPixmap
 import base64
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,

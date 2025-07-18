@@ -9,8 +9,8 @@ import psutil
 from PySide6 import QtCore, QtWidgets
 import re
 from PySide6.QtGui import QIcon, QPixmap
-from pic_data import img_data
-from config import APP_NAME, CONFIG_FILE
+from data.pic_data import img_data
+from data.config import APP_NAME, CONFIG_FILE
 
 def resource_path(relative_path):
     """获取资源的绝对路径，适用于开发环境和PyInstaller打包环境"""
@@ -19,7 +19,18 @@ def resource_path(relative_path):
         base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
     else:
         # 在开发环境中运行
-        base_path = os.path.dirname(os.path.abspath(__file__))
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # 现在base_path是项目根目录，我们需要进入source目录
+        base_path = os.path.join(base_path, 'source')
+        
+        # 处理特殊情况
+        if relative_path == "aria2c.exe":
+            return os.path.join(base_path, 'bin', relative_path)
+        elif relative_path == "cfst.exe":
+            return os.path.join(base_path, 'bin', relative_path)
+        elif relative_path == "ip.txt" or relative_path == "ipv6.txt":
+            return os.path.join(base_path, 'resources', 'data', relative_path)
+            
     return os.path.join(base_path, relative_path)
 
 def load_base64_image(base64_str):
@@ -224,6 +235,7 @@ class HostsManager:
         self.backup_path = os.path.join(os.path.dirname(self.hosts_path), f'hosts.bak.{APP_NAME}')
         self.original_content = None
         self.modified = False
+        self.modified_hostnames = set()  # 跟踪被修改的主机名
 
     def backup(self):
         if not AdminPrivileges().is_admin():
@@ -241,6 +253,48 @@ class HostsManager:
             msg_box = msgbox_frame(f"错误 - {APP_NAME}", f"\n无法备份hosts文件，请检查权限。\n\n【错误信息】：{e}\n", QtWidgets.QMessageBox.StandardButton.Ok)
             msg_box.exec()
             return False
+    
+    def clean_hostname_entries(self, hostname):
+        """清理hosts文件中指定域名的所有记录
+        
+        Args:
+            hostname: 要清理的域名
+            
+        Returns:
+            bool: 清理是否成功
+        """
+        if not self.original_content:
+            if not self.backup():
+                return False
+        
+        # 确保original_content不为None
+        if not self.original_content:
+            print("无法读取hosts文件内容，操作中止。")
+            return False
+            
+        if not AdminPrivileges().is_admin():
+            print("需要管理员权限来修改hosts文件。")
+            return False
+            
+        try:
+            lines = self.original_content.splitlines()
+            new_lines = [line for line in lines if hostname not in line]
+            
+            # 如果没有变化，不需要写入
+            if len(new_lines) == len(lines):
+                print(f"Hosts文件中没有找到 {hostname} 的记录")
+                return True
+                
+            with open(self.hosts_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(new_lines))
+            
+            # 更新原始内容
+            self.original_content = '\n'.join(new_lines)
+            print(f"已从hosts文件中清理 {hostname} 的记录")
+            return True
+        except IOError as e:
+            print(f"清理hosts文件失败: {e}")
+            return False
 
     def apply_ip(self, hostname, ip_address):
         if not self.original_content:
@@ -256,23 +310,78 @@ class HostsManager:
             return False
         
         try:
-            lines = self.original_content.splitlines()
-            new_lines = [line for line in lines if not (hostname in line and line.strip().startswith(ip_address))]
+            # 首先清理已有的同域名记录
+            self.clean_hostname_entries(hostname)
             
+            # 然后添加新记录
+            lines = self.original_content.splitlines()
             new_entry = f"{ip_address}\t{hostname}"
-            new_lines.append(f"\n# Added by {APP_NAME}")
-            new_lines.append(new_entry)
+            lines.append(f"\n# Added by {APP_NAME}")
+            lines.append(new_entry)
             
             with open(self.hosts_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(new_lines))
+                f.write('\n'.join(lines))
             
+            # 更新原始内容
+            self.original_content = '\n'.join(lines)
             self.modified = True
+            # 记录被修改的主机名，用于最终清理
+            self.modified_hostnames.add(hostname)
             print(f"Hosts文件已更新: {new_entry}")
             return True
         except IOError as e:
             print(f"修改hosts文件失败: {e}")
             msg_box = msgbox_frame(f"错误 - {APP_NAME}", f"\n无法修改hosts文件，请检查权限。\n\n【错误信息】：{e}\n", QtWidgets.QMessageBox.StandardButton.Ok)
             msg_box.exec()
+            return False
+
+    def check_and_clean_all_entries(self):
+        """检查并清理所有由本应用程序添加的hosts记录
+        
+        Returns:
+            bool: 清理是否成功
+        """
+        if not AdminPrivileges().is_admin():
+            print("需要管理员权限来检查和清理hosts文件。")
+            return False
+            
+        try:
+            # 读取当前hosts文件内容
+            with open(self.hosts_path, 'r', encoding='utf-8') as f:
+                current_content = f.read()
+                
+            lines = current_content.splitlines()
+            new_lines = []
+            skip_next = False
+            
+            for line in lines:
+                # 如果上一行是我们的注释标记，跳过当前行
+                if skip_next:
+                    skip_next = False
+                    continue
+                    
+                # 检查是否是我们添加的注释行
+                if f"# Added by {APP_NAME}" in line:
+                    skip_next = True  # 跳过下一行（实际的hosts记录）
+                    continue
+                    
+                # 保留其他所有行
+                new_lines.append(line)
+                
+            # 检查是否有变化
+            if len(new_lines) == len(lines):
+                print("Hosts文件中没有找到由本应用添加的记录")
+                return True
+                
+            # 写回清理后的内容
+            with open(self.hosts_path, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(new_lines))
+                
+            print(f"已清理所有由 {APP_NAME} 添加的hosts记录")
+            return True
+                
+        except IOError as e:
+            print(f"检查和清理hosts文件失败: {e}")
             return False
 
     def restore(self):
@@ -282,6 +391,8 @@ class HostsManager:
                     os.remove(self.backup_path)
                 except OSError:
                     pass
+            # 即使没有修改过，也检查一次是否有残留
+            self.check_and_clean_all_entries()
             return True
 
         if not AdminPrivileges().is_admin():
@@ -299,6 +410,8 @@ class HostsManager:
                         os.remove(self.backup_path)
                     except OSError:
                         pass
+                # 恢复后再检查一次是否有残留
+                self.check_and_clean_all_entries()
                 return True
             except IOError as e:
                 print(f"从内存恢复hosts文件失败: {e}")
@@ -309,6 +422,8 @@ class HostsManager:
     def restore_from_backup_file(self):
         if not os.path.exists(self.backup_path):
             print("未找到hosts备份文件，无法恢复。")
+            # 即使没有备份文件，也尝试清理可能的残留
+            self.check_and_clean_all_entries()
             return False
         try:
             with open(self.backup_path, 'r', encoding='utf-8') as bf:
@@ -318,11 +433,15 @@ class HostsManager:
             os.remove(self.backup_path)
             self.modified = False
             print("Hosts文件已从备份文件恢复。")
+            # 恢复后再检查一次是否有残留
+            self.check_and_clean_all_entries()
             return True
         except (IOError, OSError) as e:
             print(f"从备份文件恢复hosts失败: {e}")
             msg_box = msgbox_frame(f"警告 - {APP_NAME}", f"\n自动恢复hosts文件失败，请手动从 {self.backup_path} 恢复。\n\n【错误信息】：{e}\n", QtWidgets.QMessageBox.StandardButton.Ok)
             msg_box.exec()
+            # 尽管恢复失败，仍然尝试清理可能的残留
+            self.check_and_clean_all_entries()
             return False
 
 def censor_url(text):
