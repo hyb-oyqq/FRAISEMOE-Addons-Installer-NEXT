@@ -173,3 +173,4 @@ cython_debug/
 nuitka-crash-report.xml
 build.bat
 log.txt
+result.csv
