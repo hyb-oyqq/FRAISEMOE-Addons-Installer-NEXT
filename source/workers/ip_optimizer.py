@@ -38,6 +38,7 @@ class IpOptimizer:
                 "-url", url,     # 指定测速地址
                 "-f", ip_txt_path,   # IP文件
                 "-dd",           # 禁用下载测速，按延迟排序
+                "-o",
             ]
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0

@@ -32,7 +32,7 @@
 <!-- LANGUAGE -->
 <p align="center">
     <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT">中文</a> | 
-    <a href="#">English</a>
+    <a href="README-en.md">English</a>
 </p>
 
 ---

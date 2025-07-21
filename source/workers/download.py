@@ -182,5 +182,4 @@ class ProgressWindow(QDialog):
 
     def closeEvent(self, event):
         # 覆盖默认的关闭事件，防止用户通过其他方式关闭窗口
-        # 如果需要，可以在这里添加逻辑，例如询问用户是否要停止下载
         event.ignore()

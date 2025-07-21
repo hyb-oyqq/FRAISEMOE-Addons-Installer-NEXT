@@ -2,19 +2,10 @@
   <img src="./introduction_imgs/main.png" alt="FRAISEMOE Logo" />
   <h2 style="margin: 10px 0 5px 0; font-weight: bold; color: #e75480;">🍓 FRAISEMOE NEKOPARA Addons Installer NEXT🍓</h2>
   <p style="font-size: 1.1em; color: #555;">一个为 Nekopara 系列游戏安装补丁的应用。</p>
+
   <p>
-    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/" style="margin-right: 15px;">
-      <img src="https://img.shields.io/github/stars/Yanam1Anna/FRAISEMOE-Addons-Installer?style=social" alt="GitHub stars" />
-      GitHub
-    </a>
-    <a href="https://www.bilibili.com/video/BV1hn9UYwE6p/" style="margin-right: 15px;">
-      <img src="https://img.shields.io/badge/Bilibili-视频讲解-00A1D6?logo=bilibili&logoColor=white" alt="Bilibili" />
-      Bilibili
-    </a>
-  </p>
-  <p>
-    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ.md">中文</a> | 
-    <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ-en.md">English</a>
+    <a href="./FAQ.md">中文</a> | 
+    <a href="./FAQ-en.md">English</a>
   </p>
   <blockquote style="color: #c00; font-weight: bold; border-left: 4px solid #e75480; background: #fff0f5; padding: 10px;">
     请严格遵守 <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ.md">使用须知文档</a> 的所有条例，如有违反，全体开发人员不承担任何责任。<br>
@@ -133,13 +124,12 @@
 
 ---
 
-<h4><u>【重要】为什么开发者无视我的问题？如何提交错误报告？</u></h4>
+<h4><u>【重要】遇到错误需要反馈？如何提交错误报告？</u></h4>
 
-1. 首先，每个人都会有没空的时候，请耐心等待回复或问题处理。
-2. 其次，文档和视频中已详细介绍了使用方法和常见问题解决方式，请检查你遇到的问题，或相似类别的问题是否存在于文档中，如果存在，一般不回复处理。
-3. 最后，如果遇到了未提及的问题，<b>请勿在视频站内或博客站内以评论，私信等方式报告你的问题，请到[GitHub中提交Issues](https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/issues)。</b>
-4. 提交问题报告时，<b>请附上下载报错窗口的报错信息，而不是安装最终结果显示，</b>安装结果显示是给用户看的，不是给开发者看的。
-![issues_main](https://raw.githubusercontent.com/Yanam1Anna/FRAISEMOE-Addons-Installer/refs/heads/master/introduction_imgs/issues_main.png)
+1. 首先，请排除是否计算机本机网络问题
+2. 其次，请打开debug模式，再次运行程序，<b>将报错截图与同目录下的log.txt文件一并保存。</b>
+3. 最后，<b>请到[GitHub中提交Issues](https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/issues)。</b>
+![issues_main](./introduction_imgs/issues_main.png)
 
 ---
 
@@ -151,7 +141,7 @@
 
 <h4><u>打开应用时提示应用正在运行 / 被占用的情况</u></h4>
 
-- 由于开启应用动作过于频繁，造成任务管理器刷新失败，请手动进入任务管理器中找到"FRAISEMOE-Addons-Installer"，结束其程序进程后再次重启。
+- 由于开启应用动作过于频繁，造成任务管理器刷新失败，请手动进入任务管理器中找到"FRAISEMOE Addons Installer NEXT"，结束其程序进程后再次重启。
 
 <h4><u>1. 下载报错</u></h4>
 
