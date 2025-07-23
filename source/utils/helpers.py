@@ -13,22 +13,21 @@ from data.pic_data import img_data
 from data.config import APP_NAME, CONFIG_FILE
 
 def resource_path(relative_path):
-    """获取资源的绝对路径，适用于开发环境和PyInstaller打包环境"""
+    """获取资源的绝对路径，适用于开发环境和Nuitka打包环境"""
     if getattr(sys, 'frozen', False):
-        # PyInstaller创建的临时文件夹，并将路径存储在_MEIPASS中
-        base_path = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+        # Nuitka/PyInstaller创建的临时文件夹，并将路径存储在_MEIPASS中或与可执行文件同目录
+        if hasattr(sys, '_MEIPASS'):
+            base_path = sys._MEIPASS
+        else:
+            base_path = os.path.dirname(sys.executable)
     else:
         # 在开发环境中运行
-        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        # 现在base_path是项目根目录，我们需要进入source目录
-        base_path = os.path.join(base_path, 'source')
-        
-        # 处理特殊情况
-        if relative_path == "aria2c.exe":
+        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        # 处理特殊的可执行文件和数据文件路径
+        if relative_path in ("aria2c.exe", "cfst.exe"):
             return os.path.join(base_path, 'bin', relative_path)
-        elif relative_path == "cfst.exe":
-            return os.path.join(base_path, 'bin', relative_path)
-        elif relative_path == "ip.txt" or relative_path == "ipv6.txt":
+        elif relative_path in ("ip.txt", "ipv6.txt"):
             return os.path.join(base_path, 'resources', 'data', relative_path)
             
     return os.path.join(base_path, relative_path)
