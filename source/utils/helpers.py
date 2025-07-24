@@ -113,9 +113,9 @@ class HashManager:
         if check_type == "pre":
             message = "\n正在检查游戏文件以确定需要安装的补丁...\n"
         elif check_type == "after":
-            message = "\n正在检验文件完整性...\n"
+            message = "\n正在检验本地文件完整性...\n"
         elif check_type == "extraction":
-            message = "\n正在验证解压文件的完整性...\n"
+            message = "\n正在验证下载的解压文件完整性...\n"
         
         msg_box = msgbox_frame(f"通知 - {APP_NAME}", message)
         msg_box.open()

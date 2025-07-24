@@ -142,6 +142,9 @@ class DownloadManager:
         # 禁用开始安装按钮
         self.main_window.ui.start_install_btn.setEnabled(False)
         
+        # 清空下载历史记录
+        self.main_window.download_queue_history = []
+        
         # 显示哈希检查窗口
         self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre")
 
@@ -185,7 +188,7 @@ class DownloadManager:
         # 询问用户是否使用Cloudflare加速
         msg_box = QtWidgets.QMessageBox(self.main_window)
         msg_box.setWindowTitle(f"下载优化 - {APP_NAME}")
-        msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。如您的杀毒软件提醒有软件正在修改hosts文件，请注意放行。")
+        msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。\n如您的杀毒软件提醒有软件正在修改hosts文件，请注意放行。")
         
         # 设置Cloudflare图标
         cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
@@ -221,6 +224,10 @@ class DownloadManager:
         # 清空现有队列
         self.download_queue.clear()
         
+        # 创建下载历史记录列表，用于跟踪本次安装的游戏
+        if not hasattr(self.main_window, 'download_queue_history'):
+            self.main_window.download_queue_history = []
+        
         # 添加nekopara 1-4
         for i in range(1, 5):
             game_version = f"NEKOPARA Vol.{i}"
@@ -231,6 +238,8 @@ class DownloadManager:
                 _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
                 self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
+                # 记录到下载历史
+                self.main_window.download_queue_history.append(game_version)
 
         # 添加nekopara after
         game_version = "NEKOPARA After"
@@ -241,6 +250,8 @@ class DownloadManager:
                 _7z_path = os.path.join(PLUGIN, "after.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
                 self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
+                # 记录到下载历史
+                self.main_window.download_queue_history.append(game_version)
     
     def _start_ip_optimization(self, url):
         """开始IP优化过程

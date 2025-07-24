@@ -299,18 +299,65 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(100, self.show_result)
 
     def show_result(self):
-        """显示安装结果"""
-        installed_version = "\n".join(
-            [i for i in self.installed_status if self.installed_status[i]]
-        )
-        failed_ver = "\n".join(
-            [i for i in self.installed_status if not self.installed_status[i]]
-        )
+        """显示安装结果，区分不同情况"""
+        # 获取当前安装状态
+        installed_versions = []  # 成功安装的版本
+        skipped_versions = []    # 已有补丁跳过的版本
+        failed_versions = []     # 安装失败的版本
+        not_found_versions = []  # 未找到的版本
+        
+        # 获取所有游戏版本路径
+        install_paths = self.download_manager.get_install_paths() if hasattr(self.download_manager, "get_install_paths") else {}
+        
+        for game_version, is_installed in self.installed_status.items():
+            path = install_paths.get(game_version, "")
+            
+            # 检查游戏是否存在但未通过本次安装补丁
+            if is_installed:
+                # 游戏已安装补丁
+                if hasattr(self, 'download_queue_history') and game_version not in self.download_queue_history:
+                    # 已有补丁，被跳过下载
+                    skipped_versions.append(game_version)
+                else:
+                    # 本次成功安装
+                    installed_versions.append(game_version)
+            else:
+                # 游戏未安装补丁
+                if os.path.exists(path):
+                    # 游戏文件夹存在，但安装失败
+                    failed_versions.append(game_version)
+                else:
+                    # 游戏文件夹不存在
+                    not_found_versions.append(game_version)
+        
+        # 构建结果信息
+        result_text = f"\n安装结果：\n"
+        
+        # 总数统计
+        total_installed = len(installed_versions)
+        total_skipped = len(skipped_versions)
+        total_failed = len(failed_versions)
+        
+        result_text += f"安装成功：{total_installed} 个  已跳过：{total_skipped} 个  安装失败：{total_failed} 个\n\n"
+        
+        # 详细列表
+        if installed_versions:
+            result_text += f"【成功安装】:\n{chr(10).join(installed_versions)}\n\n"
+            
+        if skipped_versions:
+            result_text += f"【已安装跳过】:\n{chr(10).join(skipped_versions)}\n\n"
+            
+        if failed_versions:
+            result_text += f"【安装失败】:\n{chr(10).join(failed_versions)}\n\n"
+            
+        if not_found_versions and (installed_versions or failed_versions):
+            # 只有当有其他版本存在时，才显示未找到的版本
+            result_text += f"【未在指定目录找到】:\n{chr(10).join(not_found_versions)}\n"
+        
         QMessageBox.information(
             self,
-            f"完成 - {APP_NAME}",
-            f"\n安装结果：\n安装成功数：{len(installed_version.splitlines())}      安装失败数：{len(failed_ver.splitlines())}\n"
-            f"安装成功的版本：\n{installed_version}\n尚未持有或未使用本工具安装补丁的版本：\n{failed_ver}\n",
+            f"安装完成 - {APP_NAME}",
+            result_text
         )
 
     def closeEvent(self, event):
