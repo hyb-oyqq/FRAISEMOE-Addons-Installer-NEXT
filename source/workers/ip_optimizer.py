@@ -38,7 +38,7 @@ class IpOptimizer:
                 "-url", url,     # 指定测速地址
                 "-f", ip_txt_path,   # IP文件
                 "-dd",           # 禁用下载测速，按延迟排序
-                "-o",
+                "-o",""          # 不写入结果文件
             ]
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
@@ -119,10 +119,8 @@ class IpOptimizer:
                             if match and not optimal_ip:  # 只保存第一个匹配的IP（最优IP）
                                 optimal_ip = match.group(1)
                                 print(f"找到最优 IP: {optimal_ip}")
-                                
-                                # 如果已经看到完成标记，可以退出了
-                                if found_completion:
-                                    break
+                                # 找到最优IP后立即退出循环，不等待完成标记
+                                break
                             
                 except Exception as e:
                     print(f"读取输出时发生错误: {e}")
