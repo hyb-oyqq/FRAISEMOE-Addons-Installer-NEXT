@@ -1,7 +1,7 @@
 # 🍓FRAISEMOE-Addons-Installer-NEXT🍓
 
 ```
-🔊 Note: This repository is still under active development, and most of the documentation is not yet available. We appreciate your understanding.
+🔊 Note: This repository's documentation updates have stabilized. If there are any missing parts, please promptly raise an issue. Thank you all for your support!
 The English version is not updated in real-time! Please check the Simplified Chinese version for more updates! Thank you for your support!
 ```
 

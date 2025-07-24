@@ -1,7 +1,7 @@
 # 🍓FRAISEMOE-Addons-Installer-NEXT🍓
 
 ```
-🔊 注意：本库仍然努力更新中，大部分文档不可用，敬请谅解。
+🔊 注意：本库文档更新已趋于稳定，如有遗漏部分请及时提出issue，感谢各位支持！
 ```
 
 <!-- PROJECT SHIELDS -->
