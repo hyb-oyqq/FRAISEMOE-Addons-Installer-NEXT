@@ -255,7 +255,7 @@ class MainWindow(QMainWindow):
         # 禁用退出按钮
         self.ui.exit_btn.setEnabled(False)
         
-        self.hash_msg_box = self.hash_manager.hash_pop_window()
+        self.hash_msg_box = self.hash_manager.hash_pop_window(check_type="after")
 
         install_paths = self.download_manager.get_install_paths()
         

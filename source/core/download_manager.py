@@ -4,7 +4,7 @@ import json
 from collections import deque
 from urllib.parse import urlparse
 
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets, QtCore
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap
 
@@ -143,7 +143,7 @@ class DownloadManager:
         self.main_window.ui.start_install_btn.setEnabled(False)
         
         # 显示哈希检查窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window()
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre")
 
         # 执行预检查
         install_paths = self.get_install_paths()
@@ -185,7 +185,7 @@ class DownloadManager:
         # 询问用户是否使用Cloudflare加速
         msg_box = QtWidgets.QMessageBox(self.main_window)
         msg_box.setWindowTitle(f"下载优化 - {APP_NAME}")
-        msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。")
+        msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。如您的杀毒软件提醒有软件正在修改hosts文件，请注意放行。")
         
         # 设置Cloudflare图标
         cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
@@ -293,11 +293,33 @@ class DownloadManager:
 
         # 显示优选结果
         if not ip:
-            QtWidgets.QMessageBox.warning(
-                self.main_window, 
-                f"优选失败 - {APP_NAME}", 
-                "\n未能找到合适的Cloudflare IP，将使用默认网络进行下载。\n"
-            )
+            msg_box = QtWidgets.QMessageBox(self.main_window)
+            msg_box.setWindowTitle(f"优选失败 - {APP_NAME}")
+            msg_box.setText("\n未能找到合适的Cloudflare IP，将使用默认网络进行下载。\n\n10秒后自动继续...")
+            msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+            ok_button = msg_box.addButton("确定 (10)", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+            
+            # 创建计时器实现倒计时
+            countdown = 10
+            timer = QtCore.QTimer(self.main_window)
+            
+            def update_countdown():
+                nonlocal countdown
+                countdown -= 1
+                ok_button.setText(f"确定 ({countdown})")
+                if countdown <= 0:
+                    timer.stop()
+                    if msg_box.isVisible():
+                        msg_box.accept()
+            
+            timer.timeout.connect(update_countdown)
+            timer.start(1000)  # 每秒更新一次
+            
+            # 显示对话框，但不阻塞主线程
+            msg_box.open()
+            
+            # 连接关闭信号以停止计时器
+            msg_box.finished.connect(timer.stop)
         else:
             # 应用优选IP到hosts文件
             if self.download_queue:
@@ -308,11 +330,33 @@ class DownloadManager:
                 self.hosts_manager.clean_hostname_entries(hostname)
                 
                 if self.hosts_manager.apply_ip(hostname, ip):
-                    QtWidgets.QMessageBox.information(
-                        self.main_window, 
-                        f"成功 - {APP_NAME}", 
-                        f"\n已将优选IP ({ip}) 应用到hosts文件。\n"
-                    )
+                    msg_box = QtWidgets.QMessageBox(self.main_window)
+                    msg_box.setWindowTitle(f"成功 - {APP_NAME}")
+                    msg_box.setText(f"\n已将优选IP ({ip}) 应用到hosts文件。\n\n10秒后自动继续...")
+                    msg_box.setIcon(QtWidgets.QMessageBox.Icon.Information)
+                    ok_button = msg_box.addButton("确定 (10)", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+                    
+                    # 创建计时器实现倒计时
+                    countdown = 10
+                    timer = QtCore.QTimer(self.main_window)
+                    
+                    def update_countdown():
+                        nonlocal countdown
+                        countdown -= 1
+                        ok_button.setText(f"确定 ({countdown})")
+                        if countdown <= 0:
+                            timer.stop()
+                            if msg_box.isVisible():
+                                msg_box.accept()
+                    
+                    timer.timeout.connect(update_countdown)
+                    timer.start(1000)  # 每秒更新一次
+                    
+                    # 显示对话框，但不阻塞主线程
+                    msg_box.open()
+                    
+                    # 连接关闭信号以停止计时器
+                    msg_box.finished.connect(timer.stop)
                 else:
                     QtWidgets.QMessageBox.critical(
                         self.main_window, 
@@ -320,8 +364,8 @@ class DownloadManager:
                         "\n修改hosts文件失败，请检查程序是否以管理员权限运行。\n"
                     )
         
-        # 开始下载
-        self.next_download_task()
+        # 计时器结束或用户点击确定时，继续下载
+        QtCore.QTimer.singleShot(10000, self.next_download_task)
 
     def next_download_task(self):
         """处理下载队列中的下一个任务"""
@@ -450,7 +494,7 @@ class DownloadManager:
             return
 
         # 下载成功，开始解压缩
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window()
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="extraction")
         
         # 创建并启动解压线程
         self.main_window.extraction_thread = self.main_window.create_extraction_thread(

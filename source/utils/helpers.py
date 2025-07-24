@@ -99,8 +99,25 @@ class HashManager:
                     print(f"Error calculating hash for {file_path}: {e}")
         return results
 
-    def hash_pop_window(self):
-        msg_box = msgbox_frame(f"通知 - {APP_NAME}", "\n正在检验文件状态...\n")
+    def hash_pop_window(self, check_type="default"):
+        """显示文件检验窗口
+        
+        Args:
+            check_type: 检查类型，可以是 'pre'(预检查), 'after'(后检查), 'extraction'(解压后检查)
+        
+        Returns:
+            QMessageBox: 消息框实例
+        """
+        message = "\n正在检验文件状态...\n"
+        
+        if check_type == "pre":
+            message = "\n正在检查游戏文件以确定需要安装的补丁...\n"
+        elif check_type == "after":
+            message = "\n正在检验文件完整性...\n"
+        elif check_type == "extraction":
+            message = "\n正在验证解压文件的完整性...\n"
+        
+        msg_box = msgbox_frame(f"通知 - {APP_NAME}", message)
         msg_box.open()
         QtWidgets.QApplication.processEvents()
         return msg_box
