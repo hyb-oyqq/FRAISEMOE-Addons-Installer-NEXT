@@ -33,8 +33,8 @@ class MultiStageAnimations(QObject):
         # 第二阶段：菜单元素
         self.menu_widgets = [
             {"widget": ui.menubg, "end_pos": QPoint(710, 0), "duration": 600},
-            {"widget": ui.start_install_btn, "end_pos": QPoint(780, 250), "duration": 600},
-            {"widget": ui.exit_btn, "end_pos": QPoint(780, 340), "duration": 600}
+            {"widget": ui.button_container, "end_pos": QPoint(780, 250), "duration": 600},
+            {"widget": ui.exit_container, "end_pos": QPoint(780, 340), "duration": 600}
         ]
         
         self.animations = []
@@ -144,7 +144,7 @@ class MultiStageAnimations(QObject):
             anim_group.addAnimation(pos_anim)
             anim_group.addAnimation(opacity_anim)
 
-            if item["widget"] == self.ui.exit_btn:
+            if item["widget"] == self.ui.exit_container:
                 anim_group.finished.connect(self.animation_finished.emit)
 
             anim_group.start()

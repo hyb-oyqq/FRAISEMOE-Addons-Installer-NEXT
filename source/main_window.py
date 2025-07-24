@@ -57,10 +57,6 @@ class MainWindow(QMainWindow):
         self.debug_manager = DebugManager(self)
         self.download_manager = DownloadManager(self)
         
-        # 设置退出按钮和开始安装按钮的样式表，使其在禁用状态下不会变灰
-        button_style = "QPushButton:disabled { opacity: 1.0; }"
-        self.ui.exit_btn.setStyleSheet(button_style)
-        self.ui.start_install_btn.setStyleSheet(button_style)
         
         # 检查管理员权限和进程
         self.admin_privileges.request_admin_privileges()
@@ -81,7 +77,7 @@ class MainWindow(QMainWindow):
                 )
                 sys.exit(1)
         
-        # 连接信号
+        # 连接信号 - 绑定到新按钮
         self.ui.start_install_btn.clicked.connect(self.download_manager.file_dialog)
         self.ui.exit_btn.clicked.connect(self.shutdown_app)
         
@@ -102,7 +98,8 @@ class MainWindow(QMainWindow):
         # 但仍然需要跟踪动画状态，防止用户在动画播放过程中退出
         self.animation_in_progress = True
         
-        # 禁用开始安装按钮，防止在动画播放期间点击
+        # 按钮容器初始是隐藏的，无需在这里禁用
+        # 但确保开始安装按钮仍然处于禁用状态
         self.ui.start_install_btn.setEnabled(False)
         
         self.animator.animation_finished.connect(self.on_animations_finished)
@@ -426,3 +423,5 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             sys.exit(0) 
+
+ 
