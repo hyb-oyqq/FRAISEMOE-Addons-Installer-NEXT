@@ -1,6 +1,9 @@
 import json
 import requests
+import webbrowser
 from PySide6.QtCore import QThread, Signal
+from PySide6.QtWidgets import QMessageBox
+import sys
 
 class ConfigFetchThread(QThread):
     finished = Signal(object, str)  # data, error_message
@@ -30,8 +33,12 @@ class ConfigFetchThread(QThread):
             # 首先，总是尝试解析JSON
             config_data = response.json()
 
-            # 检查是否是要求更新的错误信息
-            if config_data.get("message") == "请使用最新版本的FRAISEMOE Addons Installer NEXT进行下载安装":
+            # 检查是否是要求更新的错误信息 - 使用Unicode编码的更新提示文本
+            update_required_msg = "\u8bf7\u4f7f\u7528\u6700\u65b0\u7248\u672c\u7684FraiseMoe2-Next\u8fdb\u884c\u4e0b\u8f7d"
+            if isinstance(config_data, str) and config_data == update_required_msg:
+                self.finished.emit(None, "update_required")
+                return
+            elif isinstance(config_data, dict) and config_data.get("message") == update_required_msg:
                 self.finished.emit(None, "update_required")
                 return
 
@@ -44,9 +51,15 @@ class ConfigFetchThread(QThread):
 
             self.finished.emit(config_data, "")
         except requests.exceptions.RequestException as e:
-            self.finished.emit(None, f"网络请求失败: {e}")
+            error_msg = "访问云端配置失败，请检查网络状况或稍后再试。"
+            if self.debug_mode:
+                error_msg += f"\n详细错误: {e}"
+            self.finished.emit(None, error_msg)
         except (ValueError, json.JSONDecodeError) as e:
-            self.finished.emit(None, f"JSON解析失败: {e}")
+            error_msg = "访问云端配置失败，请检查网络状况或稍后再试。"
+            if self.debug_mode:
+                error_msg += f"\nJSON解析失败: {e}"
+            self.finished.emit(None, error_msg)
         finally:
             if self.debug_mode:
                 print("--- Finished fetching cloud config ---") 

@@ -28,7 +28,7 @@ def resource_path(relative_path):
         if relative_path in ("aria2c.exe", "cfst.exe"):
             return os.path.join(base_path, 'bin', relative_path)
         elif relative_path in ("ip.txt", "ipv6.txt"):
-            return os.path.join(base_path, 'resources', 'data', relative_path)
+            return os.path.join(base_path, 'data', relative_path)
             
     return os.path.join(base_path, relative_path)
 

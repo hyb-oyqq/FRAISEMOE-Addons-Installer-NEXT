@@ -6,8 +6,9 @@ from urllib.parse import urlparse
 
 from PySide6 import QtWidgets
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap
 
-from utils import msgbox_frame, HostsManager
+from utils import msgbox_frame, HostsManager, resource_path
 from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL
 from workers import IpOptimizerThread
 
@@ -185,7 +186,17 @@ class DownloadManager:
         msg_box = QtWidgets.QMessageBox(self.main_window)
         msg_box.setWindowTitle(f"下载优化 - {APP_NAME}")
         msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。")
-        msg_box.setIcon(QtWidgets.QMessageBox.Icon.Question)
+        
+        # 设置Cloudflare图标
+        cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
+        if os.path.exists(cf_icon_path):
+            cf_pixmap = QPixmap(cf_icon_path)
+            if not cf_pixmap.isNull():
+                msg_box.setWindowIcon(QIcon(cf_pixmap))
+                msg_box.setIconPixmap(cf_pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, 
+                                                    Qt.TransformationMode.SmoothTransformation))
+        else:
+            msg_box.setIcon(QtWidgets.QMessageBox.Icon.Question)
         
         yes_button = msg_box.addButton("是，开启加速", QtWidgets.QMessageBox.ButtonRole.YesRole)
         no_button = msg_box.addButton("否，直接下载", QtWidgets.QMessageBox.ButtonRole.NoRole)
@@ -240,10 +251,21 @@ class DownloadManager:
         # 禁用退出按钮
         self.main_window.ui.exit_btn.setEnabled(False)
         
+        # 使用Cloudflare图标创建消息框
+        
         self.optimizing_msg_box = msgbox_frame(
             f"通知 - {APP_NAME}",
             "\n正在优选Cloudflare IP，请稍候...\n\n这可能需要5-10分钟，请耐心等待喵~"
         )
+        # 设置Cloudflare图标
+        cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
+        if os.path.exists(cf_icon_path):
+            cf_pixmap = QPixmap(cf_icon_path)
+            if not cf_pixmap.isNull():
+                self.optimizing_msg_box.setWindowIcon(QIcon(cf_pixmap))
+                self.optimizing_msg_box.setIconPixmap(cf_pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, 
+                                                                 Qt.TransformationMode.SmoothTransformation))
+        
         # 我们不再提供"跳过"按钮
         self.optimizing_msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
         self.optimizing_msg_box.setWindowModality(Qt.WindowModality.ApplicationModal)

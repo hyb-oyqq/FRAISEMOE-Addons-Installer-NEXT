@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import json
+import webbrowser
 
 from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer
@@ -36,6 +37,7 @@ class MainWindow(QMainWindow):
         
         # 初始化状态变量
         self.cloud_config = None
+        self.config_valid = False  # 添加配置有效标志
         self.installed_status = {f"NEKOPARA Vol.{i}": False for i in range(1, 5)}
         self.installed_status["NEKOPARA After"] = False  # 添加After的状态
         self.hash_msg_box = None
@@ -111,8 +113,11 @@ class MainWindow(QMainWindow):
         """动画完成后启用按钮"""
         self.animation_in_progress = False
         
-        # 启用开始安装按钮
-        self.ui.start_install_btn.setEnabled(True)
+        # 只有在配置有效时才启用开始安装按钮
+        if self.config_valid:
+            self.ui.start_install_btn.setEnabled(True)
+        else:
+            self.ui.start_install_btn.setEnabled(False)
 
     def fetch_cloud_config(self):
         """获取云端配置"""
@@ -130,6 +135,9 @@ class MainWindow(QMainWindow):
             error_message: 错误信息，如果有
         """
         if error_message:
+            # 标记配置无效
+            self.config_valid = False
+            
             if error_message == "update_required":
                 msg_box = msgbox_frame(
                     f"更新提示 - {APP_NAME}",
@@ -137,8 +145,11 @@ class MainWindow(QMainWindow):
                     QMessageBox.StandardButton.Ok,
                 )
                 msg_box.exec()
-                self.ui_manager.open_project_home_page()
+                # 在浏览器中打开项目主页
+                webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/")
+                # 强制关闭程序
                 self.shutdown_app(force_exit=True)
+                return
             elif "missing_keys" in error_message:
                 missing_versions = error_message.split(":")[1]
                 msg_box = msgbox_frame(
@@ -147,17 +158,38 @@ class MainWindow(QMainWindow):
                     QMessageBox.StandardButton.Ok,
                 )
                 msg_box.exec()
+                # 对于部分缺失，仍然允许使用，因为可能只影响部分游戏版本
+                self.config_valid = True
             else:
-                # 其他错误暂时只在debug模式下打印
+                # 显示通用错误消息，只在debug模式下显示详细错误
                 debug_mode = self.ui_manager.debug_action.isChecked() if self.ui_manager.debug_action else False
-                if debug_mode:
-                    print(f"获取云端配置失败: {error_message}")
+                error_msg = "访问云端配置失败，请检查网络状况或稍后再试。"
+                if debug_mode and "详细错误:" in error_message:
+                    msg_box = msgbox_frame(
+                        f"错误 - {APP_NAME}",
+                        f"\n{error_message}\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                else:
+                    msg_box = msgbox_frame(
+                        f"错误 - {APP_NAME}",
+                        f"\n{error_msg}\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                msg_box.exec()
+                # 在无法连接到云端时禁用开始安装按钮
+                self.ui.start_install_btn.setEnabled(False)
         else:
             self.cloud_config = data
+            # 标记配置有效
+            self.config_valid = True
+            
             debug_mode = self.ui_manager.debug_action.isChecked() if self.ui_manager.debug_action else False
             if debug_mode:
                 print("--- Cloud config fetched successfully ---")
                 print(json.dumps(data, indent=2))
+            # 确保按钮在成功获取配置时启用
+            self.ui.start_install_btn.setEnabled(True)
 
     def toggle_debug_mode(self, checked):
         """切换调试模式
