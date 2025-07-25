@@ -8,6 +8,7 @@ from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer, Qt, QPoint, QRect, QSize
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect
 from PySide6.QtGui import QPalette, QColor, QPainterPath, QRegion
+from PySide6.QtGui import QAction # Added for menu actions
 
 from ui.Ui_install import Ui_MainWindows
 from data.config import (
@@ -107,6 +108,7 @@ class MainWindow(QMainWindow):
         
         # 连接信号 - 绑定到新按钮
         self.ui.start_install_btn.clicked.connect(self.handle_install_button_click)
+        self.ui.uninstall_btn.clicked.connect(self.handle_uninstall_button_click)  # 添加卸载补丁按钮事件连接
         self.ui.exit_btn.clicked.connect(self.shutdown_app)
         
         # 初始化按钮状态标记
@@ -178,14 +180,14 @@ class MainWindow(QMainWindow):
             
         # 更新内容区域大小
         if hasattr(self.ui, 'inner_content'):
-            self.ui.inner_content.setGeometry(0, 55, new_width, new_height - 55)
+            self.ui.inner_content.setGeometry(0, 65, new_width, new_height - 65)
             
         # 更新背景图大小
         if hasattr(self.ui, 'Mainbg'):
-            self.ui.Mainbg.setGeometry(0, 0, new_width, new_height - 55)
+            self.ui.Mainbg.setGeometry(0, 0, new_width, new_height - 65)
             
         if hasattr(self.ui, 'loadbg'):
-            self.ui.loadbg.setGeometry(0, 0, new_width, new_height - 55)
+            self.ui.loadbg.setGeometry(0, 0, new_width, new_height - 65)
             
         # 调整按钮位置 - 固定在右侧
         right_margin = 20  # 减小右边距，使按钮更靠右
@@ -193,14 +195,22 @@ class MainWindow(QMainWindow):
             btn_width = 211  # 扩大后的容器宽度
             btn_height = 111  # 扩大后的容器高度
             x_pos = new_width - btn_width - right_margin
-            y_pos = int((new_height - 55) * 0.42) - 10  # 调整Y位置以适应扩大的容器
+            y_pos = int((new_height - 65) * 0.28) - 10  # 调整为更靠上的位置
             self.ui.button_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
+            
+        # 添加卸载补丁按钮容器的位置调整
+        if hasattr(self.ui, 'uninstall_container'):
+            btn_width = 211  # 扩大后的容器宽度
+            btn_height = 111  # 扩大后的容器高度
+            x_pos = new_width - btn_width - right_margin
+            y_pos = int((new_height - 65) * 0.46) - 10  # 调整为中间位置
+            self.ui.uninstall_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
             
         if hasattr(self.ui, 'exit_container'):
             btn_width = 211  # 扩大后的容器宽度
             btn_height = 111  # 扩大后的容器高度
             x_pos = new_width - btn_width - right_margin
-            y_pos = int((new_height - 55) * 0.62) - 10  # 调整Y位置以适应扩大的容器
+            y_pos = int((new_height - 65) * 0.64) - 10  # 调整为更靠下的位置
             self.ui.exit_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
             
         # 更新圆角
@@ -589,5 +599,170 @@ class MainWindow(QMainWindow):
         else:
             # 按钮处于"开始安装"状态，正常执行安装流程
             self.download_manager.file_dialog() 
+
+    def handle_uninstall_button_click(self):
+        """处理卸载补丁按钮点击事件
+        打开文件选择对话框选择游戏目录，然后卸载对应游戏的补丁
+        """
+        # 获取游戏目录
+        from PySide6.QtWidgets import QFileDialog
+        
+        # 打开文件选择对话框
+        game_dir = QFileDialog.getExistingDirectory(
+            self, 
+            "选择游戏目录", 
+            ""
+        )
+        
+        if not game_dir or game_dir == "":
+            return  # 用户取消了选择
+            
+        # 验证所选目录是否为有效的游戏目录
+        game_version = self.identify_game_version(game_dir)
+        
+        if not game_version:
+            msg_box = msgbox_frame(
+                f"错误 - {APP_NAME}",
+                "\n所选目录不是有效的NEKOPARA游戏目录。\n请选择包含游戏可执行文件的目录。\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            msg_box.exec()
+            return
+            
+        # 确认卸载
+        reply = QMessageBox.question(
+            self,
+            f"确认卸载 - {APP_NAME}",
+            f"\n确定要卸载 {game_version} 的补丁吗？\n",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.No:
+            return
+            
+        # 开始卸载补丁
+        self.uninstall_patch(game_dir, game_version)
+    
+    def identify_game_version(self, game_dir):
+        """识别游戏版本
+        
+        Args:
+            game_dir: 游戏目录路径
+            
+        Returns:
+            str: 游戏版本名称，如果不是有效的游戏目录则返回None
+        """
+        import os
+        
+        # 检查是否为NEKOPARA游戏目录
+        # 通过检查游戏可执行文件来识别游戏版本
+        for game_version, info in GAME_INFO.items():
+            exe_path = os.path.join(game_dir, info["exe"])
+            if os.path.exists(exe_path):
+                return game_version
+                
+        # 如果没有直接匹配，尝试通过目录名称推断
+        dir_name = os.path.basename(game_dir).lower()
+        
+        if "vol" in dir_name or "vol." in dir_name:
+            # 尝试提取卷号
+            if "vol 1" in dir_name or "vol.1" in dir_name or "vol1" in dir_name:
+                return "NEKOPARA Vol.1"
+            elif "vol 2" in dir_name or "vol.2" in dir_name or "vol2" in dir_name:
+                return "NEKOPARA Vol.2" 
+            elif "vol 3" in dir_name or "vol.3" in dir_name or "vol3" in dir_name:
+                return "NEKOPARA Vol.3"
+            elif "vol 4" in dir_name or "vol.4" in dir_name or "vol4" in dir_name:
+                return "NEKOPARA Vol.4"
+        elif "after" in dir_name:
+            return "NEKOPARA After"
+            
+        return None
+    
+    def uninstall_patch(self, game_dir, game_version):
+        """卸载补丁
+        
+        Args:
+            game_dir: 游戏目录路径
+            game_version: 游戏版本
+        """
+        import os
+        import shutil
+        
+        if game_version not in GAME_INFO:
+            QMessageBox.critical(
+                self,
+                f"错误 - {APP_NAME}",
+                f"\n无法识别游戏版本: {game_version}\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            return
+            
+        try:
+            # 获取补丁文件路径
+            patch_file_path = os.path.join(game_dir, os.path.basename(GAME_INFO[game_version]["install_path"]))
+            
+            # 检查补丁文件是否存在
+            if os.path.exists(patch_file_path):
+                os.remove(patch_file_path)
+                print(f"已删除补丁文件: {patch_file_path}")
+                
+                # 检查是否有额外的签名文件 (.sig)
+                if game_version == "NEKOPARA After":
+                    sig_file_path = f"{patch_file_path}.sig"
+                    if os.path.exists(sig_file_path):
+                        os.remove(sig_file_path)
+                        print(f"已删除签名文件: {sig_file_path}")
+                
+                # 删除patch文件夹
+                patch_folder = os.path.join(game_dir, "patch")
+                if os.path.exists(patch_folder):
+                    shutil.rmtree(patch_folder)
+                    print(f"已删除补丁文件夹: {patch_folder}")
+                
+                # 删除game/patch文件夹
+                game_patch_folder = os.path.join(game_dir, "game", "patch")
+                if os.path.exists(game_patch_folder):
+                    shutil.rmtree(game_patch_folder)
+                    print(f"已删除game/patch文件夹: {game_patch_folder}")
+                
+                # 删除配置文件
+                config_file = os.path.join(game_dir, "game", "config.json")
+                if os.path.exists(config_file):
+                    os.remove(config_file)
+                    print(f"已删除配置文件: {config_file}")
+                    
+                scripts_file = os.path.join(game_dir, "game", "scripts.json")
+                if os.path.exists(scripts_file):
+                    os.remove(scripts_file)
+                    print(f"已删除脚本文件: {scripts_file}")
+                
+                # 更新安装状态
+                self.installed_status[game_version] = False
+                
+                # 显示卸载成功消息
+                QMessageBox.information(
+                    self,
+                    f"卸载完成 - {APP_NAME}",
+                    f"\n{game_version} 补丁卸载成功！\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+            else:
+                QMessageBox.warning(
+                    self,
+                    f"警告 - {APP_NAME}",
+                    f"\n未找到 {game_version} 的补丁文件，可能未安装补丁或已被移除。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+            
+        except Exception as e:
+            # 显示卸载失败消息
+            QMessageBox.critical(
+                self,
+                f"卸载失败 - {APP_NAME}",
+                f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n",
+                QMessageBox.StandardButton.Ok,
+            ) 
 
  

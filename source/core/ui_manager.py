@@ -1,4 +1,4 @@
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtGui import QIcon, QAction, QFont
 from PySide6.QtWidgets import QMessageBox, QMainWindow
 from PySide6.QtCore import Qt
 import webbrowser
@@ -39,20 +39,28 @@ class UIManager:
         if not self.ui or not hasattr(self.ui, 'menu_2'):
             return
 
+        # 创建菜单项
         project_home_action = QAction("项目主页", self.main_window)
         project_home_action.triggered.connect(self.open_project_home_page)
         
         about_action = QAction("关于", self.main_window)
         about_action.triggered.connect(self.show_about_dialog)
         
+        # 添加到菜单
         self.ui.menu_2.addAction(project_home_action)
         self.ui.menu_2.addAction(about_action)
+        
+        # 连接按钮点击事件，如果使用按钮式菜单
+        if hasattr(self.ui, 'help_btn'):
+            # 按钮已经连接到显示菜单，不需要额外处理
+            pass
     
     def _setup_settings_menu(self):
         """设置"设置"菜单"""
         if not self.ui or not hasattr(self.ui, 'menu'):
             return
 
+        # 创建菜单项
         self.debug_action = QAction("Debug模式", self.main_window, checkable=True)
         
         # 安全地获取config属性
@@ -67,13 +75,22 @@ class UIManager:
         if hasattr(self.main_window, 'toggle_debug_mode'):
             self.debug_action.triggered.connect(self.main_window.toggle_debug_mode)
             
+        # 添加到菜单
         self.ui.menu.addAction(self.debug_action)
 
         # 为未来功能预留的"切换下载源"按钮
         self.switch_source_action = QAction("切换下载源", self.main_window)
         self.switch_source_action.setEnabled(False)  # 暂时禁用
         self.ui.menu.addAction(self.switch_source_action)
-    
+        
+        # 添加分隔符
+        self.ui.menu.addSeparator()
+        
+        # 连接按钮点击事件，如果使用按钮式菜单
+        if hasattr(self.ui, 'settings_btn'):
+            # 按钮已经连接到显示菜单，不需要额外处理
+            pass
+
     def open_project_home_page(self):
         """打开项目主页"""
         webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT")

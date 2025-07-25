@@ -49,6 +49,7 @@ class MultiStageAnimations(QObject):
             # 移除菜单背景动画
             # {"widget": ui.menubg, "end_pos": QPoint(720, 55), "duration": 600},
             {"widget": ui.button_container, "end_pos": None, "duration": 600},
+            {"widget": ui.uninstall_container, "end_pos": None, "duration": 600},  # 添加卸载补丁按钮
             {"widget": ui.exit_container, "end_pos": None, "duration": 600}
         ]
         
@@ -66,6 +67,14 @@ class MultiStageAnimations(QObject):
         )
         self.ui.start_install_btn.released.connect(
             lambda: self.end_button_click_animation(self.ui.button_container)
+        )
+        
+        # 为卸载补丁按钮添加点击动画
+        self.ui.uninstall_btn.pressed.connect(
+            lambda: self.start_button_click_animation(self.ui.uninstall_container)
+        )
+        self.ui.uninstall_btn.released.connect(
+            lambda: self.end_button_click_animation(self.ui.uninstall_container)
         )
         
         # 为退出按钮添加点击动画
@@ -240,6 +249,9 @@ class MultiStageAnimations(QObject):
         # 更新按钮最终位置
         self._update_button_positions()
         
+        # 跟踪最后一个动画，用于连接finished信号
+        last_anim = None
+        
         for item in self.menu_widgets:
             anim_group = QParallelAnimationGroup()
             
@@ -259,11 +271,16 @@ class MultiStageAnimations(QObject):
             anim_group.addAnimation(pos_anim)
             anim_group.addAnimation(opacity_anim)
 
+            # 记录最后一个按钮的动画
             if item["widget"] == self.ui.exit_container:
-                anim_group.finished.connect(self.animation_finished.emit)
+                last_anim = anim_group
 
             anim_group.start()
             self.animations.append(anim_group)
+            
+        # 在最后一个动画完成时发出信号
+        if last_anim:
+            last_anim.finished.connect(self.animation_finished.emit)
     
     def _update_button_positions(self):
         """更新按钮最终位置"""
@@ -279,18 +296,29 @@ class MultiStageAnimations(QObject):
             if hasattr(self.ui, 'button_container'):
                 btn_width = self.ui.button_container.width()
                 x_pos = width - btn_width - right_margin
-                y_pos = int((height - 55) * 0.42) - 10  # 调整Y位置以适应扩大的容器
+                y_pos = int((height - 65) * 0.28) - 10  # 与resizeEvent中保持一致
                 
                 # 更新动画目标位置
                 for item in self.menu_widgets:
                     if item["widget"] == self.ui.button_container:
+                        item["end_pos"] = QPoint(x_pos, y_pos)
+            
+            # 卸载补丁按钮
+            if hasattr(self.ui, 'uninstall_container'):
+                btn_width = self.ui.uninstall_container.width()
+                x_pos = width - btn_width - right_margin
+                y_pos = int((height - 65) * 0.46) - 10  # 与resizeEvent中保持一致
+                
+                # 更新动画目标位置
+                for item in self.menu_widgets:
+                    if item["widget"] == self.ui.uninstall_container:
                         item["end_pos"] = QPoint(x_pos, y_pos)
                 
             # 退出按钮
             if hasattr(self.ui, 'exit_container'):
                 btn_width = self.ui.exit_container.width()
                 x_pos = width - btn_width - right_margin
-                y_pos = int((height - 55) * 0.62) - 10  # 调整Y位置以适应扩大的容器
+                y_pos = int((height - 65) * 0.64) - 10  # 与resizeEvent中保持一致
                 
                 # 更新动画目标位置
                 for item in self.menu_widgets:
@@ -300,9 +328,11 @@ class MultiStageAnimations(QObject):
             # 默认位置
             for item in self.menu_widgets:
                 if item["widget"] == self.ui.button_container:
-                    item["end_pos"] = QPoint(1050, 285)
+                    item["end_pos"] = QPoint(1050, 200)
+                elif item["widget"] == self.ui.uninstall_container:
+                    item["end_pos"] = QPoint(1050, 310)
                 elif item["widget"] == self.ui.exit_container:
-                    item["end_pos"] = QPoint(1050, 415)
+                    item["end_pos"] = QPoint(1050, 420)
     
     def start_animations(self):
         """启动完整动画序列"""

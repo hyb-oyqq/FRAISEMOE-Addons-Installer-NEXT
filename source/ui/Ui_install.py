@@ -13,6 +13,9 @@ from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QMenu,
     QMenuBar, QPushButton, QSizePolicy, QWidget, QHBoxLayout)
 import os
 
+# 导入配置常量
+from data.config import APP_NAME, APP_VERSION
+
 def load_base64_image(base64_str):
     pixmap = QPixmap()
     pixmap.loadFromData(base64.b64decode(base64_str))
@@ -63,9 +66,9 @@ class Ui_MainWindows(object):
         self.main_container.setGeometry(QRect(0, 0, 1280, 720))
         self.main_container.setStyleSheet("""
             QWidget#main_container {
-                background-color: #C5DDFC;
+                background-color: #E96948;
                 border-radius: 20px;
-                border: 1px solid #A4C2F4;
+                border: 1px solid #E96948;
             }
         """)
 
@@ -87,25 +90,19 @@ class Ui_MainWindows(object):
         region = QRegion(path.toFillPolygon().toPolygon())
         self.content_container.setMask(region)
 
-        # 禁用裁剪，这可能导致窗口变形
-        # rect = self.content_container.rect()
-        # path = QPainterPath()
-        # path.addRoundedRect(rect, 20, 20)
-        # self.content_container.setMask(QRegion(path.toFillPolygon().toPolygon()))
-
         # 标题栏
         self.title_bar = QWidget(self.content_container)
         self.title_bar.setObjectName(u"title_bar")
-        self.title_bar.setGeometry(QRect(0, 0, 1280, 30))
+        self.title_bar.setGeometry(QRect(0, 0, 1280, 35))  # 减小高度从40到35
         self.title_bar.setStyleSheet("""
             QWidget#title_bar {
-                background-color: #A4C2F4;
+                background-color: #E96948;
                 border-top-left-radius: 20px;
                 border-top-right-radius: 20px;
-                border-bottom: 1px solid #8AB4F8;
+                border-bottom: 1px solid #F47A5B;
             }
         """)
-
+        
         # 标题栏布局
         self.title_layout = QHBoxLayout(self.title_bar)
         self.title_layout.setSpacing(10)
@@ -159,8 +156,9 @@ class Ui_MainWindows(object):
         # 标题文本
         self.title_label = QLabel(self.title_bar)
         self.title_label.setObjectName(u"title_label")
-        self.title_label.setText("FraiseMoe Addons Manager")
-        title_font = QFont(font_family, 12)
+        # 直接使用APP_NAME并添加版本号
+        self.title_label.setText(f"{APP_NAME} v{APP_VERSION}")
+        title_font = QFont(font_family, 14)  # 减小字体从16到14
         title_font.setBold(True)
         self.title_label.setFont(title_font)
         self.title_label.setStyleSheet("color: #333333; padding-left: 10px;")
@@ -173,61 +171,111 @@ class Ui_MainWindows(object):
         self.title_layout.addSpacing(5)
         self.title_layout.addWidget(self.close_btn)
 
-        # 菜单区域
+        # 修改菜单区域 - 确保足够宽以容纳更多菜单项
         self.menu_area = QWidget(self.content_container)
         self.menu_area.setObjectName(u"menu_area")
-        self.menu_area.setGeometry(QRect(0, 30, 1024, 25))
+        self.menu_area.setGeometry(QRect(0, 35, 1280, 30))  # 调整位置从40到35，高度从35到30
         self.menu_area.setStyleSheet("""
             QWidget#menu_area {
-                background-color: #D4E4FC;
-                border-bottom: 1px solid #A4C2F4;
+                background-color: #E96948;
             }
         """)
-
-        # 创建菜单栏在菜单区域中
-        self.menubar = QMenuBar(self.menu_area)
-        self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(10, 2, 200, 20))
-        self.menubar.setStyleSheet("""
-            QMenuBar {
+        
+        # 不再使用菜单栏，改用普通按钮
+        # 创建菜单按钮字体
+        menu_font = QFont(font_family, 14)  # 进一步减小字体大小到14
+        menu_font.setBold(True)
+        
+        # 设置按钮
+        self.settings_btn = QPushButton("设置", self.menu_area)
+        self.settings_btn.setObjectName(u"settings_btn")
+        self.settings_btn.setGeometry(QRect(20, 1, 80, 28))  # 调整高度和Y位置
+        self.settings_btn.setFont(menu_font)
+        self.settings_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.settings_btn.setStyleSheet("""
+            QPushButton {
                 background-color: transparent;
-                color: #333333;
-                font-weight: bold;
-                spacing: 5px;
+                color: white;
+                border: none;
+                text-align: left;
+                padding-left: 10px;
             }
-            QMenuBar::item {
-                background-color: transparent;
-                padding: 1px 8px;
+            QPushButton:hover {
+                background-color: #F47A5B;
                 border-radius: 4px;
             }
-            QMenuBar::item:selected {
-                background-color: rgba(0, 0, 0, 0.1);
+            QPushButton:pressed {
+                background-color: #D25A3C;
+                border-radius: 4px;
             }
-            QMenuBar::item:pressed {
-                background-color: rgba(0, 0, 0, 0.15);
-            }
+        """)
+        
+        # 帮助按钮
+        self.help_btn = QPushButton("帮助", self.menu_area)
+        self.help_btn.setObjectName(u"help_btn")
+        self.help_btn.setGeometry(QRect(120, 1, 80, 28))  # 调整高度和Y位置
+        self.help_btn.setFont(menu_font)
+        self.help_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.help_btn.setStyleSheet(self.settings_btn.styleSheet())
+        
+        # 将原来的菜单项移到全局，方便访问
+        self.menu = QMenu(self.content_container)
+        self.menu.setObjectName(u"menu")
+        self.menu.setTitle("设置")
+        self.menu.setFont(menu_font)
+        self.menu.setStyleSheet("""
             QMenu {
-                background-color: #D4E4FC;
-                border: 1px solid #A4C2F4;
+                background-color: #E96948;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border: 1px solid #F47A5B;
+                padding: 8px;
                 border-radius: 6px;
-                padding: 5px;
-                margin: 2px;
+                margin-top: 2px;
             }
             QMenu::item {
-                padding: 6px 25px 6px 20px;
-                color: #333333;
-                border-radius: 4px;
+                padding: 6px 20px 6px 15px;
+                background-color: transparent;
+                min-width: 120px;
+                color: white;
             }
             QMenu::item:selected {
-                background-color: rgba(0, 0, 0, 0.1);
+                background-color: #F47A5B;
+                border-radius: 4px;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #F47A5B;
+                margin: 5px 15px;
             }
         """)
-
+        
+        self.menu_2 = QMenu(self.content_container)
+        self.menu_2.setObjectName(u"menu_2")
+        self.menu_2.setTitle("帮助")
+        self.menu_2.setFont(menu_font)
+        self.menu_2.setStyleSheet(self.menu.styleSheet())
+        
+        # 连接按钮点击事件到显示对应菜单
+        self.settings_btn.clicked.connect(lambda: self.show_menu(self.menu, self.settings_btn))
+        self.help_btn.clicked.connect(lambda: self.show_menu(self.menu_2, self.help_btn))
+        
+        # 预留位置给未来可能的第三个按钮
+        # 第三个按钮可以这样添加:
+        # self.third_btn = QPushButton("第三项", self.menu_area)
+        # self.third_btn.setObjectName(u"third_btn")
+        # self.third_btn.setGeometry(QRect(320, 0, 120, 35))
+        # self.third_btn.setFont(menu_font)
+        # self.third_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        # self.third_btn.setStyleSheet(self.settings_btn.styleSheet())
+        # self.third_btn.clicked.connect(lambda: self.show_menu(self.menu_3, self.third_btn))
+        
         # 内容子容器
         self.inner_content = QWidget(self.content_container)
         self.inner_content.setObjectName(u"inner_content")
         # 确保宽度足够大，保证右侧元素完全显示
-        self.inner_content.setGeometry(QRect(0, 55, 1280, 665))
+        self.inner_content.setGeometry(QRect(0, 65, 1280, 655))  # 调整Y位置从75到65，高度从645到655
         self.inner_content.setStyleSheet("""
             QWidget#inner_content {
                 background-color: transparent;
@@ -243,43 +291,12 @@ class Ui_MainWindows(object):
         inner_region = QRegion(inner_path.toFillPolygon().toPolygon())
         self.inner_content.setMask(inner_region)
 
-        # 确保底部的圆角正确显示
-        # 在菜单背景区域下方添加一个底部圆角装饰器
-        # self.bottom_corner_left = QWidget(self.main_container)
-        # self.bottom_corner_left.setObjectName(u"bottom_corner_left")
-        # self.bottom_corner_left.setGeometry(QRect(0, 556, 20, 20))
-        # self.bottom_corner_left.setStyleSheet("""
-        #     QWidget#bottom_corner_left {
-        #         background-color: #C5DDFC;
-        #         border-bottom-left-radius: 20px;
-        #     }
-        # """)
-
-        # self.bottom_corner_right = QWidget(self.main_container)
-        # self.bottom_corner_right.setObjectName(u"bottom_corner_right")
-        # self.bottom_corner_right.setGeometry(QRect(1004, 556, 20, 20))
-        # self.bottom_corner_right.setStyleSheet("""
-        #     QWidget#bottom_corner_right {
-        #         background-color: #C5DDFC;
-        #         border-bottom-right-radius: 20px;
-        #     }
-        # """)
-
-        self.menu = QMenu(self.menubar)
-        self.menu.setObjectName(u"menu")
-        self.menu_2 = QMenu(self.menubar)
-        self.menu_2.setObjectName(u"menu_2")
-
-        self.menubar.addAction(self.menu.menuAction())
-        self.menubar.addAction(self.menu_2.menuAction())
-        self.menu.addSeparator()
-        
         # 在主容器中添加背景和内容元素
         # 修改loadbg使用title_bg1.png作为整个背景
         # 原来的loadbg保持不变
         self.loadbg = QLabel(self.inner_content)
         self.loadbg.setObjectName(u"loadbg")
-        self.loadbg.setGeometry(QRect(0, 0, 1280, 665))  # 调整尺寸
+        self.loadbg.setGeometry(QRect(0, 0, 1280, 655))  # 调整高度从645到655
         self.loadbg.setPixmap(load_base64_image(img_data["loadbg"]))
         self.loadbg.setScaledContents(True)
         
@@ -316,7 +333,7 @@ class Ui_MainWindows(object):
         # 修复Mainbg位置并使用title_bg1.png作为背景图片
         self.Mainbg = QLabel(self.inner_content)
         self.Mainbg.setObjectName(u"Mainbg")
-        self.Mainbg.setGeometry(QRect(0, 0, 1280, 665))  # 调整尺寸
+        self.Mainbg.setGeometry(QRect(0, 0, 1280, 655))  # 调整高度从645到655
         self.Mainbg.setPixmap(load_image_from_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BG", "title_bg1.png")))
         self.Mainbg.setScaledContents(True)
         
@@ -325,9 +342,10 @@ class Ui_MainWindows(object):
         
         # 创建文本标签布局的按钮
         # 开始安装按钮 - 基于背景图片和标签组合
+        # 调整开始安装按钮的位置
         self.button_container = QWidget(self.inner_content)
         self.button_container.setObjectName(u"start_install_container")
-        self.button_container.setGeometry(QRect(1050, 285, 211, 111))  # 扩大容器尺寸，预留动画空间
+        self.button_container.setGeometry(QRect(1050, 200, 211, 111))  # 调整Y坐标，上移至200
         # 不要隐藏容器，让动画系统来控制它的可见性和位置
 
         # 使用原来的按钮背景图片
@@ -358,11 +376,45 @@ class Ui_MainWindows(object):
                 border: none;
             }
         """)
+
+        # 添加卸载补丁按钮 - 新增
+        self.uninstall_container = QWidget(self.inner_content)
+        self.uninstall_container.setObjectName(u"uninstall_container")
+        self.uninstall_container.setGeometry(QRect(1050, 310, 211, 111))  # 调整Y坐标，位于310位置
+
+        # 使用相同的按钮背景图片
+        self.uninstall_bg = QLabel(self.uninstall_container)
+        self.uninstall_bg.setObjectName(u"uninstall_bg")
+        self.uninstall_bg.setGeometry(QRect(10, 10, 191, 91))  # 居中放置在扩大的容器中
+        self.uninstall_bg.setPixmap(button_pixmap)
+        self.uninstall_bg.setScaledContents(True)
+
+        self.uninstall_text = QLabel(self.uninstall_container)
+        self.uninstall_text.setObjectName(u"uninstall_text")
+        self.uninstall_text.setGeometry(QRect(10, 7, 191, 91))  # 居中放置在扩大的容器中
+        self.uninstall_text.setText("卸载补丁")
+        self.uninstall_text.setFont(self.custom_font)
+        self.uninstall_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.uninstall_text.setStyleSheet("letter-spacing: 1px;")
+
+        # 点击区域透明按钮
+        self.uninstall_btn = QPushButton(self.uninstall_container)
+        self.uninstall_btn.setObjectName(u"uninstall_btn")
+        self.uninstall_btn.setGeometry(QRect(10, 10, 191, 91))  # 居中放置在扩大的容器中
+        self.uninstall_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))  # 设置鼠标悬停时为手形光标
+        self.uninstall_btn.setFlat(True)
+        self.uninstall_btn.raise_()  # 确保按钮在最上层
+        self.uninstall_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+            }
+        """)
         
-        # 退出按钮 - 基于背景图片和标签组合
+        # 退出按钮 - 基于背景图片和标签组合，调整位置
         self.exit_container = QWidget(self.inner_content)
         self.exit_container.setObjectName(u"exit_container")
-        self.exit_container.setGeometry(QRect(1050, 415, 211, 111))  # 扩大容器尺寸，预留动画空间
+        self.exit_container.setGeometry(QRect(1050, 420, 211, 111))  # 调整Y坐标，下移至420
         # 不要隐藏容器，让动画系统来控制它的可见性和位置
 
         # 使用原来的按钮背景图片
@@ -394,19 +446,6 @@ class Ui_MainWindows(object):
             }
         """)
         
-        # 注释掉menubg，移除右侧背景区域
-        # self.menubg = QLabel(self.inner_content)
-        # self.menubg.setObjectName(u"menubg")
-        # # 将X坐标调整为720，以使背景图片更靠右
-        # self.menubg.setGeometry(QRect(720, 0, 321, 521))
-        # self.menubg.setPixmap(load_base64_image(img_data["menubg"]))
-        # self.menubg.setScaledContents(True)
-        
-        # 恢复按钮位置
-        # self.exit_container = QWidget(self.inner_content)
-        # self.exit_container.setObjectName(u"exit_container")
-        # self.exit_container.setGeometry(QRect(780, 340, 191, 91))  # 恢复到原来的位置 780
-        
         MainWindows.setCentralWidget(self.centralwidget)
         
         # 调整层级顺序
@@ -417,36 +456,22 @@ class Ui_MainWindows(object):
         self.vol4bg.raise_()
         self.afterbg.raise_()
         self.Mainbg.raise_()
-        # self.menubg.raise_()  # 注释掉menubg
-        # 不再需要底部圆角装饰器
-        # self.bottom_corner_left.raise_()
-        # self.bottom_corner_right.raise_()
         self.button_container.raise_()
+        self.uninstall_container.raise_()  # 添加新按钮到层级顺序
         self.exit_container.raise_()
         self.menu_area.raise_()  # 确保菜单区域在背景之上
+        # self.menubar.raise_()  # 不再需要菜单栏
+        self.settings_btn.raise_()  # 确保设置按钮在上层
+        self.help_btn.raise_()  # 确保帮助按钮在上层
         self.title_bar.raise_()  # 确保标题栏在最上层
         
-        # 保留原有菜单栏，调整到主容器内部
-        # self.menubar = QMenuBar(self.main_container)
-        # self.menubar.setObjectName(u"menubar")
-        # self.menubar.setGeometry(QRect(0, 0, 1024, 21))
-        # self.menu = QMenu(self.menubar)
-        # self.menu.setObjectName(u"menu")
-        # self.menu_2 = QMenu(self.menubar)
-        # self.menu_2.setObjectName(u"menu_2")
-        # 不再调用MainWindows.setMenuBar，而是手动将菜单栏添加到主容器
-        # MainWindows.setMenuBar(self.menubar)
-
-        # self.menubar.addAction(self.menu.menuAction())
-        # self.menubar.addAction(self.menu_2.menuAction())
-        # self.menu.addSeparator()
         self.retranslateUi(MainWindows)
 
         QMetaObject.connectSlotsByName(MainWindows)
     # setupUi
 
     def retranslateUi(self, MainWindows):
-        MainWindows.setWindowTitle(QCoreApplication.translate("MainWindows", u" UI Test", None))
+        MainWindows.setWindowTitle(QCoreApplication.translate("MainWindows", f"{APP_NAME} v{APP_VERSION}", None))
         self.loadbg.setText("")
         self.vol1bg.setText("")
         self.vol2bg.setText("")
@@ -457,8 +482,18 @@ class Ui_MainWindows(object):
 #if QT_CONFIG(accessibility)
         self.start_install_btn.setAccessibleDescription("")
 #endif // QT_CONFIG(accessibility)
-        # self.menubg.setText("") # 注释掉menubg
-        self.menu.setTitle(QCoreApplication.translate("MainWindows", u"\u8bbe\u7f6e", None))
-        self.menu_2.setTitle(QCoreApplication.translate("MainWindows", u"\u5e2e\u52a9", None))
+        self.menu.setTitle(QCoreApplication.translate("MainWindows", u"设置", None))
+        self.menu_2.setTitle(QCoreApplication.translate("MainWindows", u"帮助", None))
     # retranslateUi
+
+    def show_menu(self, menu, button):
+        """显示菜单
+        
+        Args:
+            menu: 要显示的菜单
+            button: 触发菜单的按钮
+        """
+        # 计算菜单显示位置
+        pos = button.mapToGlobal(button.rect().bottomLeft())
+        menu.exec(pos)
 
