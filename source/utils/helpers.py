@@ -37,6 +37,19 @@ def load_base64_image(base64_str):
     pixmap.loadFromData(base64.b64decode(base64_str))
     return pixmap
 
+def load_image_from_file(file_path):
+    """加载图像文件到QPixmap
+    
+    Args:
+        file_path: 图像文件路径
+        
+    Returns:
+        QPixmap: 加载的图像
+    """
+    if os.path.exists(file_path):
+        return QPixmap(file_path)
+    return QPixmap()
+
 def msgbox_frame(title, text, buttons=QtWidgets.QMessageBox.StandardButton.NoButton):
     msg_box = QtWidgets.QMessageBox()
     msg_box.setWindowTitle(title)

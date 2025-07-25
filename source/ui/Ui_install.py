@@ -15,16 +15,8 @@ import os
 
 # 导入配置常量
 from data.config import APP_NAME, APP_VERSION
-
-def load_base64_image(base64_str):
-    pixmap = QPixmap()
-    pixmap.loadFromData(base64.b64decode(base64_str))
-    return pixmap
-
-def load_image_from_file(file_path):
-    if os.path.exists(file_path):
-        return QPixmap(file_path)
-    return QPixmap()
+# 导入工具函数
+from utils import load_base64_image, load_image_from_file
 
 class Ui_MainWindows(object):
     def setupUi(self, MainWindows):
@@ -33,9 +25,11 @@ class Ui_MainWindows(object):
         MainWindows.setEnabled(True)
         # 调整窗口默认大小为1280x720以匹配背景图片
         MainWindows.resize(1280, 720)
-        # 移除最大和最小尺寸限制，允许自由缩放
-        # MainWindows.setMinimumSize(QSize(1024, 576))
-        # MainWindows.setMaximumSize(QSize(1024, 576))
+        # 锁定窗口比例为16:9，确保不会变形，同时限制最大尺寸不超过背景图片
+        MainWindows.setMinimumSize(QSize(1024, 576))  # 16:9最小尺寸
+        MainWindows.setMaximumSize(QSize(1280, 720))  # 将最大尺寸限制为1280x720
+        # 设置固定纵横比
+        self.aspect_ratio = 16/9
         MainWindows.setMouseTracking(False)
         MainWindows.setTabletTracking(False)
         MainWindows.setAcceptDrops(True)
@@ -296,46 +290,59 @@ class Ui_MainWindows(object):
         # 原来的loadbg保持不变
         self.loadbg = QLabel(self.inner_content)
         self.loadbg.setObjectName(u"loadbg")
-        self.loadbg.setGeometry(QRect(0, 0, 1280, 655))  # 调整高度从645到655
-        self.loadbg.setPixmap(load_base64_image(img_data["loadbg"]))
+        self.loadbg.setGeometry(QRect(0, 0, 1280, 655))
+        # 加载背景图并允许拉伸
+        bg_pixmap = load_base64_image(img_data["loadbg"])
+        self.loadbg.setPixmap(bg_pixmap)
         self.loadbg.setScaledContents(True)
         
         self.vol1bg = QLabel(self.inner_content)
         self.vol1bg.setObjectName(u"vol1bg")
         self.vol1bg.setGeometry(QRect(0, 150, 93, 64))
+        # 使用更简洁的方式
         self.vol1bg.setPixmap(load_base64_image(img_data["vol1"]))
         self.vol1bg.setScaledContents(True)
         
         self.vol2bg = QLabel(self.inner_content)
         self.vol2bg.setObjectName(u"vol2bg")
         self.vol2bg.setGeometry(QRect(0, 210, 93, 64))
+        # 使用更简洁的方式
         self.vol2bg.setPixmap(load_base64_image(img_data["vol2"]))
         self.vol2bg.setScaledContents(True)
         
         self.vol3bg = QLabel(self.inner_content)
         self.vol3bg.setObjectName(u"vol3bg")
         self.vol3bg.setGeometry(QRect(0, 270, 93, 64))
+        # 使用更简洁的方式
         self.vol3bg.setPixmap(load_base64_image(img_data["vol3"]))
         self.vol3bg.setScaledContents(True)
         
         self.vol4bg = QLabel(self.inner_content)
         self.vol4bg.setObjectName(u"vol4bg")
         self.vol4bg.setGeometry(QRect(0, 330, 93, 64))
+        # 使用更简洁的方式
         self.vol4bg.setPixmap(load_base64_image(img_data["vol4"]))
         self.vol4bg.setScaledContents(True)
         
         self.afterbg = QLabel(self.inner_content)
         self.afterbg.setObjectName(u"afterbg")
         self.afterbg.setGeometry(QRect(0, 390, 93, 64))
+        # 使用更简洁的方式
         self.afterbg.setPixmap(load_base64_image(img_data["after"]))
         self.afterbg.setScaledContents(True)
         
         # 修复Mainbg位置并使用title_bg1.png作为背景图片
         self.Mainbg = QLabel(self.inner_content)
         self.Mainbg.setObjectName(u"Mainbg")
-        self.Mainbg.setGeometry(QRect(0, 0, 1280, 655))  # 调整高度从645到655
-        self.Mainbg.setPixmap(load_image_from_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BG", "title_bg1.png")))
-        self.Mainbg.setScaledContents(True)
+        self.Mainbg.setGeometry(QRect(0, 0, 1280, 655))
+        # 允许拉伸以填满整个区域
+        main_bg_pixmap = load_image_from_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BG", "title_bg1.png"))
+        
+        # 如果加载的图片不是空的，则设置，并允许拉伸填满
+        if not main_bg_pixmap.isNull():
+            self.Mainbg.setPixmap(main_bg_pixmap)
+            self.Mainbg.setScaledContents(True)
+        self.Mainbg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # 使用新的按钮图片
         button_pixmap = load_image_from_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BTN", "Button.png"))

@@ -16,7 +16,7 @@ from data.config import (
     PLUGIN_HASH, UA, CONFIG_URL, LOG_FILE
 )
 from utils import (
-    load_config, save_config, HashManager, AdminPrivileges, msgbox_frame
+    load_config, save_config, HashManager, AdminPrivileges, msgbox_frame, load_image_from_file
 )
 from workers import (
     DownloadThread, ProgressWindow, IpOptimizerThread, 
@@ -37,9 +37,9 @@ class MainWindow(QMainWindow):
         
         # 调整窗口大小以适应背景图片比例 (1280x720)
         self.resize(1280, 720)
-        # 移除大小限制，允许自由缩放
-        # self.setMinimumSize(QSize(1024, 576))
-        # self.setMaximumSize(QSize(1024, 576))
+        # 设置固定尺寸范围
+        self.setMinimumSize(QSize(1024, 576))
+        self.setMaximumSize(QSize(1280, 720))
         
         # 窗口比例 (16:9)
         self.aspect_ratio = 16 / 9
@@ -174,17 +174,22 @@ class MainWindow(QMainWindow):
         if hasattr(self.ui, 'content_container'):
             self.ui.content_container.setGeometry(0, 0, new_width, new_height)
             
-        # 更新标题栏宽度
+        # 更新标题栏宽度和高度
         if hasattr(self.ui, 'title_bar'):
-            self.ui.title_bar.setGeometry(0, 0, new_width, 30)
+            self.ui.title_bar.setGeometry(0, 0, new_width, 35)
+        
+        # 更新菜单区域
+        if hasattr(self.ui, 'menu_area'):
+            self.ui.menu_area.setGeometry(0, 35, new_width, 30)
             
         # 更新内容区域大小
         if hasattr(self.ui, 'inner_content'):
             self.ui.inner_content.setGeometry(0, 65, new_width, new_height - 65)
             
-        # 更新背景图大小
+        # 更新背景图大小 - 使用setScaledContents简化处理
         if hasattr(self.ui, 'Mainbg'):
             self.ui.Mainbg.setGeometry(0, 0, new_width, new_height - 65)
+            # 使用setScaledContents=True，不需要手动缩放
             
         if hasattr(self.ui, 'loadbg'):
             self.ui.loadbg.setGeometry(0, 0, new_width, new_height - 65)
