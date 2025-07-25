@@ -140,7 +140,7 @@ class DownloadManager:
     def download_action(self):
         """开始下载流程"""
         # 禁用开始安装按钮
-        self.main_window.ui.start_install_btn.setEnabled(False)
+        self.main_window.set_start_button_enabled(False)
         
         # 清空下载历史记录
         self.main_window.download_queue_history = []
@@ -173,7 +173,7 @@ class DownloadManager:
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             # 重新启用开始安装按钮
-            self.main_window.ui.start_install_btn.setEnabled(True)
+            self.main_window.set_start_button_enabled(True)
             return
 
         # 填充下载队列
@@ -565,6 +565,6 @@ class DownloadManager:
         
         # 重新启用退出按钮和开始安装按钮
         self.main_window.ui.exit_btn.setEnabled(True)
-        self.main_window.ui.start_install_btn.setEnabled(True)
+        self.main_window.set_start_button_enabled(True)
         
         self.main_window.show_result() 

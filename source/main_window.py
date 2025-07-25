@@ -5,8 +5,9 @@ import json
 import webbrowser
 
 from PySide6 import QtWidgets
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QMainWindow, QMessageBox
+from PySide6.QtCore import QTimer, Qt, QPoint, QRect, QSize
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect
+from PySide6.QtGui import QPalette, QColor, QPainterPath, QRegion
 
 from ui.Ui_install import Ui_MainWindows
 from data.config import (
@@ -28,9 +29,30 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        # 设置窗口为无边框
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        # 设置窗口背景透明
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # 调整窗口大小以适应背景图片比例 (1280x720)
+        self.resize(1280, 720)
+        # 移除大小限制，允许自由缩放
+        # self.setMinimumSize(QSize(1024, 576))
+        # self.setMaximumSize(QSize(1024, 576))
+        
+        # 窗口比例 (16:9)
+        self.aspect_ratio = 16 / 9
+        
+        # 拖动窗口相关变量
+        self._drag_position = QPoint()
+        self._is_dragging = False
+        
         # 初始化UI (从Ui_install.py导入)
         self.ui = Ui_MainWindows()
         self.ui.setupUi(self)
+        
+        # 设置圆角窗口
+        self.setRoundedCorners()
         
         # 初始化配置
         self.config = load_config()
@@ -57,6 +79,12 @@ class MainWindow(QMainWindow):
         self.debug_manager = DebugManager(self)
         self.download_manager = DownloadManager(self)
         
+        # 设置关闭按钮事件连接
+        if hasattr(self.ui, 'close_btn'):
+            self.ui.close_btn.clicked.connect(self.close)
+        
+        if hasattr(self.ui, 'minimize_btn'):
+            self.ui.minimize_btn.clicked.connect(self.showMinimized)
         
         # 检查管理员权限和进程
         self.admin_privileges.request_admin_privileges()
@@ -78,8 +106,12 @@ class MainWindow(QMainWindow):
                 sys.exit(1)
         
         # 连接信号 - 绑定到新按钮
-        self.ui.start_install_btn.clicked.connect(self.download_manager.file_dialog)
+        self.ui.start_install_btn.clicked.connect(self.handle_install_button_click)
         self.ui.exit_btn.clicked.connect(self.shutdown_app)
+        
+        # 初始化按钮状态标记
+        self.install_button_enabled = False
+        self.last_error_message = ""
         
         # 根据初始配置决定是否开启Debug模式
         if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action:
@@ -92,6 +124,94 @@ class MainWindow(QMainWindow):
         # 窗口显示后延迟100ms启动动画
         QTimer.singleShot(100, self.start_animations)
     
+    def setRoundedCorners(self):
+        """设置窗口圆角"""
+        # 实现圆角窗口
+        path = QPainterPath()
+        path.addRoundedRect(self.rect(), 20, 20)
+        mask = QRegion(path.toFillPolygon().toPolygon())
+        self.setMask(mask)
+        
+        # 更新resize事件时更新圆角
+        self.updateRoundedCorners = True
+    
+    # 添加鼠标事件处理，实现窗口拖动
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            # 只有当鼠标在标题栏区域时才可以拖动
+            if hasattr(self.ui, 'title_bar') and self.ui.title_bar.geometry().contains(event.position().toPoint()):
+                self._is_dragging = True
+                self._drag_position = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+    
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton and self._is_dragging:
+            self.move(event.globalPosition().toPoint() - self._drag_position)
+            event.accept()
+    
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._is_dragging = False
+            event.accept()
+    
+    def resizeEvent(self, event):
+        """当窗口大小改变时更新圆角和维持纵横比"""
+        # 计算基于当前宽度的合适高度，以维持16:9比例
+        new_width = event.size().width()
+        new_height = int(new_width / self.aspect_ratio)
+        
+        if new_height != event.size().height():
+            # 阻止变形，保持比例
+            self.resize(new_width, new_height)
+        
+        # 更新主容器大小
+        if hasattr(self.ui, 'main_container'):
+            self.ui.main_container.setGeometry(0, 0, new_width, new_height)
+            
+        # 更新内容容器大小    
+        if hasattr(self.ui, 'content_container'):
+            self.ui.content_container.setGeometry(0, 0, new_width, new_height)
+            
+        # 更新标题栏宽度
+        if hasattr(self.ui, 'title_bar'):
+            self.ui.title_bar.setGeometry(0, 0, new_width, 30)
+            
+        # 更新内容区域大小
+        if hasattr(self.ui, 'inner_content'):
+            self.ui.inner_content.setGeometry(0, 55, new_width, new_height - 55)
+            
+        # 更新背景图大小
+        if hasattr(self.ui, 'Mainbg'):
+            self.ui.Mainbg.setGeometry(0, 0, new_width, new_height - 55)
+            
+        if hasattr(self.ui, 'loadbg'):
+            self.ui.loadbg.setGeometry(0, 0, new_width, new_height - 55)
+            
+        # 调整按钮位置 - 固定在右侧
+        right_margin = 20  # 减小右边距，使按钮更靠右
+        if hasattr(self.ui, 'button_container'):
+            btn_width = 211  # 扩大后的容器宽度
+            btn_height = 111  # 扩大后的容器高度
+            x_pos = new_width - btn_width - right_margin
+            y_pos = int((new_height - 55) * 0.42) - 10  # 调整Y位置以适应扩大的容器
+            self.ui.button_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
+            
+        if hasattr(self.ui, 'exit_container'):
+            btn_width = 211  # 扩大后的容器宽度
+            btn_height = 111  # 扩大后的容器高度
+            x_pos = new_width - btn_width - right_margin
+            y_pos = int((new_height - 55) * 0.62) - 10  # 调整Y位置以适应扩大的容器
+            self.ui.exit_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
+            
+        # 更新圆角
+        if hasattr(self, 'updateRoundedCorners') and self.updateRoundedCorners:
+            path = QPainterPath()
+            path.addRoundedRect(self.rect(), 20, 20)
+            mask = QRegion(path.toFillPolygon().toPolygon())
+            self.setMask(mask)
+            
+        super().resizeEvent(event)
+    
     def start_animations(self):
         """开始启动动画"""
         # 不再禁用退出按钮的交互性，只通过样式表控制外观
@@ -100,7 +220,7 @@ class MainWindow(QMainWindow):
         
         # 按钮容器初始是隐藏的，无需在这里禁用
         # 但确保开始安装按钮仍然处于禁用状态
-        self.ui.start_install_btn.setEnabled(False)
+        self.set_start_button_enabled(False)
         
         self.animator.animation_finished.connect(self.on_animations_finished)
         self.animator.start_animations()
@@ -112,9 +232,26 @@ class MainWindow(QMainWindow):
         
         # 只有在配置有效时才启用开始安装按钮
         if self.config_valid:
-            self.ui.start_install_btn.setEnabled(True)
+            self.set_start_button_enabled(True)
         else:
-            self.ui.start_install_btn.setEnabled(False)
+            self.set_start_button_enabled(False)
+            
+    def set_start_button_enabled(self, enabled):
+        """设置开始安装按钮的启用状态和视觉效果
+        
+        Args:
+            enabled: 是否启用按钮
+        """
+        self.ui.start_install_btn.setEnabled(True)  # 始终启用按钮，以便捕获点击事件
+        
+        # 根据状态修改文本内容，但不再修改颜色样式
+        if enabled:
+            self.ui.start_install_text.setText("开始安装")
+        else:
+            self.ui.start_install_text.setText("!无法安装!")
+            
+        # 记录当前按钮状态，用于点击事件处理
+        self.install_button_enabled = enabled
 
     def fetch_cloud_config(self):
         """获取云端配置"""
@@ -134,6 +271,8 @@ class MainWindow(QMainWindow):
         if error_message:
             # 标记配置无效
             self.config_valid = False
+            # 记录错误信息，用于按钮点击时显示
+            self.last_error_message = error_message
             
             if error_message == "update_required":
                 msg_box = msgbox_frame(
@@ -175,18 +314,20 @@ class MainWindow(QMainWindow):
                     )
                 msg_box.exec()
                 # 在无法连接到云端时禁用开始安装按钮
-                self.ui.start_install_btn.setEnabled(False)
+                self.set_start_button_enabled(False)
         else:
             self.cloud_config = data
             # 标记配置有效
             self.config_valid = True
+            # 清除错误信息
+            self.last_error_message = ""
             
             debug_mode = self.ui_manager.debug_action.isChecked() if self.ui_manager.debug_action else False
             if debug_mode:
                 print("--- Cloud config fetched successfully ---")
                 print(json.dumps(data, indent=2))
             # 确保按钮在成功获取配置时启用
-            self.ui.start_install_btn.setEnabled(True)
+            self.set_start_button_enabled(True)
 
     def toggle_debug_mode(self, checked):
         """切换调试模式
@@ -290,7 +431,7 @@ class MainWindow(QMainWindow):
 
         # 重新启用退出按钮和开始安装按钮
         self.ui.exit_btn.setEnabled(True)
-        self.ui.start_install_btn.setEnabled(True)
+        self.set_start_button_enabled(True)
         
         # 添加短暂延迟确保UI更新
         QTimer.singleShot(100, self.show_result)
@@ -423,5 +564,30 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             sys.exit(0) 
+
+    def handle_install_button_click(self):
+        """处理安装按钮点击事件
+        根据按钮当前状态决定是显示错误还是执行安装
+        """
+        if not self.install_button_enabled:
+            # 按钮处于"无法安装"状态，显示上次错误消息
+            if self.last_error_message == "update_required":
+                msg_box = msgbox_frame(
+                    f"更新提示 - {APP_NAME}",
+                    "\n当前版本过低，请及时更新。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+            else:
+                # 默认显示网络错误
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    "\n访问云端配置失败，请检查网络状况或稍后再试。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+        else:
+            # 按钮处于"开始安装"状态，正常执行安装流程
+            self.download_manager.file_dialog() 
 
  

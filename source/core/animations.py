@@ -1,15 +1,24 @@
+import sys
 from PySide6.QtCore import (QObject, QPropertyAnimation, QParallelAnimationGroup,
-                          QPoint, QEasingCurve, QTimer, Signal)
-from PySide6.QtWidgets import QGraphicsOpacityEffect
+                          QPoint, QEasingCurve, QTimer, Signal, QRect)
+from PySide6.QtWidgets import QGraphicsOpacityEffect, QPushButton
+from PySide6.QtGui import QColor
 
 class MultiStageAnimations(QObject):
     animation_finished = Signal()
     def __init__(self, ui, parent=None):
         super().__init__(parent)
         self.ui = ui
-        # 获取画布尺寸
-        self.canvas_width = ui.centralwidget.width()
-        self.canvas_height = ui.centralwidget.height()
+        self.parent = parent  # 保存父窗口引用以获取当前尺寸
+        
+        # 获取画布尺寸 - 动态从父窗口获取
+        if parent:
+            self.canvas_width = parent.width()
+            self.canvas_height = parent.height()
+        else:
+            # 默认尺寸
+            self.canvas_width = 1280
+            self.canvas_height = 720
         
         # 动画时序配置
         self.animation_config = {
@@ -18,29 +27,132 @@ class MultiStageAnimations(QObject):
             },
             "mainbg": {
                 "delay_after": 500
+            },
+            "button_click": {
+                "scale_duration": 100,
+                "scale_min": 0.95,
+                "scale_max": 1.0
             }
         }
         
-        # 第一阶段：Logo动画配置
+        # 第一阶段：Logo动画配置，根据新布局调整Y坐标
         self.logo_widgets = [
-            {"widget": ui.vol1bg, "delay": 0, "duration": 500, "end_pos": QPoint(0, 120)},
-            {"widget": ui.vol2bg, "delay": 80, "duration": 500, "end_pos": QPoint(0, 180)},
-            {"widget": ui.vol3bg, "delay": 160, "duration": 500, "end_pos": QPoint(0, 240)},
-            {"widget": ui.vol4bg, "delay": 240, "duration": 500, "end_pos": QPoint(0, 300)},
-            {"widget": ui.afterbg, "delay": 320, "duration": 500, "end_pos": QPoint(0, 360)}
+            {"widget": ui.vol1bg, "delay": 0, "duration": 500, "end_pos": QPoint(0, 150)},
+            {"widget": ui.vol2bg, "delay": 80, "duration": 500, "end_pos": QPoint(0, 210)},
+            {"widget": ui.vol3bg, "delay": 160, "duration": 500, "end_pos": QPoint(0, 270)},
+            {"widget": ui.vol4bg, "delay": 240, "duration": 500, "end_pos": QPoint(0, 330)},
+            {"widget": ui.afterbg, "delay": 320, "duration": 500, "end_pos": QPoint(0, 390)}
         ]
         
-        # 第二阶段：菜单元素
+        # 第二阶段：菜单元素，位置会在开始动画时动态计算
         self.menu_widgets = [
-            {"widget": ui.menubg, "end_pos": QPoint(710, 0), "duration": 600},
-            {"widget": ui.button_container, "end_pos": QPoint(780, 250), "duration": 600},
-            {"widget": ui.exit_container, "end_pos": QPoint(780, 340), "duration": 600}
+            # 移除菜单背景动画
+            # {"widget": ui.menubg, "end_pos": QPoint(720, 55), "duration": 600},
+            {"widget": ui.button_container, "end_pos": None, "duration": 600},
+            {"widget": ui.exit_container, "end_pos": None, "duration": 600}
         ]
         
         self.animations = []
         self.timers = []
+        
+        # 设置按钮点击动画
+        self.setup_button_click_animations()
+    
+    def setup_button_click_animations(self):
+        """设置按钮点击动画"""
+        # 为开始安装按钮添加点击动画
+        self.ui.start_install_btn.pressed.connect(
+            lambda: self.start_button_click_animation(self.ui.button_container)
+        )
+        self.ui.start_install_btn.released.connect(
+            lambda: self.end_button_click_animation(self.ui.button_container)
+        )
+        
+        # 为退出按钮添加点击动画
+        self.ui.exit_btn.pressed.connect(
+            lambda: self.start_button_click_animation(self.ui.exit_container)
+        )
+        self.ui.exit_btn.released.connect(
+            lambda: self.end_button_click_animation(self.ui.exit_container)
+        )
+    
+    def start_button_click_animation(self, button_container):
+        """开始按钮点击动画"""
+        # 创建缩放动画
+        scale_anim = QPropertyAnimation(button_container.children()[0], b"geometry")  # 只对按钮背景应用动画
+        scale_anim.setDuration(self.animation_config["button_click"]["scale_duration"])
+        
+        # 获取当前几何形状
+        current_geometry = button_container.children()[0].geometry()
+        
+        # 计算缩放后的几何形状（保持中心点不变）
+        scale_factor = self.animation_config["button_click"]["scale_min"]
+        width_diff = current_geometry.width() * (1 - scale_factor) / 2
+        height_diff = current_geometry.height() * (1 - scale_factor) / 2
+        
+        new_geometry = QRect(
+            current_geometry.x() + width_diff,
+            current_geometry.y() + height_diff,
+            current_geometry.width() * scale_factor,
+            current_geometry.height() * scale_factor
+        )
+        
+        scale_anim.setEndValue(new_geometry)
+        scale_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        
+        # 启动动画
+        scale_anim.start()
+        self.animations.append(scale_anim)
+        
+        # 对文本标签也应用同样的动画
+        text_anim = QPropertyAnimation(button_container.children()[1], b"geometry")
+        text_anim.setDuration(self.animation_config["button_click"]["scale_duration"])
+        text_geometry = button_container.children()[1].geometry()
+        
+        new_text_geometry = QRect(
+            text_geometry.x() + width_diff,
+            text_geometry.y() + height_diff,
+            text_geometry.width() * scale_factor,
+            text_geometry.height() * scale_factor
+        )
+        
+        text_anim.setEndValue(new_text_geometry)
+        text_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
+        text_anim.start()
+        self.animations.append(text_anim)
+    
+    def end_button_click_animation(self, button_container):
+        """结束按钮点击动画，恢复正常外观"""
+        # 创建恢复动画 - 对背景
+        scale_anim = QPropertyAnimation(button_container.children()[0], b"geometry")
+        scale_anim.setDuration(self.animation_config["button_click"]["scale_duration"])
+        
+        # 恢复到原始大小 (10,10,191,91)
+        original_geometry = QRect(10, 10, 191, 91)
+        scale_anim.setEndValue(original_geometry)
+        scale_anim.setEasingCurve(QEasingCurve.Type.OutElastic)
+        
+        # 启动动画
+        scale_anim.start()
+        self.animations.append(scale_anim)
+        
+        # 恢复文本标签
+        text_anim = QPropertyAnimation(button_container.children()[1], b"geometry")
+        text_anim.setDuration(self.animation_config["button_click"]["scale_duration"])
+        
+        # 恢复文本到原始大小 (10,7,191,91)
+        text_anim.setEndValue(QRect(10, 7, 191, 91))
+        text_anim.setEasingCurve(QEasingCurve.Type.OutElastic)
+        text_anim.start()
+        self.animations.append(text_anim)
+
     def initialize(self):
         """初始化所有组件状态"""
+        # 更新画布尺寸
+        if self.parent:
+            self.canvas_width = self.parent.width()
+            self.canvas_height = self.parent.height()
+        
         # 设置Mainbg初始状态
         effect = QGraphicsOpacityEffect(self.ui.Mainbg)
         effect.setOpacity(0)
@@ -125,6 +237,9 @@ class MultiStageAnimations(QObject):
         self.animations.append(main_anim)
     def start_menu_animations(self):
         """启动菜单动画（从下往上）"""
+        # 更新按钮最终位置
+        self._update_button_positions()
+        
         for item in self.menu_widgets:
             anim_group = QParallelAnimationGroup()
             
@@ -149,6 +264,46 @@ class MultiStageAnimations(QObject):
 
             anim_group.start()
             self.animations.append(anim_group)
+    
+    def _update_button_positions(self):
+        """更新按钮最终位置"""
+        # 根据当前窗口大小动态计算按钮位置
+        if self.parent:
+            width = self.parent.width()
+            height = self.parent.height()
+            
+            # 计算按钮位置
+            right_margin = 20  # 减小右边距，使按钮更靠右
+            
+            # 开始安装按钮
+            if hasattr(self.ui, 'button_container'):
+                btn_width = self.ui.button_container.width()
+                x_pos = width - btn_width - right_margin
+                y_pos = int((height - 55) * 0.42) - 10  # 调整Y位置以适应扩大的容器
+                
+                # 更新动画目标位置
+                for item in self.menu_widgets:
+                    if item["widget"] == self.ui.button_container:
+                        item["end_pos"] = QPoint(x_pos, y_pos)
+                
+            # 退出按钮
+            if hasattr(self.ui, 'exit_container'):
+                btn_width = self.ui.exit_container.width()
+                x_pos = width - btn_width - right_margin
+                y_pos = int((height - 55) * 0.62) - 10  # 调整Y位置以适应扩大的容器
+                
+                # 更新动画目标位置
+                for item in self.menu_widgets:
+                    if item["widget"] == self.ui.exit_container:
+                        item["end_pos"] = QPoint(x_pos, y_pos)
+        else:
+            # 默认位置
+            for item in self.menu_widgets:
+                if item["widget"] == self.ui.button_container:
+                    item["end_pos"] = QPoint(1050, 285)
+                elif item["widget"] == self.ui.exit_container:
+                    item["end_pos"] = QPoint(1050, 415)
+    
     def start_animations(self):
         """启动完整动画序列"""
         self.clear_animations()
