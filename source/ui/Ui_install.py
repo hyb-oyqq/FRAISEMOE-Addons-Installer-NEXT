@@ -1,4 +1,3 @@
-from data.pic_data import img_data
 from PySide6.QtGui import QPixmap
 import base64
 from PySide6.QtCore import (QCoreApplication, QDate, QDateTime, QLocale,
@@ -15,8 +14,7 @@ import os
 
 # 导入配置常量
 from data.config import APP_NAME, APP_VERSION
-# 导入工具函数
-from utils import load_base64_image, load_image_from_file
+from utils import load_image_from_file
 
 class Ui_MainWindows(object):
     def setupUi(self, MainWindows):
@@ -292,43 +290,49 @@ class Ui_MainWindows(object):
         self.loadbg.setObjectName(u"loadbg")
         self.loadbg.setGeometry(QRect(0, 0, 1280, 655))
         # 加载背景图并允许拉伸
-        bg_pixmap = load_base64_image(img_data["loadbg"])
+        bg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BG", "bg1.jpg")
+        bg_pixmap = QPixmap(bg_path)
         self.loadbg.setPixmap(bg_pixmap)
         self.loadbg.setScaledContents(True)
         
         self.vol1bg = QLabel(self.inner_content)
         self.vol1bg.setObjectName(u"vol1bg")
         self.vol1bg.setGeometry(QRect(0, 150, 93, 64))
-        # 使用更简洁的方式
-        self.vol1bg.setPixmap(load_base64_image(img_data["vol1"]))
+        # 直接加载图片文件
+        vol1_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo01_logo.png")
+        self.vol1bg.setPixmap(QPixmap(vol1_path))
         self.vol1bg.setScaledContents(True)
         
         self.vol2bg = QLabel(self.inner_content)
         self.vol2bg.setObjectName(u"vol2bg")
         self.vol2bg.setGeometry(QRect(0, 210, 93, 64))
-        # 使用更简洁的方式
-        self.vol2bg.setPixmap(load_base64_image(img_data["vol2"]))
+        # 直接加载图片文件
+        vol2_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo02_logo.png")
+        self.vol2bg.setPixmap(QPixmap(vol2_path))
         self.vol2bg.setScaledContents(True)
         
         self.vol3bg = QLabel(self.inner_content)
         self.vol3bg.setObjectName(u"vol3bg")
         self.vol3bg.setGeometry(QRect(0, 270, 93, 64))
-        # 使用更简洁的方式
-        self.vol3bg.setPixmap(load_base64_image(img_data["vol3"]))
+        # 直接加载图片文件
+        vol3_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo03_logo.png")
+        self.vol3bg.setPixmap(QPixmap(vol3_path))
         self.vol3bg.setScaledContents(True)
         
         self.vol4bg = QLabel(self.inner_content)
         self.vol4bg.setObjectName(u"vol4bg")
         self.vol4bg.setGeometry(QRect(0, 330, 93, 64))
-        # 使用更简洁的方式
-        self.vol4bg.setPixmap(load_base64_image(img_data["vol4"]))
+        # 直接加载图片文件
+        vol4_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo04_logo.png")
+        self.vol4bg.setPixmap(QPixmap(vol4_path))
         self.vol4bg.setScaledContents(True)
         
         self.afterbg = QLabel(self.inner_content)
         self.afterbg.setObjectName(u"afterbg")
         self.afterbg.setGeometry(QRect(0, 390, 93, 64))
-        # 使用更简洁的方式
-        self.afterbg.setPixmap(load_base64_image(img_data["after"]))
+        # 直接加载图片文件
+        after_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "voaf_logo.png")
+        self.afterbg.setPixmap(QPixmap(after_path))
         self.afterbg.setScaledContents(True)
         
         # 修复Mainbg位置并使用title_bg1.png作为背景图片

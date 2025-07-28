@@ -9,7 +9,6 @@ import psutil
 from PySide6 import QtCore, QtWidgets
 import re
 from PySide6.QtGui import QIcon, QPixmap
-from data.pic_data import img_data
 from data.config import APP_NAME, CONFIG_FILE
 
 def resource_path(relative_path):
@@ -55,9 +54,10 @@ def msgbox_frame(title, text, buttons=QtWidgets.QMessageBox.StandardButton.NoBut
     msg_box.setWindowTitle(title)
     msg_box.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
     
-    icon_data = img_data.get("icon")
-    if icon_data:
-        pixmap = load_base64_image(icon_data)
+    # 直接加载图标文件
+    icon_path = resource_path(os.path.join("IMG", "ICO", "icon.png"))
+    if os.path.exists(icon_path):
+        pixmap = QPixmap(icon_path)
         if not pixmap.isNull():
             msg_box.setWindowIcon(QIcon(pixmap))
             msg_box.setIconPixmap(pixmap.scaled(64, 64, QtCore.Qt.AspectRatioMode.KeepAspectRatio, QtCore.Qt.TransformationMode.SmoothTransformation))

@@ -5,7 +5,6 @@ import webbrowser
 
 from utils import load_base64_image, msgbox_frame
 from data.config import APP_NAME, APP_VERSION
-from data.pic_data import img_data
 
 class UIManager:
     def __init__(self, main_window):
@@ -22,10 +21,11 @@ class UIManager:
     def setup_ui(self):
         """设置UI元素，包括窗口图标、标题和菜单"""
         # 设置窗口图标
-        icon_data = img_data.get("icon")
-        if icon_data:
-            pixmap = load_base64_image(icon_data)
-            self.main_window.setWindowIcon(QIcon(pixmap))
+        import os
+        from utils import resource_path
+        icon_path = resource_path(os.path.join("IMG", "ICO", "icon.png"))
+        if os.path.exists(icon_path):
+            self.main_window.setWindowIcon(QIcon(icon_path))
 
         # 设置窗口标题
         self.main_window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
