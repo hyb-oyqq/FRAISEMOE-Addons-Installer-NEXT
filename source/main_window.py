@@ -660,15 +660,51 @@ class MainWindow(QMainWindow):
                 # 有多个游戏，让用户选择
                 from PySide6.QtWidgets import QInputDialog
                 game_versions = list(game_dirs.keys())
+                # 添加"全部卸载"选项
+                game_versions.append("全部卸载")
+                
                 selected_game, ok = QInputDialog.getItem(
                     self, "选择游戏", "选择要卸载补丁的游戏:", 
                     game_versions, 0, False
                 )
                 
                 if ok and selected_game:
-                    game_version = selected_game
-                    game_dir = game_dirs[game_version]
-                    self._confirm_and_uninstall(game_dir, game_version)
+                    if selected_game == "全部卸载":
+                        # 卸载所有游戏补丁
+                        reply = QMessageBox.question(
+                            self,
+                            f"确认卸载 - {APP_NAME}",
+                            f"\n确定要卸载所有游戏的补丁吗？\n这将卸载以下游戏的补丁:\n{chr(10).join(list(game_dirs.keys()))}\n",
+                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                            QMessageBox.StandardButton.No
+                        )
+                        
+                        if reply == QMessageBox.StandardButton.Yes:
+                            success_count = 0
+                            fail_count = 0
+                            for version, path in game_dirs.items():
+                                try:
+                                    if self.uninstall_patch(path, version):
+                                        success_count += 1
+                                    else:
+                                        fail_count += 1
+                                except Exception as e:
+                                    if debug_mode:
+                                        print(f"DEBUG: 卸载 {version} 时出错: {str(e)}")
+                                    fail_count += 1
+                            
+                            # 显示批量卸载结果
+                            QMessageBox.information(
+                                self,
+                                f"批量卸载完成 - {APP_NAME}",
+                                f"\n批量卸载完成！\n成功: {success_count} 个\n失败: {fail_count} 个\n",
+                                QMessageBox.StandardButton.Ok,
+                            )
+                    else:
+                        # 卸载选中的单个游戏
+                        game_version = selected_game
+                        game_dir = game_dirs[game_version]
+                        self._confirm_and_uninstall(game_dir, game_version)
         else:
             # 未找到游戏目录，尝试将选择的目录作为游戏目录
             if debug_mode:
@@ -1006,6 +1042,9 @@ class MainWindow(QMainWindow):
         Args:
             game_dir: 游戏目录路径
             game_version: 游戏版本
+            
+        Returns:
+            bool: 卸载成功返回True，失败返回False
         """
         import os
         import shutil
@@ -1019,7 +1058,7 @@ class MainWindow(QMainWindow):
                 f"\n无法识别游戏版本: {game_version}\n",
                 QMessageBox.StandardButton.Ok,
             )
-            return
+            return False
         
         if debug_mode:
             print(f"DEBUG: 开始卸载 {game_version} 补丁，目录: {game_dir}")
@@ -1118,33 +1157,43 @@ class MainWindow(QMainWindow):
             # 更新安装状态
             self.installed_status[game_version] = False
             
-            # 显示卸载成功消息
-            if files_removed > 0:
-                QMessageBox.information(
+            # 在非批量卸载模式下显示卸载成功消息
+            if game_version != "all":
+                # 显示卸载成功消息
+                if files_removed > 0:
+                    QMessageBox.information(
+                        self,
+                        f"卸载完成 - {APP_NAME}",
+                        f"\n{game_version} 补丁卸载成功！\n共删除 {files_removed} 个文件/文件夹。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        f"警告 - {APP_NAME}",
+                        f"\n未找到 {game_version} 的补丁文件，可能未安装补丁或已被移除。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+            
+            # 卸载成功
+            return True
+            
+        except Exception as e:
+            # 在非批量卸载模式下显示卸载失败消息
+            if game_version != "all":
+                # 显示卸载失败消息
+                error_message = f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n"
+                if debug_mode:
+                    print(f"DEBUG: 卸载错误 - {str(e)}")
+                    
+                QMessageBox.critical(
                     self,
-                    f"卸载完成 - {APP_NAME}",
-                    f"\n{game_version} 补丁卸载成功！\n共删除 {files_removed} 个文件/文件夹。\n",
-                    QMessageBox.StandardButton.Ok,
-                )
-            else:
-                QMessageBox.warning(
-                    self,
-                    f"警告 - {APP_NAME}",
-                    f"\n未找到 {game_version} 的补丁文件，可能未安装补丁或已被移除。\n",
+                    f"卸载失败 - {APP_NAME}",
+                    error_message,
                     QMessageBox.StandardButton.Ok,
                 )
             
-        except Exception as e:
-            # 显示卸载失败消息
-            error_message = f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n"
-            if debug_mode:
-                print(f"DEBUG: 卸载错误 - {str(e)}")
-                
-            QMessageBox.critical(
-                self,
-                f"卸载失败 - {APP_NAME}",
-                error_message,
-                QMessageBox.StandardButton.Ok,
-            ) 
+            # 卸载失败
+            return False 
 
  
