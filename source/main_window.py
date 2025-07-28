@@ -283,13 +283,16 @@ class MainWindow(QMainWindow):
             data: 获取到的配置数据
             error_message: 错误信息，如果有
         """
+        # 定义debug_mode变量在方法开头
+        debug_mode = self.ui_manager.debug_action.isChecked() if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action else False
+        
         if error_message:
             # 标记配置无效
             self.config_valid = False
-            # 记录错误信息，用于按钮点击时显示
-            self.last_error_message = error_message
             
+            # 记录错误信息，用于按钮点击时显示
             if error_message == "update_required":
+                self.last_error_message = "update_required"
                 msg_box = msgbox_frame(
                     f"更新提示 - {APP_NAME}",
                     "\n当前版本过低，请及时更新。\n",
@@ -302,6 +305,7 @@ class MainWindow(QMainWindow):
                 self.shutdown_app(force_exit=True)
                 return
             elif "missing_keys" in error_message:
+                self.last_error_message = "missing_keys"
                 missing_versions = error_message.split(":")[1]
                 msg_box = msgbox_frame(
                     f"配置缺失 - {APP_NAME}",
@@ -312,8 +316,10 @@ class MainWindow(QMainWindow):
                 # 对于部分缺失，仍然允许使用，因为可能只影响部分游戏版本
                 self.config_valid = True
             else:
+                # 设置网络错误标记
+                self.last_error_message = "network_error"
+                
                 # 显示通用错误消息，只在debug模式下显示详细错误
-                debug_mode = self.ui_manager.debug_action.isChecked() if self.ui_manager.debug_action else False
                 error_msg = "访问云端配置失败，请检查网络状况或稍后再试。"
                 if debug_mode and "详细错误:" in error_message:
                     msg_box = msgbox_frame(
@@ -337,7 +343,6 @@ class MainWindow(QMainWindow):
             # 清除错误信息
             self.last_error_message = ""
             
-            debug_mode = self.ui_manager.debug_action.isChecked() if self.ui_manager.debug_action else False
             if debug_mode:
                 print("--- Cloud config fetched successfully ---")
                 print(json.dumps(data, indent=2))
@@ -585,7 +590,7 @@ class MainWindow(QMainWindow):
         根据按钮当前状态决定是显示错误还是执行安装
         """
         if not self.install_button_enabled:
-            # 按钮处于"无法安装"状态，显示上次错误消息
+            # 按钮处于"无法安装"状态
             if self.last_error_message == "update_required":
                 msg_box = msgbox_frame(
                     f"更新提示 - {APP_NAME}",
@@ -593,17 +598,31 @@ class MainWindow(QMainWindow):
                     QMessageBox.StandardButton.Ok,
                 )
                 msg_box.exec()
-            else:
-                # 默认显示网络错误
-                msg_box = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    "\n访问云端配置失败，请检查网络状况或稍后再试。\n",
-                    QMessageBox.StandardButton.Ok,
+            elif self.last_error_message == "directory_not_found":
+                # 目录识别失败的特定错误信息
+                reply = msgbox_frame(
+                    f"目录错误 - {APP_NAME}",
+                    "\n未能识别游戏目录，请确认选择的是游戏的上级目录，并且目录中包含Nekopara游戏文件夹。\n\n是否重新选择目录？\n",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 )
-                msg_box.exec()
+                if reply.exec() == QMessageBox.StandardButton.Yes:
+                    # 重新启用按钮并允许用户选择目录
+                    self.set_start_button_enabled(True)
+                    # 直接调用文件对话框
+                    self.download_manager.file_dialog()
+            else:
+                # 网络错误或其他错误
+                reply = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    "\n访问云端配置失败，请检查网络状况或稍后再试。\n\n是否重新尝试连接？\n",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                )
+                if reply.exec() == QMessageBox.StandardButton.Yes:
+                    # 重试获取配置
+                    self.fetch_cloud_config()
         else:
             # 按钮处于"开始安装"状态，正常执行安装流程
-            self.download_manager.file_dialog() 
+            self.download_manager.file_dialog()
 
     def handle_uninstall_button_click(self):
         """处理卸载补丁按钮点击事件
@@ -612,33 +631,81 @@ class MainWindow(QMainWindow):
         # 获取游戏目录
         from PySide6.QtWidgets import QFileDialog
         
-        # 打开文件选择对话框
-        game_dir = QFileDialog.getExistingDirectory(
-            self, 
-            "选择游戏目录", 
-            ""
-        )
+        debug_mode = self.ui_manager.debug_action.isChecked() if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action else False
         
-        if not game_dir or game_dir == "":
+        # 提示用户选择目录
+        file_dialog_info = "选择游戏上级目录" if debug_mode else "选择游戏目录"
+        selected_folder = QFileDialog.getExistingDirectory(self, file_dialog_info, "")
+        
+        if not selected_folder or selected_folder == "":
             return  # 用户取消了选择
-            
-        # 验证所选目录是否为有效的游戏目录
-        game_version = self.identify_game_version(game_dir)
         
-        if not game_version:
-            msg_box = msgbox_frame(
-                f"错误 - {APP_NAME}",
-                "\n所选目录不是有效的NEKOPARA游戏目录。\n请选择包含游戏可执行文件的目录。\n",
-                QMessageBox.StandardButton.Ok,
-            )
-            msg_box.exec()
-            return
+        if debug_mode:
+            print(f"DEBUG: 卸载功能 - 用户选择了目录: {selected_folder}")
+        
+        # 首先尝试将选择的目录视为上级目录，使用增强的目录识别功能
+        game_dirs = self.identify_game_directories_improved(selected_folder)
+        
+        if game_dirs and len(game_dirs) > 0:
+            # 找到了游戏目录，显示选择对话框
+            if debug_mode:
+                print(f"DEBUG: 卸载功能 - 在上级目录中找到以下游戏: {list(game_dirs.keys())}")
             
+            # 如果只有一个游戏，直接选择它
+            if len(game_dirs) == 1:
+                game_version = list(game_dirs.keys())[0]
+                game_dir = game_dirs[game_version]
+                self._confirm_and_uninstall(game_dir, game_version)
+            else:
+                # 有多个游戏，让用户选择
+                from PySide6.QtWidgets import QInputDialog
+                game_versions = list(game_dirs.keys())
+                selected_game, ok = QInputDialog.getItem(
+                    self, "选择游戏", "选择要卸载补丁的游戏:", 
+                    game_versions, 0, False
+                )
+                
+                if ok and selected_game:
+                    game_version = selected_game
+                    game_dir = game_dirs[game_version]
+                    self._confirm_and_uninstall(game_dir, game_version)
+        else:
+            # 未找到游戏目录，尝试将选择的目录作为游戏目录
+            if debug_mode:
+                print(f"DEBUG: 卸载功能 - 未在上级目录找到游戏，尝试将选择的目录视为游戏目录")
+                
+            game_version = self.identify_game_version(selected_folder)
+            
+            if game_version:
+                if debug_mode:
+                    print(f"DEBUG: 卸载功能 - 识别为游戏: {game_version}")
+                self._confirm_and_uninstall(selected_folder, game_version)
+            else:
+                # 两种方式都未识别到游戏
+                if debug_mode:
+                    print(f"DEBUG: 卸载功能 - 无法识别游戏")
+                    
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    "\n所选目录不是有效的NEKOPARA游戏目录。\n请选择包含游戏可执行文件的目录或其上级目录。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+    
+    def _confirm_and_uninstall(self, game_dir, game_version):
+        """确认并卸载补丁
+        
+        Args:
+            game_dir: 游戏目录
+            game_version: 游戏版本
+        """
+        debug_mode = self.ui_manager.debug_action.isChecked() if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action else False
+        
         # 确认卸载
         reply = QMessageBox.question(
             self,
             f"确认卸载 - {APP_NAME}",
-            f"\n确定要卸载 {game_version} 的补丁吗？\n",
+            f"\n确定要卸载 {game_version} 的补丁吗？\n游戏目录: {game_dir}\n",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -648,7 +715,7 @@ class MainWindow(QMainWindow):
             
         # 开始卸载补丁
         self.uninstall_patch(game_dir, game_version)
-    
+        
     def identify_game_version(self, game_dir):
         """识别游戏版本
         
@@ -659,31 +726,279 @@ class MainWindow(QMainWindow):
             str: 游戏版本名称，如果不是有效的游戏目录则返回None
         """
         import os
+        import re
+        
+        # 调试模式
+        debug_mode = self.ui_manager.debug_action.isChecked() if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action else False
+        
+        if debug_mode:
+            print(f"DEBUG: 尝试识别游戏版本: {game_dir}")
+            
+        # 先通过目录名称进行初步推测（这将作为递归搜索的提示）
+        dir_name = os.path.basename(game_dir).lower()
+        potential_version = None
+        vol_num = None
+        
+        # 提取卷号或判断是否是After
+        if "vol" in dir_name or "vol." in dir_name:
+            vol_match = re.search(r"vol(?:\.|\s*)?(\d+)", dir_name)
+            if vol_match:
+                vol_num = vol_match.group(1)
+                potential_version = f"NEKOPARA Vol.{vol_num}"
+                if debug_mode:
+                    print(f"DEBUG: 从目录名推测游戏版本: {potential_version}, 卷号: {vol_num}")
+        elif "after" in dir_name:
+            potential_version = "NEKOPARA After"
+            if debug_mode:
+                print(f"DEBUG: 从目录名推测游戏版本: NEKOPARA After")
         
         # 检查是否为NEKOPARA游戏目录
         # 通过检查游戏可执行文件来识别游戏版本
         for game_version, info in GAME_INFO.items():
-            exe_path = os.path.join(game_dir, info["exe"])
-            if os.path.exists(exe_path):
-                return game_version
-                
-        # 如果没有直接匹配，尝试通过目录名称推断
-        dir_name = os.path.basename(game_dir).lower()
+            # 尝试多种可能的可执行文件名变体
+            exe_variants = [
+                info["exe"],                         # 标准文件名
+                info["exe"] + ".nocrack",            # Steam加密版本
+                info["exe"].replace(".exe", ""),     # 无扩展名版本
+                info["exe"].replace("NEKOPARA", "nekopara").lower(),  # 全小写变体
+                info["exe"].lower(),                 # 小写变体
+                info["exe"].lower() + ".nocrack",    # 小写变体的Steam加密版本
+            ]
+            
+            # 对于Vol.3可能有特殊名称
+            if "Vol.3" in game_version:
+                # 增加可能的卷3特定的变体
+                exe_variants.extend([
+                    "NEKOPARAVol3.exe", 
+                    "NEKOPARAVol3.exe.nocrack",
+                    "nekoparavol3.exe",
+                    "nekoparavol3.exe.nocrack",
+                    "nekopara_vol3.exe",
+                    "nekopara_vol3.exe.nocrack",
+                    "vol3.exe",
+                    "vol3.exe.nocrack"
+                ])
+            
+            for exe_variant in exe_variants:
+                exe_path = os.path.join(game_dir, exe_variant)
+                if os.path.exists(exe_path):
+                    if debug_mode:
+                        print(f"DEBUG: 通过可执行文件确认游戏版本: {game_version}, 文件: {exe_variant}")
+                    return game_version
         
-        if "vol" in dir_name or "vol." in dir_name:
-            # 尝试提取卷号
-            if "vol 1" in dir_name or "vol.1" in dir_name or "vol1" in dir_name:
-                return "NEKOPARA Vol.1"
-            elif "vol 2" in dir_name or "vol.2" in dir_name or "vol2" in dir_name:
-                return "NEKOPARA Vol.2" 
-            elif "vol 3" in dir_name or "vol.3" in dir_name or "vol3" in dir_name:
-                return "NEKOPARA Vol.3"
-            elif "vol 4" in dir_name or "vol.4" in dir_name or "vol4" in dir_name:
-                return "NEKOPARA Vol.4"
-        elif "after" in dir_name:
-            return "NEKOPARA After"
+        # 如果没有直接匹配，尝试递归搜索
+        if potential_version:
+            # 从预测的版本中获取卷号或确认是否是After
+            is_after = "After" in potential_version
+            if not vol_num and not is_after:
+                vol_match = re.search(r"Vol\.(\d+)", potential_version)
+                if vol_match:
+                    vol_num = vol_match.group(1)
+            
+            # 递归搜索可执行文件
+            for root, dirs, files in os.walk(game_dir):
+                for file in files:
+                    file_lower = file.lower()
+                    if file.endswith('.exe') or file.endswith('.exe.nocrack'):
+                        # 检查文件名中是否包含卷号或关键词
+                        if ((vol_num and (f"vol{vol_num}" in file_lower or 
+                                         f"vol.{vol_num}" in file_lower or 
+                                         f"vol {vol_num}" in file_lower)) or
+                            (is_after and "after" in file_lower)):
+                            if debug_mode:
+                                print(f"DEBUG: 通过递归搜索确认游戏版本: {potential_version}, 文件: {file}")
+                            return potential_version
+        
+        # 如果仍然没有找到，基于目录名的推测返回结果
+        if potential_version:
+            if debug_mode:
+                print(f"DEBUG: 基于目录名返回推测的游戏版本: {potential_version}")
+            return potential_version
+            
+        if debug_mode:
+            print(f"DEBUG: 无法识别游戏版本: {game_dir}")
             
         return None
+        
+    def identify_game_directories_improved(self, selected_folder):
+        """改进的游戏目录识别，支持大小写不敏感和特殊字符处理
+        
+        Args:
+            selected_folder: 选择的上级目录
+            
+        Returns:
+            dict: 游戏版本到游戏目录的映射
+        """
+        import os
+        import re
+        
+        # 添加debug日志
+        debug_mode = self.ui_manager.debug_action.isChecked() if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action else False
+        
+        if debug_mode:
+            print(f"--- 开始识别目录: {selected_folder} ---")
+            
+        game_paths = {}
+        
+        # 获取上级目录中的所有文件夹
+        try:
+            all_dirs = [d for d in os.listdir(selected_folder) if os.path.isdir(os.path.join(selected_folder, d))]
+            if debug_mode:
+                print(f"DEBUG: 找到以下子目录: {all_dirs}")
+        except Exception as e:
+            if debug_mode:
+                print(f"DEBUG: 无法读取目录 {selected_folder}: {str(e)}")
+            return {}
+        
+        for game, info in GAME_INFO.items():
+            expected_dir = info["install_path"].split("/")[0]  # 例如 "NEKOPARA Vol. 1"
+            expected_exe = info["exe"]  # 标准可执行文件名
+            
+            if debug_mode:
+                print(f"DEBUG: 搜索游戏 {game}, 预期目录: {expected_dir}, 预期可执行文件: {expected_exe}")
+            
+            # 尝试不同的匹配方法
+            found_dir = None
+            
+            # 1. 精确匹配
+            if expected_dir in all_dirs:
+                found_dir = expected_dir
+                if debug_mode:
+                    print(f"DEBUG: 精确匹配成功: {expected_dir}")
+            
+            # 2. 大小写不敏感匹配
+            if not found_dir:
+                for dir_name in all_dirs:
+                    if expected_dir.lower() == dir_name.lower():
+                        found_dir = dir_name
+                        if debug_mode:
+                            print(f"DEBUG: 大小写不敏感匹配成功: {dir_name}")
+                        break
+            
+            # 3. 更模糊的匹配（允许特殊字符差异）
+            if not found_dir:
+                # 准备用于模糊匹配的正则表达式模式
+                # 替换空格为可选空格或连字符，替换点为可选点
+                pattern_text = expected_dir.replace(" ", "[ -]?").replace(".", "\\.?")
+                pattern = re.compile(f"^{pattern_text}$", re.IGNORECASE)
+                
+                for dir_name in all_dirs:
+                    if pattern.match(dir_name):
+                        found_dir = dir_name
+                        if debug_mode:
+                            print(f"DEBUG: 模糊匹配成功: {dir_name} 匹配模式 {pattern_text}")
+                        break
+            
+            # 4. 如果还是没找到，尝试更宽松的匹配
+            if not found_dir:
+                vol_match = re.search(r"vol(?:\.|\s*)?(\d+)", expected_dir, re.IGNORECASE)
+                vol_num = None
+                if vol_match:
+                    vol_num = vol_match.group(1)
+                    if debug_mode:
+                        print(f"DEBUG: 提取卷号: {vol_num}")
+                
+                is_after = "after" in expected_dir.lower()
+                
+                for dir_name in all_dirs:
+                    dir_lower = dir_name.lower()
+                    
+                    # 对于After特殊处理
+                    if is_after and "after" in dir_lower:
+                        found_dir = dir_name
+                        if debug_mode:
+                            print(f"DEBUG: After特殊匹配成功: {dir_name}")
+                        break
+                        
+                    # 对于Vol特殊处理
+                    if vol_num:
+                        # 查找目录名中的卷号
+                        dir_vol_match = re.search(r"vol(?:\.|\s*)?(\d+)", dir_lower)
+                        if dir_vol_match and dir_vol_match.group(1) == vol_num:
+                            found_dir = dir_name
+                            if debug_mode:
+                                print(f"DEBUG: 卷号匹配成功: {dir_name} 卷号 {vol_num}")
+                            break
+            
+            # 如果找到匹配的目录，验证exe文件是否存在
+            if found_dir:
+                potential_path = os.path.join(selected_folder, found_dir)
+                
+                # 尝试多种可能的可执行文件名变体
+                # 包括Steam加密版本和其他可能的变体
+                exe_variants = [
+                    expected_exe,                    # 标准文件名
+                    expected_exe + ".nocrack",       # Steam加密版本
+                    expected_exe.replace(".exe", ""),# 无扩展名版本
+                    # Vol.3的特殊变体，因为它的文件名可能不一样
+                    expected_exe.replace("NEKOPARA", "nekopara").lower(),  # 全小写变体
+                    expected_exe.lower(),            # 小写变体
+                    expected_exe.lower() + ".nocrack", # 小写变体的Steam加密版本
+                ]
+                
+                # 对于Vol.3可能有特殊名称
+                if "Vol.3" in game:
+                    # 增加可能的卷3特定的变体
+                    exe_variants.extend([
+                        "NEKOPARAVol3.exe", 
+                        "NEKOPARAVol3.exe.nocrack",
+                        "nekoparavol3.exe",
+                        "nekoparavol3.exe.nocrack",
+                        "nekopara_vol3.exe",
+                        "nekopara_vol3.exe.nocrack",
+                        "vol3.exe",
+                        "vol3.exe.nocrack"
+                    ])
+                
+                exe_exists = False
+                found_exe = None
+                
+                # 尝试所有可能的变体
+                for exe_variant in exe_variants:
+                    exe_path = os.path.join(potential_path, exe_variant)
+                    if os.path.exists(exe_path):
+                        exe_exists = True
+                        found_exe = exe_variant
+                        if debug_mode:
+                            print(f"DEBUG: 验证成功，找到游戏可执行文件: {exe_variant}")
+                        break
+                
+                # 如果没有直接找到，尝试递归搜索当前目录下的所有可执行文件
+                if not exe_exists:
+                    # 遍历当前目录下的所有文件和文件夹
+                    for root, dirs, files in os.walk(potential_path):
+                        for file in files:
+                            file_lower = file.lower()
+                            # 检查是否是游戏可执行文件（根据关键字）
+                            if file.endswith('.exe') or file.endswith('.exe.nocrack'):
+                                # 检查文件名中是否包含卷号或关键词
+                                if (f"vol{vol_num}" in file_lower or 
+                                    f"vol.{vol_num}" in file_lower or 
+                                    f"vol {vol_num}" in file_lower or
+                                    (is_after and "after" in file_lower)):
+                                    exe_path = os.path.join(root, file)
+                                    exe_exists = True
+                                    found_exe = os.path.relpath(exe_path, potential_path)
+                                    if debug_mode:
+                                        print(f"DEBUG: 通过递归搜索找到游戏可执行文件: {found_exe}")
+                                    break
+                        if exe_exists:
+                            break
+                
+                # 如果找到了可执行文件，将该目录添加到游戏目录列表
+                if exe_exists:
+                    game_paths[game] = potential_path
+                    if debug_mode:
+                        print(f"DEBUG: 验证成功，将 {potential_path} 添加为 {game} 的目录")
+                else:
+                    if debug_mode:
+                        print(f"DEBUG: 未找到任何可执行文件变体，游戏 {game} 在 {potential_path} 未找到")
+        
+        if debug_mode:
+            print(f"DEBUG: 最终识别的游戏目录: {game_paths}")
+            print(f"--- 目录识别结束 ---")
+            
+        return game_paths
     
     def uninstall_patch(self, game_dir, game_version):
         """卸载补丁
@@ -695,6 +1010,8 @@ class MainWindow(QMainWindow):
         import os
         import shutil
         
+        debug_mode = self.ui_manager.debug_action.isChecked() if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action else False
+        
         if game_version not in GAME_INFO:
             QMessageBox.critical(
                 self,
@@ -703,54 +1020,110 @@ class MainWindow(QMainWindow):
                 QMessageBox.StandardButton.Ok,
             )
             return
+        
+        if debug_mode:
+            print(f"DEBUG: 开始卸载 {game_version} 补丁，目录: {game_dir}")
             
         try:
-            # 获取补丁文件路径
-            patch_file_path = os.path.join(game_dir, os.path.basename(GAME_INFO[game_version]["install_path"]))
+            files_removed = 0
             
-            # 检查补丁文件是否存在
-            if os.path.exists(patch_file_path):
-                os.remove(patch_file_path)
-                print(f"已删除补丁文件: {patch_file_path}")
+            # 获取可能的补丁文件路径
+            install_path_base = os.path.basename(GAME_INFO[game_version]["install_path"])
+            patch_file_path = os.path.join(game_dir, install_path_base)
+            
+            # 尝试查找补丁文件，支持不同大小写
+            patch_files_to_check = [
+                patch_file_path,
+                patch_file_path.lower(),
+                patch_file_path.upper(),
+                patch_file_path.replace("_", ""),
+                patch_file_path.replace("_", "-"),
+            ]
+            
+            # 查找并删除补丁文件
+            patch_file_found = False
+            for patch_path in patch_files_to_check:
+                if os.path.exists(patch_path):
+                    patch_file_found = True
+                    os.remove(patch_path)
+                    files_removed += 1
+                    if debug_mode:
+                        print(f"DEBUG: 已删除补丁文件: {patch_path}")
+            
+            if not patch_file_found and debug_mode:
+                print(f"DEBUG: 未找到补丁文件，检查了以下路径: {patch_files_to_check}")
                 
-                # 检查是否有额外的签名文件 (.sig)
-                if game_version == "NEKOPARA After":
-                    sig_file_path = f"{patch_file_path}.sig"
+            # 检查是否有额外的签名文件 (.sig)
+            if game_version == "NEKOPARA After":
+                for patch_path in patch_files_to_check:
+                    sig_file_path = f"{patch_path}.sig"
                     if os.path.exists(sig_file_path):
                         os.remove(sig_file_path)
-                        print(f"已删除签名文件: {sig_file_path}")
-                
-                # 删除patch文件夹
-                patch_folder = os.path.join(game_dir, "patch")
+                        files_removed += 1
+                        if debug_mode:
+                            print(f"DEBUG: 已删除签名文件: {sig_file_path}")
+            
+            # 删除patch文件夹
+            patch_folders_to_check = [
+                os.path.join(game_dir, "patch"),
+                os.path.join(game_dir, "Patch"),
+                os.path.join(game_dir, "PATCH"),
+            ]
+            
+            for patch_folder in patch_folders_to_check:
                 if os.path.exists(patch_folder):
                     shutil.rmtree(patch_folder)
-                    print(f"已删除补丁文件夹: {patch_folder}")
-                
-                # 删除game/patch文件夹
-                game_patch_folder = os.path.join(game_dir, "game", "patch")
-                if os.path.exists(game_patch_folder):
-                    shutil.rmtree(game_patch_folder)
-                    print(f"已删除game/patch文件夹: {game_patch_folder}")
-                
-                # 删除配置文件
-                config_file = os.path.join(game_dir, "game", "config.json")
-                if os.path.exists(config_file):
-                    os.remove(config_file)
-                    print(f"已删除配置文件: {config_file}")
+                    files_removed += 1
+                    if debug_mode:
+                        print(f"DEBUG: 已删除补丁文件夹: {patch_folder}")
+            
+            # 删除game/patch文件夹
+            game_folders = ["game", "Game", "GAME"]
+            patch_folders = ["patch", "Patch", "PATCH"]
+            
+            for game_folder in game_folders:
+                for patch_folder in patch_folders:
+                    game_patch_folder = os.path.join(game_dir, game_folder, patch_folder)
+                    if os.path.exists(game_patch_folder):
+                        shutil.rmtree(game_patch_folder)
+                        files_removed += 1
+                        if debug_mode:
+                            print(f"DEBUG: 已删除game/patch文件夹: {game_patch_folder}")
+            
+            # 删除配置文件
+            config_files = ["config.json", "Config.json", "CONFIG.JSON"]
+            script_files = ["scripts.json", "Scripts.json", "SCRIPTS.JSON"]
+            
+            for game_folder in game_folders:
+                game_path = os.path.join(game_dir, game_folder)
+                if os.path.exists(game_path):
+                    # 删除配置文件
+                    for config_file in config_files:
+                        config_path = os.path.join(game_path, config_file)
+                        if os.path.exists(config_path):
+                            os.remove(config_path)
+                            files_removed += 1
+                            if debug_mode:
+                                print(f"DEBUG: 已删除配置文件: {config_path}")
                     
-                scripts_file = os.path.join(game_dir, "game", "scripts.json")
-                if os.path.exists(scripts_file):
-                    os.remove(scripts_file)
-                    print(f"已删除脚本文件: {scripts_file}")
-                
-                # 更新安装状态
-                self.installed_status[game_version] = False
-                
-                # 显示卸载成功消息
+                    # 删除脚本文件
+                    for script_file in script_files:
+                        script_path = os.path.join(game_path, script_file)
+                        if os.path.exists(script_path):
+                            os.remove(script_path)
+                            files_removed += 1
+                            if debug_mode:
+                                print(f"DEBUG: 已删除脚本文件: {script_path}")
+            
+            # 更新安装状态
+            self.installed_status[game_version] = False
+            
+            # 显示卸载成功消息
+            if files_removed > 0:
                 QMessageBox.information(
                     self,
                     f"卸载完成 - {APP_NAME}",
-                    f"\n{game_version} 补丁卸载成功！\n",
+                    f"\n{game_version} 补丁卸载成功！\n共删除 {files_removed} 个文件/文件夹。\n",
                     QMessageBox.StandardButton.Ok,
                 )
             else:
@@ -763,10 +1136,14 @@ class MainWindow(QMainWindow):
             
         except Exception as e:
             # 显示卸载失败消息
+            error_message = f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n"
+            if debug_mode:
+                print(f"DEBUG: 卸载错误 - {str(e)}")
+                
             QMessageBox.critical(
                 self,
                 f"卸载失败 - {APP_NAME}",
-                f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n",
+                error_message,
                 QMessageBox.StandardButton.Ok,
             ) 
 

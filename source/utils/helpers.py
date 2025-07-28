@@ -188,6 +188,7 @@ class AdminPrivileges:
             "nekopara_vol1.exe",
             "nekopara_vol2.exe",
             "NEKOPARAvol3.exe",
+            "NEKOPARAvol3.exe.nocrack",
             "nekopara_vol4.exe",
             "nekopara_after.exe",
         ]
@@ -230,33 +231,40 @@ class AdminPrivileges:
 
     def check_and_terminate_processes(self):
         for proc in psutil.process_iter(["pid", "name"]):
-            if proc.info["name"] in self.required_exes:
-                msg_box = msgbox_frame(
-                    f"进程检测 - {APP_NAME}",
-                    f"\n检测到游戏正在运行： {proc.info['name']} \n\n是否终止？\n",
-                    QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                )
-                reply = msg_box.exec()
-                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                    try:
-                        proc.terminate()
-                        proc.wait(timeout=3)
-                    except psutil.AccessDenied:
+            proc_name = proc.info["name"].lower() if proc.info["name"] else ""
+            
+            # 检查进程名是否匹配任何需要终止的游戏进程
+            for exe in self.required_exes:
+                if exe.lower() == proc_name:
+                    # 获取不带.nocrack的游戏名称用于显示
+                    display_name = exe.replace(".nocrack", "")
+                    
+                    msg_box = msgbox_frame(
+                        f"进程检测 - {APP_NAME}",
+                        f"\n检测到游戏正在运行： {display_name} \n\n是否终止？\n",
+                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                    )
+                    reply = msg_box.exec()
+                    if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                        try:
+                            proc.terminate()
+                            proc.wait(timeout=3)
+                        except psutil.AccessDenied:
+                            msg_box = msgbox_frame(
+                                f"错误 - {APP_NAME}",
+                                f"\n无法关闭游戏： {display_name} \n\n请手动关闭后重启应用\n",
+                                QtWidgets.QMessageBox.StandardButton.Ok,
+                            )
+                            msg_box.exec()
+                            sys.exit(1)
+                    else:
                         msg_box = msgbox_frame(
-                            f"错误 - {APP_NAME}",
-                            f"\n无法关闭游戏： {proc.info['name']} \n\n请手动关闭后重启应用\n",
+                            f"进程检测 - {APP_NAME}",
+                            f"\n未关闭的游戏： {display_name} \n\n请手动关闭后重启应用\n",
                             QtWidgets.QMessageBox.StandardButton.Ok,
                         )
                         msg_box.exec()
                         sys.exit(1)
-                else:
-                    msg_box = msgbox_frame(
-                        f"进程检测 - {APP_NAME}",
-                        f"\n未关闭的游戏： {proc.info['name']} \n\n请手动关闭后重启应用\n",
-                        QtWidgets.QMessageBox.StandardButton.Ok,
-                    )
-                    msg_box.exec()
-                    sys.exit(1)
 
 class HostsManager:
     def __init__(self):

@@ -3,6 +3,7 @@ import requests
 import json
 from collections import deque
 from urllib.parse import urlparse
+import re # Added for recursive search
 
 from PySide6 import QtWidgets, QtCore
 from PySide6.QtCore import Qt
@@ -42,10 +43,29 @@ class DownloadManager:
 
     def get_install_paths(self):
         """获取所有游戏版本的安装路径"""
-        return {
-            game: os.path.join(self.selected_folder, info["install_path"])
-            for game, info in GAME_INFO.items()
-        }
+        # 使用改进的目录识别功能
+        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        install_paths = {}
+        
+        debug_mode = self.is_debug_mode()
+        
+        for game, info in GAME_INFO.items():
+            if game in game_dirs:
+                # 如果找到了游戏目录，使用它
+                game_dir = game_dirs[game]
+                install_path = os.path.join(game_dir, os.path.basename(info["install_path"]))
+                install_paths[game] = install_path
+                if debug_mode:
+                    print(f"DEBUG: 使用识别到的游戏目录 {game}: {game_dir}")
+                    print(f"DEBUG: 安装路径设置为: {install_path}")
+            else:
+                # 回退到原始路径计算方式
+                install_path = os.path.join(self.selected_folder, info["install_path"])
+                install_paths[game] = install_path
+                if debug_mode:
+                    print(f"DEBUG: 未识别到游戏目录 {game}, 使用默认路径: {install_path}")
+                    
+        return install_paths
 
     def is_debug_mode(self):
         """检查是否处于调试模式"""
@@ -145,6 +165,26 @@ class DownloadManager:
         # 清空下载历史记录
         self.main_window.download_queue_history = []
         
+        # 使用改进的目录识别功能
+        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        
+        debug_mode = self.is_debug_mode()
+        if debug_mode:
+            print(f"DEBUG: 开始下载流程, 识别到 {len(game_dirs)} 个游戏目录")
+        
+        # 检查是否找到任何游戏目录
+        if not game_dirs:
+            if debug_mode:
+                print("DEBUG: 未识别到任何游戏目录，设置目录未找到错误")
+            # 设置特定的错误类型，以便在按钮点击处理中区分处理
+            self.main_window.last_error_message = "directory_not_found"
+            QtWidgets.QMessageBox.warning(
+                self.main_window, 
+                f"目录错误 - {APP_NAME}", 
+                "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
+            )
+            return
+        
         # 显示哈希检查窗口
         self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre")
 
@@ -227,6 +267,13 @@ class DownloadManager:
         # 创建下载历史记录列表，用于跟踪本次安装的游戏
         if not hasattr(self.main_window, 'download_queue_history'):
             self.main_window.download_queue_history = []
+            
+        # 获取所有识别到的游戏目录
+        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        
+        debug_mode = self.is_debug_mode()
+        if debug_mode:
+            print(f"DEBUG: 填充下载队列, 识别到的游戏目录: {game_dirs}")
         
         # 添加nekopara 1-4
         for i in range(1, 5):
@@ -234,7 +281,18 @@ class DownloadManager:
             if not self.main_window.installed_status.get(game_version, False):
                 url = config.get(f"vol{i}")
                 if not url: continue
-                game_folder = os.path.join(self.selected_folder, f"NEKOPARA Vol. {i}")
+                
+                # 确定游戏文件夹路径
+                if game_version in game_dirs:
+                    game_folder = game_dirs[game_version]
+                    if debug_mode:
+                        print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                else:
+                    # 回退到传统方式
+                    game_folder = os.path.join(self.selected_folder, f"NEKOPARA Vol. {i}")
+                    if debug_mode:
+                        print(f"DEBUG: 使用默认游戏目录 {game_version}: {game_folder}")
+                
                 _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
                 self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
@@ -246,7 +304,16 @@ class DownloadManager:
         if not self.main_window.installed_status.get(game_version, False):
             url = config.get("after")
             if url:
-                game_folder = os.path.join(self.selected_folder, "NEKOPARA After")
+                # 确定After的游戏文件夹路径
+                if game_version in game_dirs:
+                    game_folder = game_dirs[game_version]
+                    if debug_mode:
+                        print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                else:
+                    game_folder = os.path.join(self.selected_folder, "NEKOPARA After")
+                    if debug_mode:
+                        print(f"DEBUG: 使用默认游戏目录 {game_version}: {game_folder}")
+                
                 _7z_path = os.path.join(PLUGIN, "after.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
                 self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
@@ -402,21 +469,109 @@ class DownloadManager:
             _7z_path: 7z文件保存路径
             plugin_path: 插件路径
         """
-        game_exe = {
-            game: os.path.join(
-                self.selected_folder, info["install_path"].split("/")[0], info["exe"]
+        # 使用改进的目录识别获取安装路径
+        install_paths = self.get_install_paths()
+        
+        debug_mode = self.is_debug_mode()
+        if debug_mode:
+            print(f"DEBUG: 准备下载游戏 {game_version}")
+            print(f"DEBUG: 游戏文件夹: {game_folder}")
+            
+        # 获取游戏可执行文件路径
+        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        game_exe_exists = False
+        
+        if game_version in game_dirs:
+            game_dir = game_dirs[game_version]
+            # 游戏目录已经通过可执行文件验证了，可以直接认为存在
+            game_exe_exists = True
+            if debug_mode:
+                print(f"DEBUG: 游戏目录已验证: {game_dir}")
+                print(f"DEBUG: 游戏可执行文件存在: {game_exe_exists}")
+        else:
+            # 回退到传统方法检查游戏是否存在
+            # 尝试多种可能的文件名格式
+            expected_exe = GAME_INFO[game_version]["exe"]
+            traditional_folder = os.path.join(
+                self.selected_folder, 
+                GAME_INFO[game_version]["install_path"].split("/")[0]
             )
-            for game, info in GAME_INFO.items()
-        }
+            
+            # 定义多种可能的可执行文件变体
+            exe_variants = [
+                expected_exe,                        # 标准文件名
+                expected_exe + ".nocrack",           # Steam加密版本
+                expected_exe.replace(".exe", ""),    # 无扩展名版本
+                expected_exe.replace("NEKOPARA", "nekopara").lower(),  # 全小写变体
+                expected_exe.lower(),                # 小写变体
+                expected_exe.lower() + ".nocrack",   # 小写变体的Steam加密版本
+            ]
+            
+            # 对于Vol.3可能有特殊名称
+            if "Vol.3" in game_version:
+                # 增加可能的卷3特定的变体
+                exe_variants.extend([
+                    "NEKOPARAVol3.exe", 
+                    "NEKOPARAVol3.exe.nocrack",
+                    "nekoparavol3.exe",
+                    "nekoparavol3.exe.nocrack",
+                    "nekopara_vol3.exe",
+                    "nekopara_vol3.exe.nocrack",
+                    "vol3.exe",
+                    "vol3.exe.nocrack"
+                ])
+            
+            # 检查所有可能的文件名
+            for exe_variant in exe_variants:
+                exe_path = os.path.join(traditional_folder, exe_variant)
+                if os.path.exists(exe_path):
+                    game_exe_exists = True
+                    if debug_mode:
+                        print(f"DEBUG: 找到游戏可执行文件: {exe_path}")
+                    break
+            
+            # 如果仍未找到，尝试递归搜索
+            if not game_exe_exists and os.path.exists(traditional_folder):
+                # 提取卷号或检查是否是After
+                vol_match = re.search(r"Vol\.(\d+)", game_version)
+                vol_num = None
+                if vol_match:
+                    vol_num = vol_match.group(1)
+                
+                is_after = "After" in game_version
+                
+                # 遍历游戏目录及其子目录
+                for root, dirs, files in os.walk(traditional_folder):
+                    for file in files:
+                        file_lower = file.lower()
+                        if file.endswith('.exe') or file.endswith('.exe.nocrack'):
+                            # 检查文件名中是否包含卷号或关键词
+                            if ((vol_num and (f"vol{vol_num}" in file_lower or 
+                                             f"vol.{vol_num}" in file_lower or 
+                                             f"vol {vol_num}" in file_lower)) or
+                                (is_after and "after" in file_lower)):
+                                game_exe_exists = True
+                                if debug_mode:
+                                    print(f"DEBUG: 通过递归搜索找到游戏可执行文件: {os.path.join(root, file)}")
+                                break
+                    if game_exe_exists:
+                        break
+            
+            if debug_mode:
+                print(f"DEBUG: 使用传统方法检查游戏目录: {traditional_folder}")
+                print(f"DEBUG: 游戏可执行文件存在: {game_exe_exists}")
         
         # 检查游戏是否已安装
         if (
-            game_version not in game_exe
-            or not os.path.exists(game_exe[game_version])
+            not game_exe_exists
             or self.main_window.installed_status[game_version]
         ):
-            self.main_window.installed_status[game_version] = False
-            self.main_window.show_result()
+            if debug_mode:
+                print(f"DEBUG: 跳过下载游戏 {game_version}")
+                print(f"DEBUG: 游戏存在: {game_exe_exists}")
+                print(f"DEBUG: 已安装补丁: {self.main_window.installed_status[game_version]}")
+            self.main_window.installed_status[game_version] = False if not game_exe_exists else True
+            self.next_download_task()
             return
         
         # 创建进度窗口并开始下载
