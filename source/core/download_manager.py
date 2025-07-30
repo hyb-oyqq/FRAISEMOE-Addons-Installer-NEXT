@@ -39,8 +39,13 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
             )
             return
-        # 将按钮设置为"正在安装"状态
-        self.main_window.set_start_button_enabled(False, installing=True)
+        
+        # 将按钮文本设为安装中状态
+        self.main_window.ui.start_install_text.setText("正在安装")
+        
+        # 禁用整个主窗口，防止用户操作
+        self.main_window.setEnabled(False)
+        
         self.download_action()
 
     def get_install_paths(self):
@@ -161,7 +166,7 @@ class DownloadManager:
 
     def download_action(self):
         """开始下载流程"""
-        # 按钮在file_dialog中已设置为"正在安装"状态
+        # 主窗口在file_dialog中已被禁用
         
         # 清空下载历史记录
         self.main_window.download_queue_history = []
@@ -184,30 +189,128 @@ class DownloadManager:
                 f"目录错误 - {APP_NAME}", 
                 "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
             )
-            # 恢复按钮为"无法安装"状态
-            self.main_window.set_start_button_enabled(False)
+            # 恢复主窗口
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
             return
-        
+            
         # 显示哈希检查窗口
         self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre")
 
-        # 执行预检查
+        # 执行预检查，先判断哪些游戏版本已安装了补丁
         install_paths = self.get_install_paths()
         
         self.main_window.hash_thread = self.main_window.create_hash_thread("pre", install_paths)
-        self.main_window.hash_thread.pre_finished.connect(self.on_pre_hash_finished)
+        # 使用lambda连接，传递game_dirs参数
+        self.main_window.hash_thread.pre_finished.connect(
+            lambda updated_status: self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
+        )
         self.main_window.hash_thread.start()
-    
-    def on_pre_hash_finished(self, updated_status):
-        """哈希预检查完成后的处理
+        
+    def on_pre_hash_finished_with_dirs(self, updated_status, game_dirs):
+        """优化的哈希预检查完成处理，带有游戏目录信息
         
         Args:
             updated_status: 更新后的安装状态
+            game_dirs: 识别到的游戏目录
         """
         self.main_window.installed_status = updated_status
         if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
             self.main_window.hash_msg_box.accept()
             self.main_window.hash_msg_box = None
+            
+        debug_mode = self.is_debug_mode()
+        
+        # 临时启用窗口以显示选择对话框
+        self.main_window.setEnabled(True)
+        
+        # 获取可安装的游戏版本列表（尚未安装补丁的版本）
+        installable_games = []
+        already_installed_games = []
+        for game_version, game_dir in game_dirs.items():
+            if self.main_window.installed_status.get(game_version, False):
+                if debug_mode:
+                    print(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
+                already_installed_games.append(game_version)
+            else:
+                if debug_mode:
+                    print(f"DEBUG: {game_version} 未安装补丁，可以安装")
+                installable_games.append(game_version)
+        
+        # 显示状态消息
+        status_message = ""
+        if already_installed_games:
+            status_message += f"已安装补丁的游戏：\n{chr(10).join(already_installed_games)}\n\n"
+            
+        if not installable_games:
+            # 如果没有可安装的游戏
+            QtWidgets.QMessageBox.information(
+                self.main_window, 
+                f"信息 - {APP_NAME}", 
+                f"\n所有检测到的游戏都已安装补丁。\n\n{status_message}"
+            )
+            # 恢复主窗口
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            return
+            
+        # 如果有可安装的游戏版本，让用户选择
+        from PySide6.QtWidgets import QInputDialog, QListWidget, QVBoxLayout, QDialog, QLabel, QPushButton, QAbstractItemView, QHBoxLayout
+        
+        # 创建自定义选择对话框
+        dialog = QDialog(self.main_window)
+        dialog.setWindowTitle("选择要安装的游戏")
+        dialog.resize(400, 300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 添加说明标签
+        info_label = QLabel(f"请选择要安装补丁的游戏版本：\n{status_message}", dialog)
+        layout.addWidget(info_label)
+        
+        # 添加列表控件
+        list_widget = QListWidget(dialog)
+        list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)  # 允许多选
+        for game in installable_games:
+            list_widget.addItem(game)
+        layout.addWidget(list_widget)
+        
+        # 添加全选按钮
+        select_all_btn = QPushButton("全选", dialog)
+        select_all_btn.clicked.connect(lambda: list_widget.selectAll())
+        layout.addWidget(select_all_btn)
+        
+        # 添加确定和取消按钮
+        buttons_layout = QHBoxLayout()
+        ok_button = QPushButton("确定", dialog)
+        cancel_button = QPushButton("取消", dialog)
+        buttons_layout.addWidget(ok_button)
+        buttons_layout.addWidget(cancel_button)
+        layout.addLayout(buttons_layout)
+        
+        # 连接按钮事件
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+        
+        # 显示对话框并等待用户选择
+        result = dialog.exec()
+        
+        if result != QDialog.DialogCode.Accepted or list_widget.selectedItems() == []:
+            # 用户取消或未选择任何游戏
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            return
+            
+        # 获取用户选择的游戏
+        selected_games = [item.text() for item in list_widget.selectedItems()]
+        if debug_mode:
+            print(f"DEBUG: 用户选择了以下游戏进行安装: {selected_games}")
+            
+        # 过滤game_dirs，只保留选中的游戏
+        selected_game_dirs = {game: game_dirs[game] for game in selected_games if game in game_dirs}
+        
+        # 重新禁用窗口
+        self.main_window.setEnabled(False)
 
         # 获取下载配置
         config = self.get_download_url()
@@ -215,20 +318,81 @@ class DownloadManager:
             QtWidgets.QMessageBox.critical(
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
-            # 网络故障时，使用"无法安装"状态
-            self.main_window.set_start_button_enabled(False)
+            # 网络故障时，恢复主窗口
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
             return
 
-        # 填充下载队列
-        self._fill_download_queue(config)
+        # 填充下载队列，传入选定的游戏目录
+        self._fill_download_queue(config, selected_game_dirs)
 
         # 如果没有需要下载的内容，直接进行最终校验
         if not self.download_queue:
             self.main_window.after_hash_compare()
             return
         
-        # 只有当有需要下载内容时才询问是否使用Cloudflare加速
-        # 询问用户是否使用Cloudflare加速
+        # 询问是否使用Cloudflare加速
+        self._show_cloudflare_option()
+
+    def _fill_download_queue(self, config, game_dirs):
+        """填充下载队列
+        
+        Args:
+            config: 包含下载URL的配置字典
+            game_dirs: 包含游戏文件夹路径的字典
+        """
+        # 清空现有队列
+        self.download_queue.clear()
+        
+        # 创建下载历史记录列表，用于跟踪本次安装的游戏
+        if not hasattr(self.main_window, 'download_queue_history'):
+            self.main_window.download_queue_history = []
+        
+        debug_mode = self.is_debug_mode()
+        if debug_mode:
+            print(f"DEBUG: 填充下载队列, 游戏目录: {game_dirs}")
+        
+        # 添加nekopara 1-4
+        for i in range(1, 5):
+            game_version = f"NEKOPARA Vol.{i}"
+            # 只处理game_dirs中包含的游戏版本(如果用户选择了特定版本)
+            if game_version in game_dirs and not self.main_window.installed_status.get(game_version, False):
+                url = config.get(f"vol{i}")
+                if not url: continue
+                
+                # 获取识别到的游戏文件夹路径
+                game_folder = game_dirs[game_version]
+                if debug_mode:
+                    print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                
+                _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
+                plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
+                self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
+                # 记录到下载历史
+                self.main_window.download_queue_history.append(game_version)
+
+        # 添加nekopara after
+        game_version = "NEKOPARA After"
+        # 只处理game_dirs中包含的游戏版本(如果用户选择了特定版本)
+        if game_version in game_dirs and not self.main_window.installed_status.get(game_version, False):
+            url = config.get("after")
+            if url:
+                # 获取识别到的游戏文件夹路径
+                game_folder = game_dirs[game_version]
+                if debug_mode:
+                    print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                
+                _7z_path = os.path.join(PLUGIN, "after.7z")
+                plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
+                self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
+                # 记录到下载历史
+                self.main_window.download_queue_history.append(game_version)
+                
+    def _show_cloudflare_option(self):
+        """显示Cloudflare加速选择对话框"""
+        # 临时启用窗口以显示对话框
+        self.main_window.setEnabled(True)
+        
         msg_box = QtWidgets.QMessageBox(self.main_window)
         msg_box.setWindowTitle(f"下载优化 - {APP_NAME}")
         msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。\n如您的杀毒软件提醒有软件正在修改hosts文件，请注意放行。")
@@ -246,94 +410,40 @@ class DownloadManager:
         
         yes_button = msg_box.addButton("是，开启加速", QtWidgets.QMessageBox.ButtonRole.YesRole)
         no_button = msg_box.addButton("否，直接下载", QtWidgets.QMessageBox.ButtonRole.NoRole)
+        cancel_button = msg_box.addButton("取消安装", QtWidgets.QMessageBox.ButtonRole.RejectRole)
         
         msg_box.exec()
         
-        use_optimization = msg_box.clickedButton() == yes_button
-
+        clicked_button = msg_box.clickedButton()
+        if clicked_button == cancel_button:
+            # 用户取消了安装，保持主窗口启用
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            self.download_queue.clear()  # 清空下载队列
+            return
+        
+        # 用户点击了继续按钮，重新禁用主窗口
+        self.main_window.setEnabled(False)
+        
+        use_optimization = clicked_button == yes_button
+        
         if use_optimization and not self.optimization_done:
             first_url = self.download_queue[0][0]
             self._start_ip_optimization(first_url)
         else:
             # 如果用户选择不优化，或已经优化过，直接开始下载
             self.next_download_task()
-    
-    def _fill_download_queue(self, config):
-        """填充下载队列
-        
-        Args:
-            config: 包含下载URL的配置字典
-        """
-        # 清空现有队列
-        self.download_queue.clear()
-        
-        # 创建下载历史记录列表，用于跟踪本次安装的游戏
-        if not hasattr(self.main_window, 'download_queue_history'):
-            self.main_window.download_queue_history = []
-            
-        # 获取所有识别到的游戏目录
-        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
-        
-        debug_mode = self.is_debug_mode()
-        if debug_mode:
-            print(f"DEBUG: 填充下载队列, 识别到的游戏目录: {game_dirs}")
-        
-        # 添加nekopara 1-4
-        for i in range(1, 5):
-            game_version = f"NEKOPARA Vol.{i}"
-            if not self.main_window.installed_status.get(game_version, False):
-                url = config.get(f"vol{i}")
-                if not url: continue
-                
-                # 确定游戏文件夹路径
-                if game_version in game_dirs:
-                    game_folder = game_dirs[game_version]
-                    if debug_mode:
-                        print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
-                else:
-                    # 回退到传统方式
-                    game_folder = os.path.join(self.selected_folder, f"NEKOPARA Vol. {i}")
-                    if debug_mode:
-                        print(f"DEBUG: 使用默认游戏目录 {game_version}: {game_folder}")
-                
-                _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
-                plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
-                self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
-                # 记录到下载历史
-                self.main_window.download_queue_history.append(game_version)
 
-        # 添加nekopara after
-        game_version = "NEKOPARA After"
-        if not self.main_window.installed_status.get(game_version, False):
-            url = config.get("after")
-            if url:
-                # 确定After的游戏文件夹路径
-                if game_version in game_dirs:
-                    game_folder = game_dirs[game_version]
-                    if debug_mode:
-                        print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
-                else:
-                    game_folder = os.path.join(self.selected_folder, "NEKOPARA After")
-                    if debug_mode:
-                        print(f"DEBUG: 使用默认游戏目录 {game_version}: {game_folder}")
-                
-                _7z_path = os.path.join(PLUGIN, "after.7z")
-                plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
-                self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
-                # 记录到下载历史
-                self.main_window.download_queue_history.append(game_version)
-    
     def _start_ip_optimization(self, url):
         """开始IP优化过程
         
         Args:
             url: 用于优化的URL
         """
-        # 禁用退出按钮
-        self.main_window.ui.exit_btn.setEnabled(False)
+        # 创建取消状态标记
+        self.optimization_cancelled = False
         
         # 使用Cloudflare图标创建消息框
-        
         self.optimizing_msg_box = msgbox_frame(
             f"通知 - {APP_NAME}",
             "\n正在优选Cloudflare IP，请稍候...\n\n这可能需要5-10分钟，请耐心等待喵~"
@@ -347,22 +457,57 @@ class DownloadManager:
                 self.optimizing_msg_box.setIconPixmap(cf_pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, 
                                                                  Qt.TransformationMode.SmoothTransformation))
         
-        # 我们不再提供"跳过"按钮
-        self.optimizing_msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.NoButton)
+        # 添加取消按钮
+        self.optimizing_msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Cancel)
+        self.optimizing_msg_box.buttonClicked.connect(self._on_optimization_dialog_clicked)
         self.optimizing_msg_box.setWindowModality(Qt.WindowModality.ApplicationModal)
-        self.optimizing_msg_box.open()
-
+        
         # 创建并启动优化线程
         self.ip_optimizer_thread = IpOptimizerThread(url)
         self.ip_optimizer_thread.finished.connect(self.on_optimization_finished)
         self.ip_optimizer_thread.start()
-    
+        
+        # 显示消息框（非模态，不阻塞）
+        self.optimizing_msg_box.open()
+        
+    def _on_optimization_dialog_clicked(self, button):
+        """处理优化对话框按钮点击
+        
+        Args:
+            button: 被点击的按钮
+        """
+        if button.text() == "Cancel":  # 如果是取消按钮
+            # 标记已取消
+            self.optimization_cancelled = True
+            
+            # 停止优化线程
+            if hasattr(self, 'ip_optimizer_thread') and self.ip_optimizer_thread and self.ip_optimizer_thread.isRunning():
+                self.ip_optimizer_thread.stop()
+                
+            # 恢复主窗口状态
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            
+            # 清空下载队列
+            self.download_queue.clear()
+            
+            # 显示取消消息
+            QtWidgets.QMessageBox.information(
+                self.main_window,
+                f"已取消 - {APP_NAME}",
+                "\n已取消IP优选和安装过程。\n"
+            )
+
     def on_optimization_finished(self, ip):
         """IP优化完成后的处理
         
         Args:
             ip: 优选的IP地址，如果失败则为空字符串
         """
+        # 如果已经取消，则不继续处理
+        if hasattr(self, 'optimization_cancelled') and self.optimization_cancelled:
+            return
+            
         self.optimized_ip = ip
         self.optimization_done = True
         
@@ -374,11 +519,15 @@ class DownloadManager:
 
         # 显示优选结果
         if not ip:
+            # 临时启用窗口以显示对话框
+            self.main_window.setEnabled(True)
+            
             msg_box = QtWidgets.QMessageBox(self.main_window)
             msg_box.setWindowTitle(f"优选失败 - {APP_NAME}")
             msg_box.setText("\n未能找到合适的Cloudflare IP，将使用默认网络进行下载。\n\n10秒后自动继续...")
             msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
             ok_button = msg_box.addButton("确定 (10)", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+            cancel_button = msg_box.addButton("取消安装", QtWidgets.QMessageBox.ButtonRole.RejectRole)
             
             # 创建计时器实现倒计时
             countdown = 10
@@ -396,11 +545,22 @@ class DownloadManager:
             timer.timeout.connect(update_countdown)
             timer.start(1000)  # 每秒更新一次
             
-            # 显示对话框，但不阻塞主线程
-            msg_box.open()
+            # 显示对话框并等待用户响应
+            result = msg_box.exec()
             
-            # 连接关闭信号以停止计时器
-            msg_box.finished.connect(timer.stop)
+            # 停止计时器
+            timer.stop()
+            
+            # 如果用户点击了取消安装
+            if result == QtWidgets.QMessageBox.StandardButton.RejectRole:
+                # 恢复主窗口状态
+                self.main_window.ui.start_install_text.setText("开始安装")
+                # 清空下载队列
+                self.download_queue.clear()
+                return
+                
+            # 用户点击了继续，重新禁用主窗口
+            self.main_window.setEnabled(False)
         else:
             # 应用优选IP到hosts文件
             if self.download_queue:
@@ -410,12 +570,16 @@ class DownloadManager:
                 # 先清理可能存在的旧记录
                 self.hosts_manager.clean_hostname_entries(hostname)
                 
+                # 临时启用窗口以显示对话框
+                self.main_window.setEnabled(True)
+                
                 if self.hosts_manager.apply_ip(hostname, ip):
                     msg_box = QtWidgets.QMessageBox(self.main_window)
                     msg_box.setWindowTitle(f"成功 - {APP_NAME}")
                     msg_box.setText(f"\n已将优选IP ({ip}) 应用到hosts文件。\n\n10秒后自动继续...")
                     msg_box.setIcon(QtWidgets.QMessageBox.Icon.Information)
                     ok_button = msg_box.addButton("确定 (10)", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
+                    cancel_button = msg_box.addButton("取消安装", QtWidgets.QMessageBox.ButtonRole.RejectRole)
                     
                     # 创建计时器实现倒计时
                     countdown = 10
@@ -433,20 +597,37 @@ class DownloadManager:
                     timer.timeout.connect(update_countdown)
                     timer.start(1000)  # 每秒更新一次
                     
-                    # 显示对话框，但不阻塞主线程
-                    msg_box.open()
+                    # 显示对话框并等待用户响应
+                    result = msg_box.exec()
                     
-                    # 连接关闭信号以停止计时器
-                    msg_box.finished.connect(timer.stop)
+                    # 停止计时器
+                    timer.stop()
+                    
+                    # 如果用户点击了取消安装
+                    if result == QtWidgets.QMessageBox.StandardButton.RejectRole:
+                        # 恢复主窗口状态
+                        self.main_window.setEnabled(True)
+                        self.main_window.ui.start_install_text.setText("开始安装")
+                        # 清空下载队列
+                        self.download_queue.clear()
+                        return
                 else:
                     QtWidgets.QMessageBox.critical(
                         self.main_window, 
                         f"错误 - {APP_NAME}", 
                         "\n修改hosts文件失败，请检查程序是否以管理员权限运行。\n"
                     )
+                    # 恢复主窗口状态
+                    self.main_window.ui.start_install_text.setText("开始安装")
+                    # 清空下载队列并退出
+                    self.download_queue.clear()
+                    return
+                
+                # 用户点击了继续，重新禁用主窗口
+                self.main_window.setEnabled(False)
         
         # 计时器结束或用户点击确定时，继续下载
-        QtCore.QTimer.singleShot(10000, self.next_download_task)
+        QtCore.QTimer.singleShot(100, self.next_download_task)
 
     def next_download_task(self):
         """处理下载队列中的下一个任务"""
@@ -591,8 +772,7 @@ class DownloadManager:
             game_folder: 游戏文件夹路径
             plugin_path: 插件路径
         """
-        # 禁用退出按钮
-        self.main_window.ui.exit_btn.setEnabled(False)
+        # 按钮在file_dialog中已设置为禁用状态
         
         if self.optimized_ip:
             print(f"已为 {game_version} 获取到优选IP: {self.optimized_ip}")
@@ -614,12 +794,34 @@ class DownloadManager:
             )
         )
         
-        # 连接停止按钮
-        self.main_window.progress_window.stop_button.clicked.connect(self.current_download_thread.stop)
+        # 连接停止按钮到我们的on_download_stopped方法
+        self.main_window.progress_window.stop_button.clicked.connect(self.on_download_stopped)
+        
+        # 连接暂停/恢复按钮
+        self.main_window.progress_window.pause_resume_button.clicked.connect(self.toggle_download_pause)
         
         # 启动线程和显示进度窗口
         self.current_download_thread.start()
         self.main_window.progress_window.exec()
+        
+    def toggle_download_pause(self):
+        """切换下载的暂停/恢复状态"""
+        if not self.current_download_thread:
+            return
+            
+        # 获取当前暂停状态
+        is_paused = self.current_download_thread.is_paused()
+        
+        if is_paused:
+            # 如果已暂停，则恢复下载
+            success = self.current_download_thread.resume()
+            if success:
+                self.main_window.progress_window.update_pause_button_state(False)
+        else:
+            # 如果未暂停，则暂停下载
+            success = self.current_download_thread.pause()
+            if success:
+                self.main_window.progress_window.update_pause_button_state(True)
 
     def on_download_finished(self, success, error, url, game_folder, game_version, _7z_path, plugin_path):
         """下载完成后的处理
@@ -634,14 +836,19 @@ class DownloadManager:
             plugin_path: 插件路径
         """
         # 关闭进度窗口
-        if self.main_window.progress_window.isVisible():
+        if self.main_window.progress_window and self.main_window.progress_window.isVisible():
             self.main_window.progress_window.reject()
+            self.main_window.progress_window = None
 
         # 处理下载失败
         if not success:
             print(f"--- Download Failed: {game_version} ---")
             print(error)
             print("------------------------------------")
+            
+            # 临时启用窗口以显示对话框
+            self.main_window.setEnabled(True)
+            
             msg_box = QtWidgets.QMessageBox(self.main_window)
             msg_box.setWindowTitle(f"下载失败 - {APP_NAME}")
             msg_box.setText(f"\n文件获取失败: {game_version}\n错误: {error}\n\n是否重试？")
@@ -655,10 +862,15 @@ class DownloadManager:
 
             # 处理用户选择
             if clicked_button == retry_button:
+                # 重试，重新禁用窗口
+                self.main_window.setEnabled(False)
                 self.download_setting(url, game_folder, game_version, _7z_path, plugin_path)
             elif clicked_button == next_button:
+                # 继续下一个，重新禁用窗口
+                self.main_window.setEnabled(False)
                 self.next_download_task()
             else:
+                # 结束，保持窗口启用
                 self.on_download_stopped()
             return
 
@@ -683,11 +895,37 @@ class DownloadManager:
         # 关闭哈希检查窗口
         if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
             self.main_window.hash_msg_box.close()
+            self.main_window.hash_msg_box = None
 
         # 处理解压结果
         if not success:
+            # 临时启用窗口以显示错误消息
+            self.main_window.setEnabled(True)
+            
             QtWidgets.QMessageBox.critical(self.main_window, f"错误 - {APP_NAME}", error_message)
             self.main_window.installed_status[game_version] = False
+            
+            # 询问用户是否继续其他游戏的安装
+            reply = QtWidgets.QMessageBox.question(
+                self.main_window,
+                f"继续安装? - {APP_NAME}",
+                f"\n{game_version} 的补丁安装失败。\n\n是否继续安装其他游戏的补丁？\n",
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                # 继续下一个，重新禁用窗口
+                self.main_window.setEnabled(False)
+                self.next_download_task()
+            else:
+                # 用户选择停止，保持窗口启用状态
+                self.main_window.ui.start_install_text.setText("开始安装")
+                # 清空剩余队列
+                self.download_queue.clear()
+                # 显示已完成的安装结果
+                self.main_window.show_result()
+            return
         else:
             self.main_window.installed_status[game_version] = True
         
@@ -714,15 +952,21 @@ class DownloadManager:
         self.download_queue.clear()
         
         # 确保进度窗口已关闭
-        if hasattr(self.main_window, 'progress_window') and self.main_window.progress_window.isVisible():
-            self.main_window.progress_window.reject()
+        if hasattr(self.main_window, 'progress_window') and self.main_window.progress_window:
+            if self.main_window.progress_window.isVisible():
+                self.main_window.progress_window.reject()
+            self.main_window.progress_window = None
 
         # 可以在这里决定是否立即进行哈希比较或显示结果
         print("下载已全部停止。")
-        self.main_window.setEnabled(True) # 恢复主窗口交互
         
-        # 重新启用退出按钮和开始安装按钮
-        self.main_window.ui.exit_btn.setEnabled(True)
-        self.main_window.set_start_button_enabled(True)
+        # 恢复主窗口状态
+        self.main_window.setEnabled(True)
+        self.main_window.ui.start_install_text.setText("开始安装")
         
-        self.main_window.show_result() 
+        # 显示取消安装的消息
+        QtWidgets.QMessageBox.information(
+            self.main_window,
+            f"已取消 - {APP_NAME}",
+            "\n已成功取消安装进程。\n"
+        ) 

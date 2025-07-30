@@ -165,28 +165,24 @@ class MainWindow(QMainWindow):
             self.set_start_button_enabled(False)
             
     def set_start_button_enabled(self, enabled, installing=False):
-        """设置开始安装按钮的启用状态和视觉效果
+        """[已弃用] 设置按钮启用状态的旧方法，保留以兼容旧代码
+        
+        现在推荐使用主窗口的setEnabled方法和直接设置按钮文本
         
         Args:
             enabled: 是否启用按钮
             installing: 是否正在安装中
         """
+        # 直接设置按钮文本，不改变窗口启用状态
         if installing:
-            # 安装中状态 - 按钮被禁用但显示"正在安装"
-            self.ui.start_install_btn.setEnabled(False)
             self.ui.start_install_text.setText("正在安装")
             self.install_button_enabled = False
         else:
-            # 正常状态 - 按钮可点击，但根据enabled决定是否显示"无法安装"
-            self.ui.start_install_btn.setEnabled(True)  # 始终启用按钮，以便捕获点击事件
-            
-            # 根据状态修改文本内容
             if enabled:
                 self.ui.start_install_text.setText("开始安装")
             else:
                 self.ui.start_install_text.setText("!无法安装!")
                 
-            # 记录当前按钮状态，用于点击事件处理
             self.install_button_enabled = enabled
 
     def fetch_cloud_config(self):
@@ -289,8 +285,7 @@ class MainWindow(QMainWindow):
         
     def after_hash_compare(self):
         """进行安装后哈希比较"""
-        # 禁用退出按钮
-        self.ui.exit_btn.setEnabled(False)
+        # 禁用窗口已在安装流程开始时完成
         
         self.hash_msg_box = self.hash_manager.hash_pop_window(check_type="after")
 
@@ -319,6 +314,9 @@ class MainWindow(QMainWindow):
             self.hash_msg_box = None
 
         if not result["passed"]:
+            # 启用窗口以显示错误消息
+            self.setEnabled(True)
+            
             game = result.get("game", "未知游戏")
             message = result.get("message", "发生未知错误。")
             msg_box = msgbox_frame(
@@ -328,9 +326,9 @@ class MainWindow(QMainWindow):
             )
             msg_box.exec()
 
-        # 重新启用退出按钮和开始安装按钮
-        self.ui.exit_btn.setEnabled(True)
-        self.set_start_button_enabled(True)
+        # 恢复窗口状态
+        self.setEnabled(True)
+        self.ui.start_install_text.setText("开始安装")
         
         # 添加短暂延迟确保UI更新
         QTimer.singleShot(100, self.show_result)

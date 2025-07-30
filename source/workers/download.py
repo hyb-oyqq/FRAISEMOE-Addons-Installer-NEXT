@@ -5,9 +5,10 @@ import re
 from urllib.parse import urlparse
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import (Qt, Signal, QThread, QTimer)
-from PySide6.QtWidgets import (QLabel, QProgressBar, QVBoxLayout, QDialog)
+from PySide6.QtWidgets import (QLabel, QProgressBar, QVBoxLayout, QDialog, QHBoxLayout)
 from utils import resource_path
 from data.config import APP_NAME, UA
+import signal
 
 # 下载线程类
 class DownloadThread(QThread):
@@ -21,6 +22,8 @@ class DownloadThread(QThread):
         self.game_version = game_version
         self.process = None
         self._is_running = True
+        self._is_paused = False
+        self.pause_process = None
 
     def stop(self):
         if self.process and self.process.poll() is None:
@@ -30,7 +33,55 @@ class DownloadThread(QThread):
                 subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 print(f"停止下载进程时出错: {e}")
+                
+    def pause(self):
+        """暂停下载进程"""
+        if not self._is_paused and self.process and self.process.poll() is None:
+            try:
+                # 使用SIGSTOP信号暂停进程
+                # Windows下使用不同的方式，因为没有SIGSTOP
+                if sys.platform == 'win32':
+                    self._is_paused = True
+                    # 在Windows上，使用暂停进程的方法
+                    self.pause_process = subprocess.Popen(['powershell', '-Command', f'(Get-Process -Id {self.process.pid}).Suspend()'], 
+                                                        creationflags=subprocess.CREATE_NO_WINDOW)
+                else:
+                    # 在Unix系统上使用SIGSTOP
+                    os.kill(self.process.pid, signal.SIGSTOP)
+                    self._is_paused = True
+                print(f"下载进程已暂停: PID {self.process.pid}")
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+                print(f"暂停下载进程时出错: {e}")
+                return False
+        return False
+                
+    def resume(self):
+        """恢复下载进程"""
+        if self._is_paused and self.process and self.process.poll() is None:
+            try:
+                # 使用SIGCONT信号恢复进程
+                # Windows下使用不同的方式
+                if sys.platform == 'win32':
+                    self._is_paused = False
+                    # 在Windows上，使用恢复进程的方法
+                    resume_process = subprocess.Popen(['powershell', '-Command', f'(Get-Process -Id {self.process.pid}).Resume()'], 
+                                                    creationflags=subprocess.CREATE_NO_WINDOW)
+                    resume_process.wait()
+                else:
+                    # 在Unix系统上使用SIGCONT
+                    os.kill(self.process.pid, signal.SIGCONT)
+                    self._is_paused = False
+                print(f"下载进程已恢复: PID {self.process.pid}")
+                return True
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+                print(f"恢复下载进程时出错: {e}")
+                return False
+        return False
 
+    def is_paused(self):
+        """返回当前下载是否处于暂停状态"""
+        return self._is_paused
 
     def run(self):
         try:
@@ -163,13 +214,42 @@ class ProgressWindow(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         self.stats_label = QLabel("速度: - | 线程: - | 剩余时间: -")
-        self.stop_button = QtWidgets.QPushButton("停止下载")
+        
+        # 创建按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 创建暂停/恢复按钮
+        self.pause_resume_button = QtWidgets.QPushButton("暂停下载")
+        self.pause_resume_button.setToolTip("暂停或恢复下载")
+        
+        # 创建停止按钮
+        self.stop_button = QtWidgets.QPushButton("取消下载")
+        self.stop_button.setToolTip("取消整个下载过程")
+        
+        # 添加按钮到按钮布局
+        button_layout.addWidget(self.pause_resume_button)
+        button_layout.addWidget(self.stop_button)
 
         layout.addWidget(self.game_label)
         layout.addWidget(self.progress_bar)
         layout.addWidget(self.stats_label)
-        layout.addWidget(self.stop_button)
+        layout.addLayout(button_layout)
         self.setLayout(layout)
+        
+        # 设置暂停/恢复状态
+        self.is_paused = False
+        
+    def update_pause_button_state(self, is_paused):
+        """更新暂停按钮的显示状态
+        
+        Args:
+            is_paused: 是否处于暂停状态
+        """
+        self.is_paused = is_paused
+        if is_paused:
+            self.pause_resume_button.setText("恢复下载")
+        else:
+            self.pause_resume_button.setText("暂停下载")
 
     def update_progress(self, data):
         game_version = data.get("game", "未知游戏")
@@ -187,6 +267,7 @@ class ProgressWindow(QDialog):
         self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
 
         if percent == 100:
+            self.pause_resume_button.setEnabled(False)
             self.stop_button.setEnabled(False)
             self.stop_button.setText("下载完成")
             QTimer.singleShot(1500, self.accept)
