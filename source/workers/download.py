@@ -49,6 +49,7 @@ class DownloadThread(QThread):
                 aria2c_path,
             ]
 
+            # 将所有的优化参数应用于每个下载任务
             command.extend([
                 '--dir', download_dir,
                 '--out', file_name,
@@ -74,8 +75,14 @@ class DownloadThread(QThread):
                 '--timeout=60',
                 '--auto-file-renaming=false',
                 '--allow-overwrite=true',
-                '--split=16',
-                '--max-connection-per-server=16'
+                # 优化参数 - 使用aria2允许的最佳设置
+                '--split=128',                     # 增加分片数到128
+                '--max-connection-per-server=16',  # 最大允许值16
+                '--min-split-size=1M',             # 减小最小分片大小
+                '--optimize-concurrent-downloads=true',  # 优化并发下载
+                '--file-allocation=none',          # 禁用文件预分配加快开始
+                '--async-dns=true',                # 使用异步DNS
+                '--disable-ipv6=true'              # 禁用IPv6提高速度
             ])
             
             # 证书验证现在总是需要，因为我们依赖hosts文件

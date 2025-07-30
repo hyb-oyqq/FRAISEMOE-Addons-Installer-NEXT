@@ -462,7 +462,7 @@ class MainWindow(QMainWindow):
         if event:
             event.accept()
         else:
-            sys.exit(0) 
+            sys.exit(0)
 
     def handle_install_button_click(self):
         """处理安装按钮点击事件
@@ -612,6 +612,6 @@ class MainWindow(QMainWindow):
             return
             
         # 开始卸载补丁
-        self.patch_manager.uninstall_patch(game_dir, game_version) 
+        self.patch_manager.uninstall_patch(game_dir, game_version)
 
  

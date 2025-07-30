@@ -215,39 +215,48 @@ class Ui_MainWindows(object):
         self.menu.setObjectName(u"menu")
         self.menu.setTitle("设置")
         self.menu.setFont(menu_font)
-        self.menu.setStyleSheet("""
-            QMenu {
+        # 创建菜单样式表，直接在样式表中指定字体族
+        menu_style = f"""
+            QMenu {{
                 background-color: #E96948;
                 color: white;
-                font-size: 16px;
+                font-family: "{font_family}";
+                font-size: 14px;
                 font-weight: bold;
                 border: 1px solid #F47A5B;
                 padding: 8px;
                 border-radius: 6px;
                 margin-top: 2px;
-            }
-            QMenu::item {
+            }}
+            QMenu::item {{
                 padding: 6px 20px 6px 15px;
                 background-color: transparent;
                 min-width: 120px;
                 color: white;
-            }
-            QMenu::item:selected {
+                font-family: "{font_family}";
+                font-weight: bold;
+            }}
+            QMenu::item:selected {{
                 background-color: #F47A5B;
                 border-radius: 4px;
-            }
-            QMenu::separator {
+            }}
+            QMenu::separator {{
                 height: 1px;
                 background-color: #F47A5B;
                 margin: 5px 15px;
-            }
-        """)
+            }}
+            QMenu::item:checked {{
+                background-color: #D25A3C;
+                border-radius: 4px;
+            }}
+        """
+        self.menu.setStyleSheet(menu_style)
         
         self.menu_2 = QMenu(self.content_container)
         self.menu_2.setObjectName(u"menu_2")
         self.menu_2.setTitle("帮助")
         self.menu_2.setFont(menu_font)
-        self.menu_2.setStyleSheet(self.menu.styleSheet())
+        self.menu_2.setStyleSheet(menu_style)
         
         # 连接按钮点击事件到显示对应菜单
         self.settings_btn.clicked.connect(lambda: self.show_menu(self.menu, self.settings_btn))
