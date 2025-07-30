@@ -39,12 +39,14 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
             )
             return
+        # 将按钮设置为"正在安装"状态
+        self.main_window.set_start_button_enabled(False, installing=True)
         self.download_action()
 
     def get_install_paths(self):
         """获取所有游戏版本的安装路径"""
         # 使用改进的目录识别功能
-        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
         install_paths = {}
         
         debug_mode = self.is_debug_mode()
@@ -159,14 +161,13 @@ class DownloadManager:
 
     def download_action(self):
         """开始下载流程"""
-        # 禁用开始安装按钮
-        self.main_window.set_start_button_enabled(False)
+        # 按钮在file_dialog中已设置为"正在安装"状态
         
         # 清空下载历史记录
         self.main_window.download_queue_history = []
         
         # 使用改进的目录识别功能
-        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
         
         debug_mode = self.is_debug_mode()
         if debug_mode:
@@ -183,6 +184,8 @@ class DownloadManager:
                 f"目录错误 - {APP_NAME}", 
                 "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
             )
+            # 恢复按钮为"无法安装"状态
+            self.main_window.set_start_button_enabled(False)
             return
         
         # 显示哈希检查窗口
@@ -212,8 +215,8 @@ class DownloadManager:
             QtWidgets.QMessageBox.critical(
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
-            # 重新启用开始安装按钮
-            self.main_window.set_start_button_enabled(True)
+            # 网络故障时，使用"无法安装"状态
+            self.main_window.set_start_button_enabled(False)
             return
 
         # 填充下载队列
@@ -269,7 +272,7 @@ class DownloadManager:
             self.main_window.download_queue_history = []
             
         # 获取所有识别到的游戏目录
-        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
         
         debug_mode = self.is_debug_mode()
         if debug_mode:
@@ -478,7 +481,7 @@ class DownloadManager:
             print(f"DEBUG: 游戏文件夹: {game_folder}")
             
         # 获取游戏可执行文件路径
-        game_dirs = self.main_window.identify_game_directories_improved(self.selected_folder)
+        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
         game_exe_exists = False
         
         if game_version in game_dirs:

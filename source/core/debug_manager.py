@@ -15,6 +15,25 @@ class DebugManager:
         self.logger = None
         self.original_stdout = None
         self.original_stderr = None
+        self.ui_manager = None  # 添加ui_manager属性
+    
+    def set_ui_manager(self, ui_manager):
+        """设置UI管理器引用
+        
+        Args:
+            ui_manager: UI管理器实例
+        """
+        self.ui_manager = ui_manager
+    
+    def _is_debug_mode(self):
+        """检查是否处于调试模式
+        
+        Returns:
+            bool: 是否处于调试模式
+        """
+        if hasattr(self, 'ui_manager') and hasattr(self.ui_manager, 'debug_action'):
+            return self.ui_manager.debug_action.isChecked()
+        return False
     
     def toggle_debug_mode(self, checked):
         """切换调试模式

@@ -101,6 +101,11 @@ class UIManager:
             <p><b>{APP_NAME} v{APP_VERSION}</b></p>
             <p>原作: <a href="https://github.com/Yanam1Anna">Yanam1Anna</a></p>
             <p>此应用根据 <a href="https://github.com/hyb-oyqq/FRAISEMOE2-Installer/blob/master/LICENSE">GPL-3.0 许可证</a> 授权。</p>
+            <br>
+            <p><b>感谢:</b></p>
+            <p>- <a href="https://github.com/HTony03">HTony03</a>：对原项目部分源码的重构、逻辑优化和功能实现提供了支持。</p>
+            <p>- <a href="https://github.com/ABSIDIA">钨鸮</a>：对于云端资源存储提供了支持。</p>
+            <p>- <a href="https://github.com/XIU2/CloudflareSpeedTest">XIU2/CloudflareSpeedTest</a>：提供了 IP 优选功能的核心支持。</p>
         """
         msg_box = msgbox_frame(
             f"关于 - {APP_NAME}",

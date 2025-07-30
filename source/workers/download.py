@@ -91,7 +91,7 @@ class DownloadThread(QThread):
 
             # 正则表达式用于解析aria2c的输出
             # 例如: #1 GID[...](  5%) CN:1 DL:10.5MiB/s ETA:1m30s
-            progress_pattern = re.compile(r'\((\d{1,3})%\).*?CN:(\d+).*?DL:\s*([^\s]+).*?ETA:\s*([^\s]+)')
+            progress_pattern = re.compile(r'\((\d{1,3})%\).*?CN:(\d+).*?DL:\s*([^\s]+).*?ETA:\s*([^\s\]]+)')
 
             full_output = []
             while self._is_running and self.process.poll() is None:
@@ -170,8 +170,12 @@ class ProgressWindow(QDialog):
         speed = data.get("speed", "-")
         threads = data.get("threads", "-")
         eta = data.get("eta", "-")
+        
+        # 清除ETA值中可能存在的"]"符号
+        if isinstance(eta, str):
+            eta = eta.replace("]", "")
 
-        self.game_label.setText(f"正在下载: {game_version}")
+        self.game_label.setText(f"正在下载 {game_version} 的补丁")
         self.progress_bar.setValue(int(percent))
         self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
 
