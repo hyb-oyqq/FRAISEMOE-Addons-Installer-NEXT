@@ -7,7 +7,7 @@ import webbrowser
 from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer, Qt, QPoint, QRect, QSize
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect
-from PySide6.QtGui import QPalette, QColor, QPainterPath, QRegion
+from PySide6.QtGui import QPalette, QColor, QPainterPath, QRegion, QFont
 from PySide6.QtGui import QAction # Added for menu actions
 
 from ui.Ui_install import Ui_MainWindows
@@ -372,26 +372,23 @@ class MainWindow(QMainWindow):
         # 构建结果信息
         result_text = f"\n安装结果：\n"
         
-        # 总数统计
+        # 总数统计 - 不再显示已跳过的数量
         total_installed = len(installed_versions)
-        total_skipped = len(skipped_versions)
         total_failed = len(failed_versions)
+        total_not_found = len(not_found_versions)
         
-        result_text += f"安装成功：{total_installed} 个  已跳过：{total_skipped} 个  安装失败：{total_failed} 个\n\n"
+        result_text += f"安装成功：{total_installed} 个  安装失败：{total_failed} 个\n\n"
         
         # 详细列表
         if installed_versions:
             result_text += f"【成功安装】:\n{chr(10).join(installed_versions)}\n\n"
             
-        if skipped_versions:
-            result_text += f"【已安装跳过】:\n{chr(10).join(skipped_versions)}\n\n"
-            
         if failed_versions:
             result_text += f"【安装失败】:\n{chr(10).join(failed_versions)}\n\n"
             
-        if not_found_versions and (installed_versions or failed_versions):
-            # 只有当有其他版本存在时，才显示未找到的版本
-            result_text += f"【未在指定目录找到】:\n{chr(10).join(not_found_versions)}\n"
+        if not_found_versions:
+            # 将"未在指定目录找到"改为"尚未安装补丁的游戏"
+            result_text += f"【尚未安装补丁的游戏】:\n{chr(10).join(not_found_versions)}\n"
         
         QMessageBox.information(
             self,
@@ -528,47 +525,110 @@ class MainWindow(QMainWindow):
         game_dirs = self.game_detector.identify_game_directories_improved(selected_folder)
         
         if game_dirs and len(game_dirs) > 0:
-            # 找到了游戏目录，显示选择对话框
             if debug_mode:
                 print(f"DEBUG: 卸载功能 - 在上级目录中找到以下游戏: {list(game_dirs.keys())}")
             
-            # 如果只有一个游戏，直接选择它
-            if len(game_dirs) == 1:
-                game_version = list(game_dirs.keys())[0]
-                game_dir = game_dirs[game_version]
-                self._confirm_and_uninstall(game_dir, game_version)
-            else:
-                # 有多个游戏，让用户选择
-                from PySide6.QtWidgets import QInputDialog
-                game_versions = list(game_dirs.keys())
-                # 添加"全部卸载"选项
-                game_versions.append("全部卸载")
-                
-                selected_game, ok = QInputDialog.getItem(
-                    self, "选择游戏", "选择要卸载补丁的游戏:", 
-                    game_versions, 0, False
+            # 查找已安装补丁的游戏，只处理那些已安装补丁的游戏
+            games_with_patch = {}
+            for game_version, game_dir in game_dirs.items():
+                if self.patch_manager.check_patch_installed(game_dir, game_version):
+                    games_with_patch[game_version] = game_dir
+                    if debug_mode:
+                        print(f"DEBUG: 卸载功能 - {game_version} 已安装补丁")
+            
+            # 检查是否有已安装补丁的游戏
+            if not games_with_patch:
+                QMessageBox.information(
+                    self,
+                    f"提示 - {APP_NAME}",
+                    "\n未在选择的目录中找到已安装补丁的游戏。\n请确认您选择了正确的游戏目录，并且该目录中的游戏已安装过补丁。\n",
+                    QMessageBox.StandardButton.Ok
                 )
+                return
+            
+            # 创建自定义选择对话框，允许多选
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout, QAbstractItemView
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("选择要卸载的游戏补丁")
+            dialog.resize(400, 300)
+            
+            layout = QVBoxLayout(dialog)
+            
+            # 添加"已安装补丁的游戏"标签
+            already_installed_label = QLabel("已安装补丁的游戏:", dialog)
+            already_installed_label.setFont(QFont(already_installed_label.font().family(), already_installed_label.font().pointSize(), QFont.Bold))
+            layout.addWidget(already_installed_label)
+            
+            # 添加已安装游戏列表（可选，这里使用静态标签替代，保持一致性）
+            installed_games_text = ", ".join(games_with_patch.keys())
+            installed_games_label = QLabel(installed_games_text, dialog)
+            layout.addWidget(installed_games_label)
+            
+            # 添加一些间距
+            layout.addSpacing(10)
+            
+            # 添加"请选择要卸载补丁的游戏"标签
+            info_label = QLabel("请选择要卸载补丁的游戏:", dialog)
+            info_label.setFont(QFont(info_label.font().family(), info_label.font().pointSize(), QFont.Bold))
+            layout.addWidget(info_label)
+            
+            # 添加列表控件，只显示已安装补丁的游戏
+            list_widget = QListWidget(dialog)
+            list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)  # 允许多选
+            for game in games_with_patch.keys():
+                list_widget.addItem(game)
+            layout.addWidget(list_widget)
+            
+            # 添加全选按钮
+            select_all_btn = QPushButton("全选", dialog)
+            select_all_btn.clicked.connect(lambda: list_widget.selectAll())
+            layout.addWidget(select_all_btn)
+            
+            # 添加确定和取消按钮
+            buttons_layout = QHBoxLayout()
+            ok_button = QPushButton("确定", dialog)
+            cancel_button = QPushButton("取消", dialog)
+            buttons_layout.addWidget(ok_button)
+            buttons_layout.addWidget(cancel_button)
+            layout.addLayout(buttons_layout)
+            
+            # 连接按钮事件
+            ok_button.clicked.connect(dialog.accept)
+            cancel_button.clicked.connect(dialog.reject)
+            
+            # 显示对话框并等待用户选择
+            result = dialog.exec()
+            
+            if result != QDialog.DialogCode.Accepted or list_widget.selectedItems() == []:
+                # 用户取消或未选择任何游戏
+                return
                 
-                if ok and selected_game:
-                    if selected_game == "全部卸载":
-                        # 卸载所有游戏补丁
-                        reply = QMessageBox.question(
-                            self,
-                            f"确认卸载 - {APP_NAME}",
-                            f"\n确定要卸载所有游戏的补丁吗？\n这将卸载以下游戏的补丁:\n{chr(10).join(list(game_dirs.keys()))}\n",
-                            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                            QMessageBox.StandardButton.No
-                        )
-                        
-                        if reply == QMessageBox.StandardButton.Yes:
-                            # 使用批量卸载方法
-                            success_count, fail_count = self.patch_manager.batch_uninstall_patches(game_dirs)
-                            self.patch_manager.show_uninstall_result(success_count, fail_count)
-                    else:
-                        # 卸载选中的单个游戏
-                        game_version = selected_game
-                        game_dir = game_dirs[game_version]
-                        self._confirm_and_uninstall(game_dir, game_version)
+            # 获取用户选择的游戏
+            selected_games = [item.text() for item in list_widget.selectedItems()]
+            if debug_mode:
+                print(f"DEBUG: 卸载功能 - 用户选择了以下游戏进行卸载: {selected_games}")
+                
+            # 过滤game_dirs，只保留选中的游戏
+            selected_game_dirs = {game: games_with_patch[game] for game in selected_games if game in games_with_patch}
+            
+            # 确认卸载
+            game_list = '\n'.join(selected_games)
+            reply = QMessageBox.question(
+                self,
+                f"确认卸载 - {APP_NAME}",
+                f"\n确定要卸载以下游戏的补丁吗？\n\n{game_list}\n",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.No:
+                return
+                
+            # 使用批量卸载方法
+            success_count, fail_count, results = self.patch_manager.batch_uninstall_patches(selected_game_dirs)
+            self.patch_manager.show_uninstall_result(success_count, fail_count, results)
+            
         else:
             # 未找到游戏目录，尝试将选择的目录作为游戏目录
             if debug_mode:
@@ -579,7 +639,31 @@ class MainWindow(QMainWindow):
             if game_version:
                 if debug_mode:
                     print(f"DEBUG: 卸载功能 - 识别为游戏: {game_version}")
-                self._confirm_and_uninstall(selected_folder, game_version)
+                
+                # 检查是否已安装补丁
+                if self.patch_manager.check_patch_installed(selected_folder, game_version):
+                    # 确认卸载
+                    reply = QMessageBox.question(
+                        self,
+                        f"确认卸载 - {APP_NAME}",
+                        f"\n确定要卸载 {game_version} 的补丁吗？\n游戏目录: {selected_folder}\n",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                        QMessageBox.StandardButton.No
+                    )
+                    
+                    if reply == QMessageBox.StandardButton.Yes:
+                        # 创建单个游戏的目录字典，使用批量卸载流程
+                        single_game_dir = {game_version: selected_folder}
+                        success_count, fail_count, results = self.patch_manager.batch_uninstall_patches(single_game_dir)
+                        self.patch_manager.show_uninstall_result(success_count, fail_count, results)
+                else:
+                    # 没有安装补丁
+                    QMessageBox.information(
+                        self,
+                        f"提示 - {APP_NAME}",
+                        f"\n未在 {game_version} 中找到已安装的补丁。\n请确认该游戏已经安装过补丁。\n",
+                        QMessageBox.StandardButton.Ok
+                    )
             else:
                 # 两种方式都未识别到游戏
                 if debug_mode:
@@ -592,28 +676,6 @@ class MainWindow(QMainWindow):
                 )
                 msg_box.exec()
     
-    def _confirm_and_uninstall(self, game_dir, game_version):
-        """确认并卸载补丁
-        
-        Args:
-            game_dir: 游戏目录
-            game_version: 游戏版本
-        """
-        debug_mode = self.debug_manager._is_debug_mode()
-        
-        # 确认卸载
-        reply = QMessageBox.question(
-            self,
-            f"确认卸载 - {APP_NAME}",
-            f"\n确定要卸载 {game_version} 的补丁吗？\n游戏目录: {game_dir}\n",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.No:
-            return
-            
-        # 开始卸载补丁
-        self.patch_manager.uninstall_patch(game_dir, game_version)
+
 
  

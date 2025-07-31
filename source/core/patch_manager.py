@@ -55,26 +55,29 @@ class PatchManager:
             return self.installed_status.get(game_version, False)
         return self.installed_status
     
-    def uninstall_patch(self, game_dir, game_version):
+    def uninstall_patch(self, game_dir, game_version, silent=False):
         """卸载补丁
         
         Args:
             game_dir: 游戏目录路径
             game_version: 游戏版本
+            silent: 是否静默模式(不显示弹窗)
             
         Returns:
             bool: 卸载成功返回True，失败返回False
+            dict: 在silent=True时，返回包含卸载结果信息的字典
         """
         debug_mode = self._is_debug_mode()
         
         if game_version not in self.game_info:
-            QMessageBox.critical(
-                None,
-                f"错误 - {self.app_name}",
-                f"\n无法识别游戏版本: {game_version}\n",
-                QMessageBox.StandardButton.Ok,
-            )
-            return False
+            if not silent:
+                QMessageBox.critical(
+                    None,
+                    f"错误 - {self.app_name}",
+                    f"\n无法识别游戏版本: {game_version}\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+            return False if not silent else {"success": False, "message": f"无法识别游戏版本: {game_version}", "files_removed": 0}
         
         if debug_mode:
             print(f"DEBUG: 开始卸载 {game_version} 补丁，目录: {game_dir}")
@@ -173,8 +176,8 @@ class PatchManager:
             # 更新安装状态
             self.installed_status[game_version] = False
             
-            # 在非批量卸载模式下显示卸载成功消息
-            if game_version != "all":
+            # 在非静默模式且非批量卸载模式下显示卸载成功消息
+            if not silent and game_version != "all":
                 # 显示卸载成功消息
                 if files_removed > 0:
                     QMessageBox.information(
@@ -192,11 +195,13 @@ class PatchManager:
                     )
             
             # 卸载成功
+            if silent:
+                return {"success": True, "message": f"{game_version} 补丁卸载成功", "files_removed": files_removed}
             return True
             
         except Exception as e:
-            # 在非批量卸载模式下显示卸载失败消息
-            if game_version != "all":
+            # 在非静默模式且非批量卸载模式下显示卸载失败消息
+            if not silent and game_version != "all":
                 # 显示卸载失败消息
                 error_message = f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n"
                 if debug_mode:
@@ -210,6 +215,8 @@ class PatchManager:
                 )
             
             # 卸载失败
+            if silent:
+                return {"success": False, "message": f"卸载 {game_version} 补丁时出错: {str(e)}", "files_removed": 0}
             return False
     
     def batch_uninstall_patches(self, game_dirs):
@@ -219,35 +226,166 @@ class PatchManager:
             game_dirs: 游戏版本到游戏目录的映射字典
             
         Returns:
-            tuple: (成功数量, 失败数量)
+            tuple: (成功数量, 失败数量, 详细结果列表)
         """
         success_count = 0
         fail_count = 0
         debug_mode = self._is_debug_mode()
+        results = []
         
         for version, path in game_dirs.items():
             try:
-                if self.uninstall_patch(path, version):
-                    success_count += 1
-                else:
-                    fail_count += 1
+                # 在批量模式下使用静默卸载
+                result = self.uninstall_patch(path, version, silent=True)
+                
+                if isinstance(result, dict):  # 使用了静默模式
+                    if result["success"]:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                    results.append({
+                        "version": version,
+                        "success": result["success"],
+                        "message": result["message"],
+                        "files_removed": result["files_removed"]
+                    })
+                else:  # 兼容旧代码，不应该执行到这里
+                    if result:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                    results.append({
+                        "version": version,
+                        "success": result,
+                        "message": f"{version} 卸载{'成功' if result else '失败'}",
+                        "files_removed": 0
+                    })
+                    
             except Exception as e:
                 if debug_mode:
                     print(f"DEBUG: 卸载 {version} 时出错: {str(e)}")
                 fail_count += 1
+                results.append({
+                    "version": version,
+                    "success": False,
+                    "message": f"卸载出错: {str(e)}",
+                    "files_removed": 0
+                })
                 
-        return success_count, fail_count
+        return success_count, fail_count, results
     
-    def show_uninstall_result(self, success_count, fail_count):
+    def show_uninstall_result(self, success_count, fail_count, results=None):
         """显示批量卸载结果
         
         Args:
             success_count: 成功卸载的数量
             fail_count: 卸载失败的数量
+            results: 详细结果列表，如果提供，会显示更详细的信息
         """
+        result_text = f"\n批量卸载完成！\n成功: {success_count} 个\n失败: {fail_count} 个\n"
+        
+        # 如果有详细结果，添加到消息中
+        if results:
+            success_list = [r["version"] for r in results if r["success"]]
+            fail_list = [r["version"] for r in results if not r["success"]]
+            
+            if success_list:
+                result_text += f"\n【成功卸载】：\n{chr(10).join(success_list)}\n"
+            
+            if fail_list:
+                result_text += f"\n【卸载失败】：\n{chr(10).join(fail_list)}\n"
+        
         QMessageBox.information(
             None,
             f"批量卸载完成 - {self.app_name}",
-            f"\n批量卸载完成！\n成功: {success_count} 个\n失败: {fail_count} 个\n",
+            result_text,
             QMessageBox.StandardButton.Ok,
         ) 
+
+    def check_patch_installed(self, game_dir, game_version):
+        """检查游戏是否已安装补丁
+        
+        Args:
+            game_dir: 游戏目录路径
+            game_version: 游戏版本
+            
+        Returns:
+            bool: 如果已安装补丁返回True，否则返回False
+        """
+        debug_mode = self._is_debug_mode()
+        
+        if game_version not in self.game_info:
+            return False
+            
+        # 获取可能的补丁文件路径
+        install_path_base = os.path.basename(self.game_info[game_version]["install_path"])
+        patch_file_path = os.path.join(game_dir, install_path_base)
+        
+        # 尝试查找补丁文件，支持不同大小写
+        patch_files_to_check = [
+            patch_file_path,
+            patch_file_path.lower(),
+            patch_file_path.upper(),
+            patch_file_path.replace("_", ""),
+            patch_file_path.replace("_", "-"),
+        ]
+        
+        # 查找补丁文件
+        for patch_path in patch_files_to_check:
+            if os.path.exists(patch_path):
+                if debug_mode:
+                    print(f"DEBUG: 找到补丁文件: {patch_path}")
+                return True
+                
+        # 检查是否有补丁文件夹
+        patch_folders_to_check = [
+            os.path.join(game_dir, "patch"),
+            os.path.join(game_dir, "Patch"),
+            os.path.join(game_dir, "PATCH"),
+        ]
+        
+        for patch_folder in patch_folders_to_check:
+            if os.path.exists(patch_folder):
+                if debug_mode:
+                    print(f"DEBUG: 找到补丁文件夹: {patch_folder}")
+                return True
+                
+        # 检查game/patch文件夹
+        game_folders = ["game", "Game", "GAME"]
+        patch_folders = ["patch", "Patch", "PATCH"]
+        
+        for game_folder in game_folders:
+            for patch_folder in patch_folders:
+                game_patch_folder = os.path.join(game_dir, game_folder, patch_folder)
+                if os.path.exists(game_patch_folder):
+                    if debug_mode:
+                        print(f"DEBUG: 找到game/patch文件夹: {game_patch_folder}")
+                    return True
+        
+        # 检查配置文件
+        config_files = ["config.json", "Config.json", "CONFIG.JSON"]
+        script_files = ["scripts.json", "Scripts.json", "SCRIPTS.JSON"]
+        
+        for game_folder in game_folders:
+            game_path = os.path.join(game_dir, game_folder)
+            if os.path.exists(game_path):
+                # 检查配置文件
+                for config_file in config_files:
+                    config_path = os.path.join(game_path, config_file)
+                    if os.path.exists(config_path):
+                        if debug_mode:
+                            print(f"DEBUG: 找到配置文件: {config_path}")
+                        return True
+                
+                # 检查脚本文件
+                for script_file in script_files:
+                    script_path = os.path.join(game_path, script_file)
+                    if os.path.exists(script_path):
+                        if debug_mode:
+                            print(f"DEBUG: 找到脚本文件: {script_path}")
+                        return True
+        
+        # 没有找到补丁文件或文件夹
+        if debug_mode:
+            print(f"DEBUG: {game_version} 在 {game_dir} 中没有安装补丁")
+        return False 

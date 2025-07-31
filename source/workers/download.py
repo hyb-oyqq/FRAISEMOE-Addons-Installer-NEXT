@@ -9,6 +9,25 @@ from PySide6.QtWidgets import (QLabel, QProgressBar, QVBoxLayout, QDialog, QHBox
 from utils import resource_path
 from data.config import APP_NAME, UA
 import signal
+import ctypes
+
+# Windows API常量和函数
+if sys.platform == 'win32':
+    kernel32 = ctypes.windll.kernel32
+    PROCESS_ALL_ACCESS = 0x1F0FFF
+    THREAD_SUSPEND_RESUME = 0x0002
+    TH32CS_SNAPTHREAD = 0x00000004
+    
+    class THREADENTRY32(ctypes.Structure):
+        _fields_ = [
+            ('dwSize', ctypes.c_ulong),
+            ('cntUsage', ctypes.c_ulong),
+            ('th32ThreadID', ctypes.c_ulong),
+            ('th32OwnerProcessID', ctypes.c_ulong),
+            ('tpBasePri', ctypes.c_ulong),
+            ('tpDeltaPri', ctypes.c_ulong),
+            ('dwFlags', ctypes.c_ulong)
+        ]
 
 # 下载线程类
 class DownloadThread(QThread):
@@ -23,7 +42,7 @@ class DownloadThread(QThread):
         self.process = None
         self._is_running = True
         self._is_paused = False
-        self.pause_process = None
+        self.threads = []
 
     def stop(self):
         if self.process and self.process.poll() is None:
@@ -34,24 +53,56 @@ class DownloadThread(QThread):
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 print(f"停止下载进程时出错: {e}")
                 
+    def _get_process_threads(self, pid):
+        """获取进程的所有线程ID"""
+        if sys.platform != 'win32':
+            return []
+            
+        thread_ids = []
+        h_snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)
+        if h_snapshot == -1:
+            return []
+        
+        thread_entry = THREADENTRY32()
+        thread_entry.dwSize = ctypes.sizeof(THREADENTRY32)
+        
+        res = kernel32.Thread32First(h_snapshot, ctypes.byref(thread_entry))
+        while res:
+            if thread_entry.th32OwnerProcessID == pid:
+                thread_ids.append(thread_entry.th32ThreadID)
+            res = kernel32.Thread32Next(h_snapshot, ctypes.byref(thread_entry))
+            
+        kernel32.CloseHandle(h_snapshot)
+        return thread_ids
+                
     def pause(self):
         """暂停下载进程"""
         if not self._is_paused and self.process and self.process.poll() is None:
             try:
-                # 使用SIGSTOP信号暂停进程
-                # Windows下使用不同的方式，因为没有SIGSTOP
                 if sys.platform == 'win32':
+                    # 获取所有线程
+                    self.threads = self._get_process_threads(self.process.pid)
+                    if not self.threads:
+                        print("未找到可暂停的线程")
+                        return False
+                        
+                    # 暂停所有线程
+                    for thread_id in self.threads:
+                        h_thread = kernel32.OpenThread(THREAD_SUSPEND_RESUME, False, thread_id)
+                        if h_thread:
+                            kernel32.SuspendThread(h_thread)
+                            kernel32.CloseHandle(h_thread)
+                            
                     self._is_paused = True
-                    # 在Windows上，使用暂停进程的方法
-                    self.pause_process = subprocess.Popen(['powershell', '-Command', f'(Get-Process -Id {self.process.pid}).Suspend()'], 
-                                                        creationflags=subprocess.CREATE_NO_WINDOW)
+                    print(f"下载进程已暂停: PID {self.process.pid}, 线程数: {len(self.threads)}")
+                    return True
                 else:
                     # 在Unix系统上使用SIGSTOP
                     os.kill(self.process.pid, signal.SIGSTOP)
                     self._is_paused = True
-                print(f"下载进程已暂停: PID {self.process.pid}")
-                return True
-            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+                    print(f"下载进程已暂停: PID {self.process.pid}")
+                    return True
+            except Exception as e:
                 print(f"暂停下载进程时出错: {e}")
                 return False
         return False
@@ -60,21 +111,24 @@ class DownloadThread(QThread):
         """恢复下载进程"""
         if self._is_paused and self.process and self.process.poll() is None:
             try:
-                # 使用SIGCONT信号恢复进程
-                # Windows下使用不同的方式
                 if sys.platform == 'win32':
+                    # 恢复所有线程
+                    for thread_id in self.threads:
+                        h_thread = kernel32.OpenThread(THREAD_SUSPEND_RESUME, False, thread_id)
+                        if h_thread:
+                            kernel32.ResumeThread(h_thread)
+                            kernel32.CloseHandle(h_thread)
+                            
                     self._is_paused = False
-                    # 在Windows上，使用恢复进程的方法
-                    resume_process = subprocess.Popen(['powershell', '-Command', f'(Get-Process -Id {self.process.pid}).Resume()'], 
-                                                    creationflags=subprocess.CREATE_NO_WINDOW)
-                    resume_process.wait()
+                    print(f"下载进程已恢复: PID {self.process.pid}, 线程数: {len(self.threads)}")
+                    return True
                 else:
                     # 在Unix系统上使用SIGCONT
                     os.kill(self.process.pid, signal.SIGCONT)
                     self._is_paused = False
-                print(f"下载进程已恢复: PID {self.process.pid}")
-                return True
-            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+                    print(f"下载进程已恢复: PID {self.process.pid}")
+                    return True
+            except Exception as e:
                 print(f"恢复下载进程时出错: {e}")
                 return False
         return False

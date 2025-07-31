@@ -7,7 +7,7 @@ import re # Added for recursive search
 
 from PySide6 import QtWidgets, QtCore
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtGui import QIcon, QPixmap, QFont
 
 from utils import msgbox_frame, HostsManager, resource_path
 from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL
@@ -264,8 +264,21 @@ class DownloadManager:
         
         layout = QVBoxLayout(dialog)
         
-        # 添加说明标签
-        info_label = QLabel(f"请选择要安装补丁的游戏版本：\n{status_message}", dialog)
+        # 先显示已安装补丁的游戏
+        if already_installed_games:
+            already_installed_label = QLabel("已安装补丁的游戏:", dialog)
+            already_installed_label.setFont(QFont(already_installed_label.font().family(), already_installed_label.font().pointSize(), QFont.Bold))
+            layout.addWidget(already_installed_label)
+            
+            already_installed_list = QLabel(chr(10).join(already_installed_games), dialog)
+            layout.addWidget(already_installed_list)
+            
+            # 添加一些间距
+            layout.addSpacing(10)
+        
+        # 添加"请选择你需要安装补丁的游戏"的标签
+        info_label = QLabel("请选择你需要安装补丁的游戏:", dialog)
+        info_label.setFont(QFont(info_label.font().family(), info_label.font().pointSize(), QFont.Bold))
         layout.addWidget(info_label)
         
         # 添加列表控件
@@ -552,8 +565,9 @@ class DownloadManager:
             timer.stop()
             
             # 如果用户点击了取消安装
-            if result == QtWidgets.QMessageBox.StandardButton.RejectRole:
+            if msg_box.clickedButton() == cancel_button:
                 # 恢复主窗口状态
+                self.main_window.setEnabled(True)
                 self.main_window.ui.start_install_text.setText("开始安装")
                 # 清空下载队列
                 self.download_queue.clear()
@@ -604,7 +618,7 @@ class DownloadManager:
                     timer.stop()
                     
                     # 如果用户点击了取消安装
-                    if result == QtWidgets.QMessageBox.StandardButton.RejectRole:
+                    if msg_box.clickedButton() == cancel_button:
                         # 恢复主窗口状态
                         self.main_window.setEnabled(True)
                         self.main_window.ui.start_install_text.setText("开始安装")
@@ -661,89 +675,9 @@ class DownloadManager:
             print(f"DEBUG: 准备下载游戏 {game_version}")
             print(f"DEBUG: 游戏文件夹: {game_folder}")
             
-        # 获取游戏可执行文件路径
-        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
-        game_exe_exists = False
-        
-        if game_version in game_dirs:
-            game_dir = game_dirs[game_version]
-            # 游戏目录已经通过可执行文件验证了，可以直接认为存在
-            game_exe_exists = True
-            if debug_mode:
-                print(f"DEBUG: 游戏目录已验证: {game_dir}")
-                print(f"DEBUG: 游戏可执行文件存在: {game_exe_exists}")
-        else:
-            # 回退到传统方法检查游戏是否存在
-            # 尝试多种可能的文件名格式
-            expected_exe = GAME_INFO[game_version]["exe"]
-            traditional_folder = os.path.join(
-                self.selected_folder, 
-                GAME_INFO[game_version]["install_path"].split("/")[0]
-            )
-            
-            # 定义多种可能的可执行文件变体
-            exe_variants = [
-                expected_exe,                        # 标准文件名
-                expected_exe + ".nocrack",           # Steam加密版本
-                expected_exe.replace(".exe", ""),    # 无扩展名版本
-                expected_exe.replace("NEKOPARA", "nekopara").lower(),  # 全小写变体
-                expected_exe.lower(),                # 小写变体
-                expected_exe.lower() + ".nocrack",   # 小写变体的Steam加密版本
-            ]
-            
-            # 对于Vol.3可能有特殊名称
-            if "Vol.3" in game_version:
-                # 增加可能的卷3特定的变体
-                exe_variants.extend([
-                    "NEKOPARAVol3.exe", 
-                    "NEKOPARAVol3.exe.nocrack",
-                    "nekoparavol3.exe",
-                    "nekoparavol3.exe.nocrack",
-                    "nekopara_vol3.exe",
-                    "nekopara_vol3.exe.nocrack",
-                    "vol3.exe",
-                    "vol3.exe.nocrack"
-                ])
-            
-            # 检查所有可能的文件名
-            for exe_variant in exe_variants:
-                exe_path = os.path.join(traditional_folder, exe_variant)
-                if os.path.exists(exe_path):
-                    game_exe_exists = True
-                    if debug_mode:
-                        print(f"DEBUG: 找到游戏可执行文件: {exe_path}")
-                    break
-            
-            # 如果仍未找到，尝试递归搜索
-            if not game_exe_exists and os.path.exists(traditional_folder):
-                # 提取卷号或检查是否是After
-                vol_match = re.search(r"Vol\.(\d+)", game_version)
-                vol_num = None
-                if vol_match:
-                    vol_num = vol_match.group(1)
-                
-                is_after = "After" in game_version
-                
-                # 遍历游戏目录及其子目录
-                for root, dirs, files in os.walk(traditional_folder):
-                    for file in files:
-                        file_lower = file.lower()
-                        if file.endswith('.exe') or file.endswith('.exe.nocrack'):
-                            # 检查文件名中是否包含卷号或关键词
-                            if ((vol_num and (f"vol{vol_num}" in file_lower or 
-                                             f"vol.{vol_num}" in file_lower or 
-                                             f"vol {vol_num}" in file_lower)) or
-                                (is_after and "after" in file_lower)):
-                                game_exe_exists = True
-                                if debug_mode:
-                                    print(f"DEBUG: 通过递归搜索找到游戏可执行文件: {os.path.join(root, file)}")
-                                break
-                    if game_exe_exists:
-                        break
-            
-            if debug_mode:
-                print(f"DEBUG: 使用传统方法检查游戏目录: {traditional_folder}")
-                print(f"DEBUG: 游戏可执行文件存在: {game_exe_exists}")
+        # 游戏可执行文件已在填充下载队列时验证过，不需要再次检查
+        # 因为game_folder是从已验证的game_dirs中获取的
+        game_exe_exists = True
         
         # 检查游戏是否已安装
         if (
