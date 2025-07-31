@@ -1,4 +1,4 @@
-# FRAISEMOE2-Installer 隐私政策
+# FRAISEMOE Addons Installer NEXT 隐私政策
 
 ## 1. 引言
 

@@ -3,7 +3,7 @@
 
 # 隐私协议的缩略版内容
 PRIVACY_POLICY_BRIEF = """
-# FRAISEMOE2-Installer 隐私政策摘要
+# FRAISEMOE Addons Installer NEXT 隐私政策摘要
 
 本应用在运行过程中会收集和处理以下信息：
 
@@ -25,7 +25,7 @@ PRIVACY_POLICY_BRIEF = """
 
 # 隐私协议的英文版缩略版内容
 PRIVACY_POLICY_BRIEF_EN = """
-# FRAISEMOE2-Installer Privacy Policy Summary
+# FRAISEMOE Addons Installer NEXT Privacy Policy Summary
 
 This application collects and processes the following information:
 
