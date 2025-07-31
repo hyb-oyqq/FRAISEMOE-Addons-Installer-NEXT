@@ -6,6 +6,7 @@ from .window_manager import WindowManager
 from .game_detector import GameDetector
 from .patch_manager import PatchManager
 from .config_manager import ConfigManager
+from .privacy_manager import PrivacyManager
 
 __all__ = [
     'MultiStageAnimations',
@@ -15,5 +16,6 @@ __all__ = [
     'WindowManager',
     'GameDetector',
     'PatchManager',
-    'ConfigManager'
+    'ConfigManager',
+    'PrivacyManager'
 ] 
