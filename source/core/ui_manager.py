@@ -5,7 +5,7 @@ import webbrowser
 import os
 
 from utils import load_base64_image, msgbox_frame, resource_path
-from data.config import APP_NAME, APP_VERSION
+from data.config import APP_NAME, APP_VERSION, LOG_FILE
 
 class UIManager:
     def __init__(self, main_window):
@@ -269,9 +269,32 @@ class UIManager:
         menu_style = self._get_menu_style(font_family)
         self.dev_menu.setStyleSheet(menu_style)
         
-        # 创建Debug模式选项并添加到开发者选项子菜单中
-        self.debug_action = QAction("Debug模式", self.main_window, checkable=True)
-        self.debug_action.setFont(menu_font)  # 设置相同的字体
+        # 创建Debug子菜单
+        self.debug_submenu = QMenu("Debug模式", self.main_window)
+        self.debug_submenu.setFont(menu_font)
+        self.debug_submenu.setStyleSheet(menu_style)
+        
+        # 创建hosts文件选项子菜单
+        self.hosts_submenu = QMenu("hosts文件选项", self.main_window)
+        self.hosts_submenu.setFont(menu_font)
+        self.hosts_submenu.setStyleSheet(menu_style)
+        
+        # 添加hosts子选项
+        self.restore_hosts_action = QAction("还原软件备份的hosts文件", self.main_window)
+        self.restore_hosts_action.setFont(menu_font)
+        self.restore_hosts_action.triggered.connect(self.restore_hosts_backup)
+        
+        self.clean_hosts_action = QAction("手动删除软件添加的hosts条目", self.main_window)
+        self.clean_hosts_action.setFont(menu_font)
+        self.clean_hosts_action.triggered.connect(self.clean_hosts_entries)
+        
+        # 添加到hosts子菜单
+        self.hosts_submenu.addAction(self.restore_hosts_action)
+        self.hosts_submenu.addAction(self.clean_hosts_action)
+        
+        # 创建Debug开关选项
+        self.debug_action = QAction("Debug开关", self.main_window, checkable=True)
+        self.debug_action.setFont(menu_font)
         
         # 安全地获取config属性
         config = getattr(self.main_window, 'config', {})
@@ -285,24 +308,33 @@ class UIManager:
         if hasattr(self.main_window, 'toggle_debug_mode'):
             self.debug_action.triggered.connect(self.main_window.toggle_debug_mode)
         
-        # 创建狂暴下载选项（无功能）
-        self.turbo_download_action = QAction("狂暴下载", self.main_window)
-        self.turbo_download_action.setFont(menu_font)  # 设置自定义字体
-        self.turbo_download_action.setEnabled(False)  # 禁用按钮
+        # 创建打开log文件选项
+        self.open_log_action = QAction("打开log.txt", self.main_window)
+        self.open_log_action.setFont(menu_font)
+        # 初始状态根据debug模式设置启用状态
+        self.open_log_action.setEnabled(debug_mode)
         
-        # 添加到开发者选项子菜单
-        self.dev_menu.addAction(self.debug_action)
-        self.dev_menu.addAction(self.turbo_download_action)
+        # 连接打开log文件的事件
+        self.open_log_action.triggered.connect(self.open_log_file)
         
-        # 为未来功能预留的"切换下载源"按钮
-        self.switch_source_action = QAction("切换下载源", self.main_window)
+        # 添加到Debug子菜单
+        self.debug_submenu.addAction(self.debug_action)
+        self.debug_submenu.addAction(self.open_log_action)
+        
+        # 为未来功能预留的"修改下载源"按钮 - 现在点击时显示"正在开发中"
+        self.switch_source_action = QAction("修改下载源", self.main_window)
         self.switch_source_action.setFont(menu_font)  # 设置自定义字体
-        self.switch_source_action.setEnabled(False)  # 暂时禁用
+        self.switch_source_action.setEnabled(True)  # 启用但显示"正在开发中"
+        self.switch_source_action.triggered.connect(self.show_under_development)
         
         # 添加到主菜单
         self.ui.menu.addAction(self.switch_source_action)
         self.ui.menu.addSeparator()
         self.ui.menu.addMenu(self.dev_menu)  # 添加开发者选项子菜单
+        
+        # 添加Debug子菜单到开发者选项菜单
+        self.dev_menu.addMenu(self.debug_submenu)
+        self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
 
     def show_menu(self, menu, button):
         """显示菜单
@@ -408,6 +440,112 @@ class UIManager:
                     QMessageBox.StandardButton.Ok,
                 )
                 error_msg.exec()
+
+    def show_under_development(self):
+        """显示功能正在开发中的提示"""
+        msg_box = msgbox_frame(
+            f"提示 - {APP_NAME}",
+            "\n该功能正在开发中，敬请期待！\n",
+            QMessageBox.StandardButton.Ok,
+        )
+        msg_box.exec()
+        
+    def open_log_file(self):
+        """打开log.txt文件"""
+        if os.path.exists(LOG_FILE):
+            try:
+                # 使用操作系统默认程序打开日志文件
+                if os.name == 'nt':  # Windows
+                    os.startfile(LOG_FILE)
+                else:  # macOS 和 Linux
+                    import subprocess
+                    subprocess.call(['xdg-open', LOG_FILE])
+            except Exception as e:
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    f"\n打开log.txt文件失败：\n\n{str(e)}\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+        else:
+            msg_box = msgbox_frame(
+                f"提示 - {APP_NAME}",
+                "\nlog.txt文件不存在，请确保Debug模式已开启并生成日志。\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            msg_box.exec()
+            
+    def restore_hosts_backup(self):
+        """还原软件备份的hosts文件"""
+        if hasattr(self.main_window, 'download_manager') and hasattr(self.main_window.download_manager, 'hosts_manager'):
+            try:
+                # 调用恢复hosts文件的方法
+                result = self.main_window.download_manager.hosts_manager.restore()
+                
+                if result:
+                    msg_box = msgbox_frame(
+                        f"成功 - {APP_NAME}",
+                        "\nhosts文件已成功还原为备份版本。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                else:
+                    msg_box = msgbox_frame(
+                        f"警告 - {APP_NAME}",
+                        "\n还原hosts文件失败或没有找到备份文件。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                
+                msg_box.exec()
+            except Exception as e:
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    f"\n还原hosts文件时发生错误：\n\n{str(e)}\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+        else:
+            msg_box = msgbox_frame(
+                f"错误 - {APP_NAME}",
+                "\n无法访问hosts管理器。\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            msg_box.exec()
+            
+    def clean_hosts_entries(self):
+        """手动删除软件添加的hosts条目"""
+        if hasattr(self.main_window, 'download_manager') and hasattr(self.main_window.download_manager, 'hosts_manager'):
+            try:
+                # 调用清理hosts条目的方法
+                result = self.main_window.download_manager.hosts_manager.check_and_clean_all_entries()
+                
+                if result:
+                    msg_box = msgbox_frame(
+                        f"成功 - {APP_NAME}",
+                        "\n已成功清理软件添加的hosts条目。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                else:
+                    msg_box = msgbox_frame(
+                        f"提示 - {APP_NAME}",
+                        "\n未发现软件添加的hosts条目或清理操作失败。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                
+                msg_box.exec()
+            except Exception as e:
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    f"\n清理hosts条目时发生错误：\n\n{str(e)}\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+        else:
+            msg_box = msgbox_frame(
+                f"错误 - {APP_NAME}",
+                "\n无法访问hosts管理器。\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            msg_box.exec()
 
     def show_about_dialog(self):
         """显示关于对话框"""

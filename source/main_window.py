@@ -152,6 +152,7 @@ class MainWindow(QMainWindow):
         
         self.animator.animation_finished.connect(self.on_animations_finished)
         self.animator.start_animations()
+        # 在动画开始时获取云端配置
         self.fetch_cloud_config()
 
     def on_animations_finished(self):
@@ -186,7 +187,7 @@ class MainWindow(QMainWindow):
             self.install_button_enabled = enabled
 
     def fetch_cloud_config(self):
-        """获取云端配置"""
+        """获取云端配置（异步方式）"""
         self.config_manager.fetch_cloud_config(
             lambda url, headers, debug_mode, parent=None: ConfigFetchThread(url, headers, debug_mode, self),
             self.on_config_fetched
@@ -223,6 +224,9 @@ class MainWindow(QMainWindow):
         self.cloud_config = self.config_manager.get_cloud_config()
         self.config_valid = self.config_manager.is_config_valid()
         self.last_error_message = self.config_manager.get_last_error()
+        
+        # 重新启用窗口，恢复用户交互
+        self.setEnabled(True)
 
     def toggle_debug_mode(self, checked):
         """切换调试模式

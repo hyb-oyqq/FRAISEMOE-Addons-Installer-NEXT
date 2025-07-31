@@ -41,8 +41,14 @@ class DebugManager:
         Args:
             checked: 是否启用调试模式
         """
+        print(f"Toggle debug mode: {checked}")
         self.main_window.config["debug_mode"] = checked
         self.main_window.save_config(self.main_window.config)
+        
+        # 更新打开log文件按钮状态
+        if hasattr(self, 'ui_manager') and hasattr(self.ui_manager, 'open_log_action'):
+            self.ui_manager.open_log_action.setEnabled(checked)
+            
         if checked:
             self.start_logging()
         else:
