@@ -185,6 +185,11 @@ class MultiStageAnimations(QObject):
             widget.setGraphicsEffect(effect)
             widget.move(widget.x(), self.canvas_height + 100)
             widget.show()
+            
+        # 禁用所有按钮，直到动画完成
+        self.ui.start_install_btn.setEnabled(False)
+        self.ui.uninstall_btn.setEnabled(False)
+        self.ui.exit_btn.setEnabled(False)
 
     def start_logo_animations(self):
         """启动Logo动画序列"""
@@ -337,6 +342,12 @@ class MultiStageAnimations(QObject):
     def start_animations(self):
         """启动完整动画序列"""
         self.clear_animations()
+        
+        # 确保按钮在动画开始时被禁用
+        self.ui.start_install_btn.setEnabled(False)
+        self.ui.uninstall_btn.setEnabled(False)
+        self.ui.exit_btn.setEnabled(False)
+        
         self.start_logo_animations()
 
     def clear_animations(self):

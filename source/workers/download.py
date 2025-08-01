@@ -154,6 +154,12 @@ class DownloadThread(QThread):
                 aria2c_path,
             ]
 
+            # 获取主窗口的下载管理器对象
+            thread_count = 64  # 默认值
+            if hasattr(self.parent(), 'download_manager'):
+                # 从下载管理器获取线程数设置
+                thread_count = self.parent().download_manager.get_download_thread_count()
+
             # 将所有的优化参数应用于每个下载任务
             command.extend([
                 '--dir', download_dir,
@@ -181,7 +187,7 @@ class DownloadThread(QThread):
                 '--auto-file-renaming=false',
                 '--allow-overwrite=true',
                 '--split=128',                     
-                '--max-connection-per-server=64',  
+                f'--max-connection-per-server={thread_count}',  # 使用动态的线程数
                 '--min-split-size=1M',             # 减小最小分片大小
                 '--optimize-concurrent-downloads=true',  # 优化并发下载
                 '--file-allocation=none',          # 禁用文件预分配加快开始

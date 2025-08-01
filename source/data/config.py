@@ -64,3 +64,15 @@ BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
 PLUGIN_HASH = {game: info["hash"] for game, info in GAME_INFO.items()}
 PROCESS_INFO = {info["exe"]: game for game, info in GAME_INFO.items()}
+
+# 下载线程档位设置
+DOWNLOAD_THREADS = {
+    "low": 1,      # 低速
+    "medium": 8,   # 中速（默认）
+    "high": 16,    # 高速
+    "extreme": 32, # 极速
+    "insane": 64   # 狂暴
+}
+
+# 默认下载线程档位
+DEFAULT_DOWNLOAD_THREAD_LEVEL = "high"

@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap, QFont
 
 from utils import msgbox_frame, HostsManager, resource_path
-from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL
+from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL, DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL
 from workers import IpOptimizerThread
 
 class DownloadManager:
@@ -28,7 +28,9 @@ class DownloadManager:
         self.optimized_ip = None
         self.optimization_done = False # 标记是否已执行过优选
         self.optimizing_msg_box = None
-    
+        # 添加下载线程级别
+        self.download_thread_level = DEFAULT_DOWNLOAD_THREAD_LEVEL
+        
     def file_dialog(self):
         """显示文件夹选择对话框，选择游戏安装目录"""
         self.selected_folder = QtWidgets.QFileDialog.getExistingDirectory(
@@ -903,4 +905,142 @@ class DownloadManager:
             self.main_window,
             f"已取消 - {APP_NAME}",
             "\n已成功取消安装进程。\n"
-        ) 
+        )
+        
+    def get_download_thread_count(self):
+        """获取当前下载线程设置对应的线程数
+        
+        Returns:
+            int: 下载线程数
+        """
+        # 获取当前线程级别对应的线程数
+        thread_count = DOWNLOAD_THREADS.get(self.download_thread_level, DOWNLOAD_THREADS["medium"])
+        return thread_count
+        
+    def set_download_thread_level(self, level):
+        """设置下载线程级别
+        
+        Args:
+            level: 线程级别 (low, medium, high, extreme, insane)
+            
+        Returns:
+            bool: 设置是否成功
+        """
+        if level in DOWNLOAD_THREADS:
+            old_level = self.download_thread_level
+            self.download_thread_level = level
+            
+            # 只有非极端级别才保存到配置
+            if level not in ["extreme", "insane"]:
+                if hasattr(self.main_window, 'config'):
+                    self.main_window.config["download_thread_level"] = level
+                    self.main_window.save_config(self.main_window.config)
+                    
+            return True
+        return False
+    
+    def show_download_thread_settings(self):
+        """显示下载线程设置对话框"""
+        # 创建对话框
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QRadioButton, QPushButton, QLabel, QButtonGroup, QHBoxLayout
+        from PySide6.QtCore import Qt
+        
+        dialog = QDialog(self.main_window)
+        dialog.setWindowTitle(f"下载线程设置 - {APP_NAME}")
+        dialog.setMinimumWidth(350)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 添加说明标签
+        info_label = QLabel("选择下载线程数量（更多线程通常可以提高下载速度）：", dialog)
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # 创建按钮组
+        button_group = QButtonGroup(dialog)
+        
+        # 添加线程选项
+        thread_options = {
+            "low": f"低速 - {DOWNLOAD_THREADS['low']}线程（慢慢来，不着急）",
+            "medium": f"中速 - {DOWNLOAD_THREADS['medium']}线程（快人半步）",
+            "high": f"高速 - {DOWNLOAD_THREADS['high']}线程（默认，推荐配置）",
+            "extreme": f"极速 - {DOWNLOAD_THREADS['extreme']}线程（如果你对你的网和电脑很自信的话）",
+            "insane": f"狂暴 - {DOWNLOAD_THREADS['insane']}线程（看看是带宽和性能先榨干还是牛牛先榨干）"
+        }
+        
+        radio_buttons = {}
+        
+        for level, text in thread_options.items():
+            radio = QRadioButton(text, dialog)
+            
+            # 选中当前使用的线程级别
+            if level == self.download_thread_level:
+                radio.setChecked(True)
+                
+            button_group.addButton(radio)
+            layout.addWidget(radio)
+            radio_buttons[level] = radio
+            
+        layout.addSpacing(10)
+        
+        # 添加按钮区域
+        btn_layout = QHBoxLayout()
+        
+        ok_button = QPushButton("确定", dialog)
+        cancel_button = QPushButton("取消", dialog)
+        
+        btn_layout.addWidget(ok_button)
+        btn_layout.addWidget(cancel_button)
+        
+        layout.addLayout(btn_layout)
+        
+        # 连接按钮事件
+        ok_button.clicked.connect(dialog.accept)
+        cancel_button.clicked.connect(dialog.reject)
+        
+        # 显示对话框
+        result = dialog.exec()
+        
+        # 处理结果
+        if result == QDialog.DialogCode.Accepted:
+            # 获取用户选择的线程级别
+            selected_level = None
+            for level, radio in radio_buttons.items():
+                if radio.isChecked():
+                    selected_level = level
+                    break
+                    
+            if selected_level:
+                # 为极速和狂暴模式显示警告
+                if selected_level in ["extreme", "insane"]:
+                    warning_result = QtWidgets.QMessageBox.warning(
+                        self.main_window,
+                        f"高风险警告 - {APP_NAME}",
+                        "警告！过高的线程数可能导致CPU负载过高或其他恶性问题！\n你确定要这么做吗？",
+                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+                        QtWidgets.QMessageBox.StandardButton.No
+                    )
+                    
+                    if warning_result != QtWidgets.QMessageBox.StandardButton.Yes:
+                        return False
+                
+                success = self.set_download_thread_level(selected_level)
+                
+                if success:
+                    # 显示设置成功消息
+                    thread_count = DOWNLOAD_THREADS[selected_level]
+                    message = f"\n已成功设置下载线程为: {thread_count}线程\n"
+                    
+                    # 对于极速和狂暴模式，添加仅本次生效的提示
+                    if selected_level in ["extreme", "insane"]:
+                        message += "\n注意：极速/狂暴模式仅本次生效。软件重启后将恢复默认设置。\n"
+                    
+                    QtWidgets.QMessageBox.information(
+                        self.main_window,
+                        f"设置成功 - {APP_NAME}",
+                        message
+                    )
+                
+            return True
+            
+        return False 

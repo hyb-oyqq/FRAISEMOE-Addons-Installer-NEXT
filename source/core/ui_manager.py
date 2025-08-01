@@ -321,14 +321,29 @@ class UIManager:
         self.debug_submenu.addAction(self.debug_action)
         self.debug_submenu.addAction(self.open_log_action)
         
-        # 为未来功能预留的"修改下载源"按钮 - 现在点击时显示"正在开发中"
+        # 创建下载设置子菜单
+        self.download_settings_menu = QMenu("下载设置", self.main_window)
+        self.download_settings_menu.setFont(menu_font)
+        self.download_settings_menu.setStyleSheet(menu_style)
+        
+        # "修改下载源"按钮移至下载设置菜单
         self.switch_source_action = QAction("修改下载源", self.main_window)
-        self.switch_source_action.setFont(menu_font)  # 设置自定义字体
-        self.switch_source_action.setEnabled(True)  # 启用但显示"正在开发中"
+        self.switch_source_action.setFont(menu_font)
+        self.switch_source_action.setEnabled(True)
         self.switch_source_action.triggered.connect(self.show_under_development)
         
+        # 添加下载线程设置选项
+        self.thread_settings_action = QAction("下载线程设置", self.main_window)
+        self.thread_settings_action.setFont(menu_font)
+        # 连接到下载线程设置对话框
+        self.thread_settings_action.triggered.connect(self.show_download_thread_settings)
+        
+        # 添加到下载设置子菜单
+        self.download_settings_menu.addAction(self.switch_source_action)
+        self.download_settings_menu.addAction(self.thread_settings_action)
+        
         # 添加到主菜单
-        self.ui.menu.addAction(self.switch_source_action)
+        self.ui.menu.addMenu(self.download_settings_menu)  # 添加下载设置子菜单
         self.ui.menu.addSeparator()
         self.ui.menu.addMenu(self.dev_menu)  # 添加开发者选项子菜单
         
@@ -449,6 +464,19 @@ class UIManager:
             QMessageBox.StandardButton.Ok,
         )
         msg_box.exec()
+        
+    def show_download_thread_settings(self):
+        """显示下载线程设置对话框"""
+        if hasattr(self.main_window, 'download_manager'):
+            self.main_window.download_manager.show_download_thread_settings()
+        else:
+            # 如果下载管理器不可用，显示错误信息
+            msg_box = msgbox_frame(
+                f"错误 - {APP_NAME}",
+                "\n下载管理器未初始化，无法修改下载线程设置。\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            msg_box.exec()
         
     def open_log_file(self):
         """打开log.txt文件"""

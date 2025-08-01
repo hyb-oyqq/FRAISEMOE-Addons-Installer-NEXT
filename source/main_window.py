@@ -1,5 +1,6 @@
 import os
 import sys
+import subprocess
 import shutil
 import json
 import webbrowser
@@ -13,7 +14,8 @@ from PySide6.QtGui import QAction # Added for menu actions
 from ui.Ui_install import Ui_MainWindows
 from data.config import (
     APP_NAME, PLUGIN, GAME_INFO, BLOCK_SIZE,
-    PLUGIN_HASH, UA, CONFIG_URL, LOG_FILE
+    PLUGIN_HASH, UA, CONFIG_URL, LOG_FILE,
+    DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL # 添加下载线程常量
 )
 from utils import (
     load_config, save_config, HashManager, AdminPrivileges, msgbox_frame, load_image_from_file
@@ -71,6 +73,10 @@ class MainWindow(QMainWindow):
         
         # 初始化下载管理器 - 应该放在其他管理器之后，因为它可能依赖于它们
         self.download_manager = DownloadManager(self)
+        
+        # 加载用户下载线程设置
+        if "download_thread_level" in self.config and self.config["download_thread_level"] in DOWNLOAD_THREADS:
+            self.download_manager.download_thread_level = self.config["download_thread_level"]
         
         # 初始化状态变量
         self.cloud_config = None
@@ -159,6 +165,11 @@ class MainWindow(QMainWindow):
         """动画完成后启用按钮"""
         self.animation_in_progress = False
         
+        # 启用所有菜单按钮
+        self.ui.start_install_btn.setEnabled(True)
+        self.ui.uninstall_btn.setEnabled(True)
+        self.ui.exit_btn.setEnabled(True)
+        
         # 只有在配置有效时才启用开始安装按钮
         if self.config_valid:
             self.set_start_button_enabled(True)
@@ -246,12 +257,13 @@ class MainWindow(QMainWindow):
         Args:
             url: 下载URL
             _7z_path: 7z文件保存路径
-            game_version: 游戏版本
+            game_version: 游戏版本名称
             
         Returns:
             DownloadThread: 下载线程实例
         """
-        return DownloadThread(url, _7z_path, game_version, self)
+        from workers import DownloadThread
+        return DownloadThread(url, _7z_path, game_version, parent=self)
         
     def create_progress_window(self):
         """创建下载进度窗口
