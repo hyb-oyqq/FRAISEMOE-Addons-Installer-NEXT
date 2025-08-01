@@ -12,6 +12,9 @@ from PySide6.QtGui import QIcon, QPixmap, QFont
 from utils import msgbox_frame, HostsManager, resource_path
 from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL, DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL
 from workers import IpOptimizerThread
+from core.cloudflare_optimizer import CloudflareOptimizer
+from core.download_task_manager import DownloadTaskManager
+from core.extraction_handler import ExtractionHandler
 
 class DownloadManager:
     def __init__(self, main_window):
@@ -21,15 +24,19 @@ class DownloadManager:
             main_window: 主窗口实例，用于访问UI和状态
         """
         self.main_window = main_window
+        self.main_window.APP_NAME = APP_NAME  # 为了让子模块能够访问APP_NAME
         self.selected_folder = ""
         self.download_queue = deque()
         self.current_download_thread = None
         self.hosts_manager = HostsManager()
-        self.optimized_ip = None
-        self.optimization_done = False # 标记是否已执行过优选
-        self.optimizing_msg_box = None
+        
         # 添加下载线程级别
         self.download_thread_level = DEFAULT_DOWNLOAD_THREAD_LEVEL
+        
+        # 初始化子模块
+        self.cloudflare_optimizer = CloudflareOptimizer(main_window, self.hosts_manager)
+        self.download_task_manager = DownloadTaskManager(main_window, self.download_thread_level)
+        self.extraction_handler = ExtractionHandler(main_window)
         
     def file_dialog(self):
         """显示文件夹选择对话框，选择游戏安装目录"""
@@ -67,12 +74,6 @@ class DownloadManager:
                 if debug_mode:
                     print(f"DEBUG: 使用识别到的游戏目录 {game}: {game_dir}")
                     print(f"DEBUG: 安装路径设置为: {install_path}")
-            else:
-                # 回退到原始路径计算方式
-                install_path = os.path.join(self.selected_folder, info["install_path"])
-                install_paths[game] = install_path
-                if debug_mode:
-                    print(f"DEBUG: 未识别到游戏目录 {game}, 使用默认路径: {install_path}")
                     
         return install_paths
 
@@ -442,209 +443,28 @@ class DownloadManager:
         
         use_optimization = clicked_button == yes_button
         
-        if use_optimization and not self.optimization_done:
+        if use_optimization and not self.cloudflare_optimizer.is_optimization_done():
             first_url = self.download_queue[0][0]
-            self._start_ip_optimization(first_url)
+            # 保存当前URL供CloudflareOptimizer使用
+            self.main_window.current_url = first_url
+            # 使用CloudflareOptimizer进行IP优化
+            self.cloudflare_optimizer.start_ip_optimization(first_url)
+            # 等待CloudflareOptimizer的回调
+            # on_optimization_finished会被调用，然后决定是否继续
+            QtCore.QTimer.singleShot(100, self.check_optimization_status)
         else:
             # 如果用户选择不优化，或已经优化过，直接开始下载
             self.next_download_task()
-
-    def _start_ip_optimization(self, url):
-        """开始IP优化过程
-        
-        Args:
-            url: 用于优化的URL
-        """
-        # 创建取消状态标记
-        self.optimization_cancelled = False
-        
-        # 使用Cloudflare图标创建消息框
-        self.optimizing_msg_box = msgbox_frame(
-            f"通知 - {APP_NAME}",
-            "\n正在优选Cloudflare IP，请稍候...\n\n这可能需要5-10分钟，请耐心等待喵~"
-        )
-        # 设置Cloudflare图标
-        cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
-        if os.path.exists(cf_icon_path):
-            cf_pixmap = QPixmap(cf_icon_path)
-            if not cf_pixmap.isNull():
-                self.optimizing_msg_box.setWindowIcon(QIcon(cf_pixmap))
-                self.optimizing_msg_box.setIconPixmap(cf_pixmap.scaled(64, 64, Qt.AspectRatioMode.KeepAspectRatio, 
-                                                                 Qt.TransformationMode.SmoothTransformation))
-        
-        # 添加取消按钮
-        self.optimizing_msg_box.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Cancel)
-        self.optimizing_msg_box.buttonClicked.connect(self._on_optimization_dialog_clicked)
-        self.optimizing_msg_box.setWindowModality(Qt.WindowModality.ApplicationModal)
-        
-        # 创建并启动优化线程
-        self.ip_optimizer_thread = IpOptimizerThread(url)
-        self.ip_optimizer_thread.finished.connect(self.on_optimization_finished)
-        self.ip_optimizer_thread.start()
-        
-        # 显示消息框（非模态，不阻塞）
-        self.optimizing_msg_box.open()
-        
-    def _on_optimization_dialog_clicked(self, button):
-        """处理优化对话框按钮点击
-        
-        Args:
-            button: 被点击的按钮
-        """
-        if button.text() == "Cancel":  # 如果是取消按钮
-            # 标记已取消
-            self.optimization_cancelled = True
-            
-            # 停止优化线程
-            if hasattr(self, 'ip_optimizer_thread') and self.ip_optimizer_thread and self.ip_optimizer_thread.isRunning():
-                self.ip_optimizer_thread.stop()
-                
-            # 恢复主窗口状态
-            self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
-            
-            # 清空下载队列
-            self.download_queue.clear()
-            
-            # 显示取消消息
-            QtWidgets.QMessageBox.information(
-                self.main_window,
-                f"已取消 - {APP_NAME}",
-                "\n已取消IP优选和安装过程。\n"
-            )
-
-    def on_optimization_finished(self, ip):
-        """IP优化完成后的处理
-        
-        Args:
-            ip: 优选的IP地址，如果失败则为空字符串
-        """
-        # 如果已经取消，则不继续处理
-        if hasattr(self, 'optimization_cancelled') and self.optimization_cancelled:
-            return
-            
-        self.optimized_ip = ip
-        self.optimization_done = True
-        
-        # 关闭提示框
-        if hasattr(self, 'optimizing_msg_box') and self.optimizing_msg_box:
-            if self.optimizing_msg_box.isVisible():
-                self.optimizing_msg_box.accept()
-            self.optimizing_msg_box = None
-
-        # 显示优选结果
-        if not ip:
-            # 临时启用窗口以显示对话框
-            self.main_window.setEnabled(True)
-            
-            msg_box = QtWidgets.QMessageBox(self.main_window)
-            msg_box.setWindowTitle(f"优选失败 - {APP_NAME}")
-            msg_box.setText("\n未能找到合适的Cloudflare IP，将使用默认网络进行下载。\n\n10秒后自动继续...")
-            msg_box.setIcon(QtWidgets.QMessageBox.Icon.Warning)
-            ok_button = msg_box.addButton("确定 (10)", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-            cancel_button = msg_box.addButton("取消安装", QtWidgets.QMessageBox.ButtonRole.RejectRole)
-            
-            # 创建计时器实现倒计时
-            countdown = 10
-            timer = QtCore.QTimer(self.main_window)
-            
-            def update_countdown():
-                nonlocal countdown
-                countdown -= 1
-                ok_button.setText(f"确定 ({countdown})")
-                if countdown <= 0:
-                    timer.stop()
-                    if msg_box.isVisible():
-                        msg_box.accept()
-            
-            timer.timeout.connect(update_countdown)
-            timer.start(1000)  # 每秒更新一次
-            
-            # 显示对话框并等待用户响应
-            result = msg_box.exec()
-            
-            # 停止计时器
-            timer.stop()
-            
-            # 如果用户点击了取消安装
-            if msg_box.clickedButton() == cancel_button:
-                # 恢复主窗口状态
-                self.main_window.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("开始安装")
-                # 清空下载队列
-                self.download_queue.clear()
-                return
-                
-            # 用户点击了继续，重新禁用主窗口
-            self.main_window.setEnabled(False)
+    
+    def check_optimization_status(self):
+        """检查IP优化状态并继续下载流程"""
+        # 必须同时满足：优化已完成且倒计时已结束
+        if self.cloudflare_optimizer.is_optimization_done() and self.cloudflare_optimizer.is_countdown_finished():
+            self.next_download_task()
         else:
-            # 应用优选IP到hosts文件
-            if self.download_queue:
-                first_url = self.download_queue[0][0]
-                hostname = urlparse(first_url).hostname
-                
-                # 先清理可能存在的旧记录
-                self.hosts_manager.clean_hostname_entries(hostname)
-                
-                # 临时启用窗口以显示对话框
-                self.main_window.setEnabled(True)
-                
-                if self.hosts_manager.apply_ip(hostname, ip):
-                    msg_box = QtWidgets.QMessageBox(self.main_window)
-                    msg_box.setWindowTitle(f"成功 - {APP_NAME}")
-                    msg_box.setText(f"\n已将优选IP ({ip}) 应用到hosts文件。\n\n10秒后自动继续...")
-                    msg_box.setIcon(QtWidgets.QMessageBox.Icon.Information)
-                    ok_button = msg_box.addButton("确定 (10)", QtWidgets.QMessageBox.ButtonRole.AcceptRole)
-                    cancel_button = msg_box.addButton("取消安装", QtWidgets.QMessageBox.ButtonRole.RejectRole)
-                    
-                    # 创建计时器实现倒计时
-                    countdown = 10
-                    timer = QtCore.QTimer(self.main_window)
-                    
-                    def update_countdown():
-                        nonlocal countdown
-                        countdown -= 1
-                        ok_button.setText(f"确定 ({countdown})")
-                        if countdown <= 0:
-                            timer.stop()
-                            if msg_box.isVisible():
-                                msg_box.accept()
-                    
-                    timer.timeout.connect(update_countdown)
-                    timer.start(1000)  # 每秒更新一次
-                    
-                    # 显示对话框并等待用户响应
-                    result = msg_box.exec()
-                    
-                    # 停止计时器
-                    timer.stop()
-                    
-                    # 如果用户点击了取消安装
-                    if msg_box.clickedButton() == cancel_button:
-                        # 恢复主窗口状态
-                        self.main_window.setEnabled(True)
-                        self.main_window.ui.start_install_text.setText("开始安装")
-                        # 清空下载队列
-                        self.download_queue.clear()
-                        return
-                else:
-                    QtWidgets.QMessageBox.critical(
-                        self.main_window, 
-                        f"错误 - {APP_NAME}", 
-                        "\n修改hosts文件失败，请检查程序是否以管理员权限运行。\n"
-                    )
-                    # 恢复主窗口状态
-                    self.main_window.ui.start_install_text.setText("开始安装")
-                    # 清空下载队列并退出
-                    self.download_queue.clear()
-                    return
-                
-                # 用户点击了继续，重新禁用主窗口
-                self.main_window.setEnabled(False)
-        
-        # 计时器结束或用户点击确定时，继续下载
-        QtCore.QTimer.singleShot(100, self.next_download_task)
-
+            # 否则，继续等待100ms后再次检查
+            QtCore.QTimer.singleShot(100, self.check_optimization_status)
+                        
     def next_download_task(self):
         """处理下载队列中的下一个任务"""
         if not self.download_queue:
@@ -652,7 +472,7 @@ class DownloadManager:
             return
             
         # 检查下载线程是否仍在运行，以避免在手动停止后立即开始下一个任务
-        if self.current_download_thread and self.current_download_thread.isRunning():
+        if self.download_task_manager.current_download_thread and self.download_task_manager.current_download_thread.isRunning():
             return
         
         # 获取下一个下载任务并开始
@@ -696,69 +516,18 @@ class DownloadManager:
         
         # 创建进度窗口并开始下载
         self.main_window.progress_window = self.main_window.create_progress_window()
-        self.start_download(url, _7z_path, game_version, game_folder, plugin_path)
-
-    def start_download(self, url, _7z_path, game_version, game_folder, plugin_path):
-        """启动下载线程
         
-        Args:
-            url: 下载URL
-            _7z_path: 7z文件保存路径
-            game_version: 游戏版本名称
-            game_folder: 游戏文件夹路径
-            plugin_path: 插件路径
-        """
-        # 按钮在file_dialog中已设置为禁用状态
-        
+        # 从CloudflareOptimizer获取已优选的IP
+        self.optimized_ip = self.cloudflare_optimizer.get_optimized_ip()
         if self.optimized_ip:
             print(f"已为 {game_version} 获取到优选IP: {self.optimized_ip}")
         else:
             print(f"未能为 {game_version} 获取优选IP，将使用默认线路。")
 
-        # 创建并连接下载线程
-        self.current_download_thread = self.main_window.create_download_thread(url, _7z_path, game_version)
-        self.current_download_thread.progress.connect(self.main_window.progress_window.update_progress)
-        self.current_download_thread.finished.connect(
-            lambda success, error: self.on_download_finished(
-                success,
-                error,
-                url,
-                game_folder,
-                game_version,
-                _7z_path,
-                plugin_path,
-            )
-        )
-        
-        # 连接停止按钮到我们的on_download_stopped方法
-        self.main_window.progress_window.stop_button.clicked.connect(self.on_download_stopped)
-        
-        # 连接暂停/恢复按钮
-        self.main_window.progress_window.pause_resume_button.clicked.connect(self.toggle_download_pause)
-        
-        # 启动线程和显示进度窗口
-        self.current_download_thread.start()
-        self.main_window.progress_window.exec()
-        
-    def toggle_download_pause(self):
-        """切换下载的暂停/恢复状态"""
-        if not self.current_download_thread:
-            return
-            
-        # 获取当前暂停状态
-        is_paused = self.current_download_thread.is_paused()
-        
-        if is_paused:
-            # 如果已暂停，则恢复下载
-            success = self.current_download_thread.resume()
-            if success:
-                self.main_window.progress_window.update_pause_button_state(False)
-        else:
-            # 如果未暂停，则暂停下载
-            success = self.current_download_thread.pause()
-            if success:
-                self.main_window.progress_window.update_pause_button_state(True)
+        # 使用DownloadTaskManager开始下载
+        self.download_task_manager.start_download(url, _7z_path, game_version, game_folder, plugin_path)
 
+    # 连接到主窗口中的下载完成处理函数
     def on_download_finished(self, success, error, url, game_folder, game_version, _7z_path, plugin_path):
         """下载完成后的处理
         
@@ -810,79 +579,31 @@ class DownloadManager:
                 self.on_download_stopped()
             return
 
-        # 下载成功，开始解压缩
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="extraction")
-        
-        # 创建并启动解压线程
-        self.main_window.extraction_thread = self.main_window.create_extraction_thread(
-            _7z_path, game_folder, plugin_path, game_version
-        )
-        self.main_window.extraction_thread.finished.connect(self.on_extraction_finished)
-        self.main_window.extraction_thread.start()
+        # 下载成功，使用ExtractionHandler开始解压缩
+        self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
+        # extraction_handler的回调会处理下一步操作
 
-    def on_extraction_finished(self, success, error_message, game_version):
-        """解压完成后的处理
+    def on_extraction_finished(self, continue_download):
+        """解压完成后的回调，决定是否继续下载队列
         
         Args:
-            success: 是否解压成功
-            error_message: 错误信息
-            game_version: 游戏版本
+            continue_download: 是否继续下载队列中的下一个任务
         """
-        # 关闭哈希检查窗口
-        if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-            self.main_window.hash_msg_box.close()
-            self.main_window.hash_msg_box = None
-
-        # 处理解压结果
-        if not success:
-            # 临时启用窗口以显示错误消息
-            self.main_window.setEnabled(True)
-            
-            QtWidgets.QMessageBox.critical(self.main_window, f"错误 - {APP_NAME}", error_message)
-            self.main_window.installed_status[game_version] = False
-            
-            # 询问用户是否继续其他游戏的安装
-            reply = QtWidgets.QMessageBox.question(
-                self.main_window,
-                f"继续安装? - {APP_NAME}",
-                f"\n{game_version} 的补丁安装失败。\n\n是否继续安装其他游戏的补丁？\n",
-                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                QtWidgets.QMessageBox.StandardButton.Yes
-            )
-            
-            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                # 继续下一个，重新禁用窗口
-                self.main_window.setEnabled(False)
-                self.next_download_task()
-            else:
-                # 用户选择停止，保持窗口启用状态
-                self.main_window.ui.start_install_text.setText("开始安装")
-                # 清空剩余队列
-                self.download_queue.clear()
-                # 显示已完成的安装结果
-                self.main_window.show_result()
-            return
+        if continue_download:
+            # 继续下一个下载任务
+            self.next_download_task()
         else:
-            self.main_window.installed_status[game_version] = True
-        
-        # 继续下一个下载任务
-        self.next_download_task()
+            # 清空剩余队列并显示结果
+            self.download_queue.clear()
+            self.main_window.show_result()
 
     def on_download_stopped(self):
         """当用户点击停止按钮或选择结束时调用的函数"""
         # 停止IP优化线程
-        if hasattr(self, 'ip_optimizer_thread') and self.ip_optimizer_thread and self.ip_optimizer_thread.isRunning():
-            self.ip_optimizer_thread.stop()
-            self.ip_optimizer_thread.wait()
-            if hasattr(self, 'optimizing_msg_box') and self.optimizing_msg_box:
-                if self.optimizing_msg_box.isVisible():
-                    self.optimizing_msg_box.accept()
-                self.optimizing_msg_box = None
+        self.cloudflare_optimizer.stop_optimization()
 
         # 停止当前可能仍在运行的下载线程
-        if self.current_download_thread and self.current_download_thread.isRunning():
-            self.current_download_thread.stop()
-            self.current_download_thread.wait() # 等待线程完全终止
+        self.download_task_manager.stop_download()
             
         # 清空下载队列，因为用户决定停止
         self.download_queue.clear()
@@ -893,7 +614,7 @@ class DownloadManager:
                 self.main_window.progress_window.reject()
             self.main_window.progress_window = None
 
-        # 可以在这里决定是否立即进行哈希比较或显示结果
+        # 退出应用程序
         print("下载已全部停止。")
         
         # 恢复主窗口状态
@@ -906,141 +627,16 @@ class DownloadManager:
             f"已取消 - {APP_NAME}",
             "\n已成功取消安装进程。\n"
         )
-        
+
+    # 以下方法委托给DownloadTaskManager
     def get_download_thread_count(self):
-        """获取当前下载线程设置对应的线程数
-        
-        Returns:
-            int: 下载线程数
-        """
-        # 获取当前线程级别对应的线程数
-        thread_count = DOWNLOAD_THREADS.get(self.download_thread_level, DOWNLOAD_THREADS["medium"])
-        return thread_count
+        """获取当前下载线程设置对应的线程数"""
+        return self.download_task_manager.get_download_thread_count()
         
     def set_download_thread_level(self, level):
-        """设置下载线程级别
-        
-        Args:
-            level: 线程级别 (low, medium, high, extreme, insane)
-            
-        Returns:
-            bool: 设置是否成功
-        """
-        if level in DOWNLOAD_THREADS:
-            old_level = self.download_thread_level
-            self.download_thread_level = level
-            
-            # 只有非极端级别才保存到配置
-            if level not in ["extreme", "insane"]:
-                if hasattr(self.main_window, 'config'):
-                    self.main_window.config["download_thread_level"] = level
-                    self.main_window.save_config(self.main_window.config)
-                    
-            return True
-        return False
+        """设置下载线程级别"""
+        return self.download_task_manager.set_download_thread_level(level)
     
     def show_download_thread_settings(self):
         """显示下载线程设置对话框"""
-        # 创建对话框
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QRadioButton, QPushButton, QLabel, QButtonGroup, QHBoxLayout
-        from PySide6.QtCore import Qt
-        
-        dialog = QDialog(self.main_window)
-        dialog.setWindowTitle(f"下载线程设置 - {APP_NAME}")
-        dialog.setMinimumWidth(350)
-        
-        layout = QVBoxLayout(dialog)
-        
-        # 添加说明标签
-        info_label = QLabel("选择下载线程数量（更多线程通常可以提高下载速度）：", dialog)
-        info_label.setWordWrap(True)
-        layout.addWidget(info_label)
-        
-        # 创建按钮组
-        button_group = QButtonGroup(dialog)
-        
-        # 添加线程选项
-        thread_options = {
-            "low": f"低速 - {DOWNLOAD_THREADS['low']}线程（慢慢来，不着急）",
-            "medium": f"中速 - {DOWNLOAD_THREADS['medium']}线程（快人半步）",
-            "high": f"高速 - {DOWNLOAD_THREADS['high']}线程（默认，推荐配置）",
-            "extreme": f"极速 - {DOWNLOAD_THREADS['extreme']}线程（如果你对你的网和电脑很自信的话）",
-            "insane": f"狂暴 - {DOWNLOAD_THREADS['insane']}线程（看看是带宽和性能先榨干还是牛牛先榨干）"
-        }
-        
-        radio_buttons = {}
-        
-        for level, text in thread_options.items():
-            radio = QRadioButton(text, dialog)
-            
-            # 选中当前使用的线程级别
-            if level == self.download_thread_level:
-                radio.setChecked(True)
-                
-            button_group.addButton(radio)
-            layout.addWidget(radio)
-            radio_buttons[level] = radio
-            
-        layout.addSpacing(10)
-        
-        # 添加按钮区域
-        btn_layout = QHBoxLayout()
-        
-        ok_button = QPushButton("确定", dialog)
-        cancel_button = QPushButton("取消", dialog)
-        
-        btn_layout.addWidget(ok_button)
-        btn_layout.addWidget(cancel_button)
-        
-        layout.addLayout(btn_layout)
-        
-        # 连接按钮事件
-        ok_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
-        
-        # 显示对话框
-        result = dialog.exec()
-        
-        # 处理结果
-        if result == QDialog.DialogCode.Accepted:
-            # 获取用户选择的线程级别
-            selected_level = None
-            for level, radio in radio_buttons.items():
-                if radio.isChecked():
-                    selected_level = level
-                    break
-                    
-            if selected_level:
-                # 为极速和狂暴模式显示警告
-                if selected_level in ["extreme", "insane"]:
-                    warning_result = QtWidgets.QMessageBox.warning(
-                        self.main_window,
-                        f"高风险警告 - {APP_NAME}",
-                        "警告！过高的线程数可能导致CPU负载过高或其他恶性问题！\n你确定要这么做吗？",
-                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                        QtWidgets.QMessageBox.StandardButton.No
-                    )
-                    
-                    if warning_result != QtWidgets.QMessageBox.StandardButton.Yes:
-                        return False
-                
-                success = self.set_download_thread_level(selected_level)
-                
-                if success:
-                    # 显示设置成功消息
-                    thread_count = DOWNLOAD_THREADS[selected_level]
-                    message = f"\n已成功设置下载线程为: {thread_count}线程\n"
-                    
-                    # 对于极速和狂暴模式，添加仅本次生效的提示
-                    if selected_level in ["extreme", "insane"]:
-                        message += "\n注意：极速/狂暴模式仅本次生效。软件重启后将恢复默认设置。\n"
-                    
-                    QtWidgets.QMessageBox.information(
-                        self.main_window,
-                        f"设置成功 - {APP_NAME}",
-                        message
-                    )
-                
-            return True
-            
-        return False 
+        return self.download_task_manager.show_download_thread_settings() 

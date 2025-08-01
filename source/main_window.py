@@ -361,25 +361,27 @@ class MainWindow(QMainWindow):
         install_paths = self.download_manager.get_install_paths() if hasattr(self.download_manager, "get_install_paths") else {}
         
         for game_version, is_installed in self.installed_status.items():
-            path = install_paths.get(game_version, "")
-            
-            # 检查游戏是否存在但未通过本次安装补丁
-            if is_installed:
-                # 游戏已安装补丁
-                if hasattr(self, 'download_queue_history') and game_version not in self.download_queue_history:
-                    # 已有补丁，被跳过下载
-                    skipped_versions.append(game_version)
+            # 只处理install_paths中存在的游戏版本
+            if game_version in install_paths:
+                path = install_paths[game_version]
+                
+                # 检查游戏是否存在但未通过本次安装补丁
+                if is_installed:
+                    # 游戏已安装补丁
+                    if hasattr(self, 'download_queue_history') and game_version not in self.download_queue_history:
+                        # 已有补丁，被跳过下载
+                        skipped_versions.append(game_version)
+                    else:
+                        # 本次成功安装
+                        installed_versions.append(game_version)
                 else:
-                    # 本次成功安装
-                    installed_versions.append(game_version)
-            else:
-                # 游戏未安装补丁
-                if os.path.exists(path):
-                    # 游戏文件夹存在，但安装失败
-                    failed_versions.append(game_version)
-                else:
-                    # 游戏文件夹不存在
-                    not_found_versions.append(game_version)
+                    # 游戏未安装补丁
+                    if os.path.exists(path):
+                        # 游戏文件夹存在，但安装失败
+                        failed_versions.append(game_version)
+                    else:
+                        # 游戏文件夹不存在
+                        not_found_versions.append(game_version)
         
         # 构建结果信息
         result_text = f"\n安装结果：\n"
@@ -387,7 +389,6 @@ class MainWindow(QMainWindow):
         # 总数统计 - 不再显示已跳过的数量
         total_installed = len(installed_versions)
         total_failed = len(failed_versions)
-        total_not_found = len(not_found_versions)
         
         result_text += f"安装成功：{total_installed} 个  安装失败：{total_failed} 个\n\n"
         
@@ -399,7 +400,7 @@ class MainWindow(QMainWindow):
             result_text += f"【安装失败】:\n{chr(10).join(failed_versions)}\n\n"
             
         if not_found_versions:
-            # 将"未在指定目录找到"改为"尚未安装补丁的游戏"
+            # 只有在真正检测到了游戏但未安装补丁时才显示
             result_text += f"【尚未安装补丁的游戏】:\n{chr(10).join(not_found_versions)}\n"
         
         QMessageBox.information(

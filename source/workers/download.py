@@ -10,6 +10,7 @@ from utils import resource_path
 from data.config import APP_NAME, UA
 import signal
 import ctypes
+import time
 
 # Windows API常量和函数
 if sys.platform == 'win32':
@@ -136,6 +137,23 @@ class DownloadThread(QThread):
     def is_paused(self):
         """返回当前下载是否处于暂停状态"""
         return self._is_paused
+    
+    def _emit_progress(self, percent, threads, speed, eta):
+        """用于直接连接的进度发射方法
+        
+        Args:
+            percent: 完成百分比
+            threads: 线程数
+            speed: 下载速度
+            eta: 预计完成时间
+        """
+        self.progress.emit({
+            "game": self.game_version,
+            "percent": percent,
+            "threads": threads,
+            "speed": speed,
+            "eta": eta
+        })
 
     def run(self):
         try:
@@ -178,7 +196,7 @@ class DownloadThread(QThread):
                 '--header', 'Sec-Fetch-Site: same-origin',
                 '--http-accept-gzip=true',
                 '--console-log-level=notice',
-                '--summary-interval=1',
+                '--summary-interval=0.5',  # 减小摘要间隔到0.5秒，提高进度更新频率
                 '--log-level=notice',
                 '--max-tries=3',
                 '--retry-wait=2',
@@ -193,7 +211,6 @@ class DownloadThread(QThread):
                 '--file-allocation=none',          # 禁用文件预分配加快开始
                 '--async-dns=true',                # 使用异步DNS
                 '--disable-ipv6=true',             # 禁用IPv6提高速度
-                '--quiet=true'                      # 减少非必要日志输出
             ])
             
             # 证书验证现在总是需要，因为我们依赖hosts文件
@@ -211,6 +228,10 @@ class DownloadThread(QThread):
             # 例如: #1 GID[...](  5%) CN:1 DL:10.5MiB/s ETA:1m30s
             progress_pattern = re.compile(r'\((\d{1,3})%\).*?CN:(\d+).*?DL:\s*([^\s]+).*?ETA:\s*([^\s\]]+)')
 
+            # 添加限流计时器，防止更新过于频繁导致UI卡顿
+            last_update_time = 0
+            update_interval = 0.2  # 限制UI更新频率，每0.2秒最多更新一次
+            
             full_output = []
             while self._is_running and self.process.poll() is None:
                 if self.process.stdout:
@@ -225,17 +246,26 @@ class DownloadThread(QThread):
 
                 match = progress_pattern.search(line)
                 if match:
-                    percent = int(match.group(1))
-                    threads = match.group(2)
-                    speed = match.group(3)
-                    eta = match.group(4)
-                    self.progress.emit({
-                        "game": self.game_version,
-                        "percent": percent,
-                        "threads": threads,
-                        "speed": speed,
-                        "eta": eta
-                    })
+                    # 检查是否达到更新间隔
+                    current_time = time.time()
+                    if current_time - last_update_time >= update_interval:
+                        percent = int(match.group(1))
+                        threads = match.group(2)
+                        speed = match.group(3)
+                        eta = match.group(4)
+                        
+                        # 直接更新UI，不经过事件队列，减少延迟
+                        QtCore.QMetaObject.invokeMethod(
+                            self, 
+                            "_emit_progress", 
+                            Qt.ConnectionType.DirectConnection,
+                            QtCore.Q_ARG(int, percent),
+                            QtCore.Q_ARG(str, threads),
+                            QtCore.Q_ARG(str, speed),
+                            QtCore.Q_ARG(str, eta)
+                        )
+                        
+                        last_update_time = current_time
 
             return_code = self.process.wait()
             
@@ -299,6 +329,9 @@ class ProgressWindow(QDialog):
         # 设置暂停/恢复状态
         self.is_paused = False
         
+        # 添加最后进度记录，用于优化UI更新
+        self._last_percent = -1
+        
     def update_pause_button_state(self, is_paused):
         """更新暂停按钮的显示状态
         
@@ -321,10 +354,17 @@ class ProgressWindow(QDialog):
         # 清除ETA值中可能存在的"]"符号
         if isinstance(eta, str):
             eta = eta.replace("]", "")
-
-        self.game_label.setText(f"正在下载 {game_version} 的补丁")
-        self.progress_bar.setValue(int(percent))
-        self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
+        
+        # 优化UI更新
+        if hasattr(self, '_last_percent') and self._last_percent == percent and percent < 100:
+            # 如果百分比没变，只更新速度和ETA信息
+            self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
+        else:
+            # 百分比变化或初次更新，更新所有信息
+            self._last_percent = percent
+            self.game_label.setText(f"正在下载 {game_version} 的补丁")
+            self.progress_bar.setValue(int(percent))
+            self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
 
         if percent == 100:
             self.pause_resume_button.setEnabled(False)
