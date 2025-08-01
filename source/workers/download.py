@@ -143,7 +143,7 @@ class DownloadThread(QThread):
                 self.finished.emit(False, "下载已手动停止。")
                 return
 
-            aria2c_path = resource_path("aria2c.exe")
+            aria2c_path = resource_path("aria2c-fast_x64.exe")
             download_dir = os.path.dirname(self._7z_path)
             file_name = os.path.basename(self._7z_path)
             
@@ -171,23 +171,23 @@ class DownloadThread(QThread):
                 '--header', 'Sec-Fetch-Mode: cors',
                 '--header', 'Sec-Fetch-Site: same-origin',
                 '--http-accept-gzip=true',
-                '--console-log-level=info',
+                '--console-log-level=notice',
                 '--summary-interval=1',
-                '--log-level=info',
+                '--log-level=notice',
                 '--max-tries=3',
                 '--retry-wait=2',
                 '--connect-timeout=60',
                 '--timeout=60',
                 '--auto-file-renaming=false',
                 '--allow-overwrite=true',
-                # 优化参数 - 使用aria2允许的最佳设置
-                '--split=128',                     # 增加分片数到128
-                '--max-connection-per-server=16',  # 最大允许值16
+                '--split=128',                     
+                '--max-connection-per-server=64',  
                 '--min-split-size=1M',             # 减小最小分片大小
                 '--optimize-concurrent-downloads=true',  # 优化并发下载
                 '--file-allocation=none',          # 禁用文件预分配加快开始
                 '--async-dns=true',                # 使用异步DNS
-                '--disable-ipv6=true'              # 禁用IPv6提高速度
+                '--disable-ipv6=true',             # 禁用IPv6提高速度
+                '--quiet=true'                      # 减少非必要日志输出
             ])
             
             # 证书验证现在总是需要，因为我们依赖hosts文件

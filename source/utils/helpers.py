@@ -24,7 +24,7 @@ def resource_path(relative_path):
         base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
         # 处理特殊的可执行文件和数据文件路径
-        if relative_path in ("aria2c.exe", "cfst.exe"):
+        if relative_path in ("aria2c-fast_x64.exe", "cfst.exe"):
             return os.path.join(base_path, 'bin', relative_path)
         elif relative_path in ("ip.txt", "ipv6.txt"):
             return os.path.join(base_path, 'data', relative_path)

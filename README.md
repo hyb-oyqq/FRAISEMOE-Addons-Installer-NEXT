@@ -92,6 +92,7 @@
 - [HTony03](https://github.com/HTony03)：对于原项目部分源码的重构、逻辑优化和功能实现提供了支持。
 - [钨鸮](https://github.com/ABSIDIA)：对于云端资源存储提供了支持。
 - [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest)：为本项目提供了 IP 优选功能的核心支持。
+- [hosxy/aria2-fast](https://github.com/hosxy/aria2-fast)：提供了修改版aria2c，提高了下载速度和性能。
 
 ## 📖 协议
 

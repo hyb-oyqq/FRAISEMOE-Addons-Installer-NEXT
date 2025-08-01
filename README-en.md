@@ -87,6 +87,7 @@ This project uses Git for version control. You can view the currently available 
 - [HTony03](https://github.com/HTony03): Provided support for refactoring, logic optimization, and feature implementation for parts of the original source code.
 - [钨鸮](https://github.com/ABSIDIA): Provided support for cloud resource storage.
 - [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest): Provided core support for the IP optimization feature of this project.
+- [hosxy/aria2-fast](https://github.com/hosxy/aria2-fast): Provided a modified version of aria2c for improved download speed and performance.
 
 ## 📖 License
 
