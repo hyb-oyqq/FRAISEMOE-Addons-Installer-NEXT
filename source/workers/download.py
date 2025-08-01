@@ -177,6 +177,14 @@ class DownloadThread(QThread):
             if hasattr(self.parent(), 'download_manager'):
                 # 从下载管理器获取线程数设置
                 thread_count = self.parent().download_manager.get_download_thread_count()
+                
+            # 检查是否启用IPv6支持
+            ipv6_enabled = False
+            if hasattr(self.parent(), 'config'):
+                ipv6_enabled = self.parent().config.get("ipv6_enabled", False)
+                
+            # 打印IPv6状态
+            print(f"IPv6支持状态: {ipv6_enabled}")
 
             # 将所有的优化参数应用于每个下载任务
             command.extend([
@@ -210,8 +218,14 @@ class DownloadThread(QThread):
                 '--optimize-concurrent-downloads=true',  # 优化并发下载
                 '--file-allocation=none',          # 禁用文件预分配加快开始
                 '--async-dns=true',                # 使用异步DNS
-                '--disable-ipv6=true',             # 禁用IPv6提高速度
             ])
+            
+            # 根据IPv6设置决定是否禁用IPv6
+            if not ipv6_enabled:
+                command.append('--disable-ipv6=true')
+                print("已禁用IPv6支持")
+            else:
+                print("已启用IPv6支持")
             
             # 证书验证现在总是需要，因为我们依赖hosts文件
             command.append('--check-certificate=false')

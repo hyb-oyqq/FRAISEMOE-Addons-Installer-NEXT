@@ -279,6 +279,21 @@ class UIManager:
         self.hosts_submenu.setFont(menu_font)
         self.hosts_submenu.setStyleSheet(menu_style)
         
+        # 添加IPv6支持选项
+        self.ipv6_action = QAction("启用IPv6支持", self.main_window, checkable=True)
+        self.ipv6_action.setFont(menu_font)
+        
+        # 检查配置中是否已启用IPv6
+        config = getattr(self.main_window, 'config', {})
+        ipv6_enabled = False
+        if isinstance(config, dict):
+            ipv6_enabled = config.get("ipv6_enabled", False)
+        
+        self.ipv6_action.setChecked(ipv6_enabled)
+        
+        # 连接IPv6支持切换事件
+        self.ipv6_action.triggered.connect(self.toggle_ipv6_support)
+        
         # 添加hosts子选项
         self.restore_hosts_action = QAction("还原软件备份的hosts文件", self.main_window)
         self.restore_hosts_action.setFont(menu_font)
@@ -350,6 +365,7 @@ class UIManager:
         # 添加Debug子菜单到开发者选项菜单
         self.dev_menu.addMenu(self.debug_submenu)
         self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
+        self.dev_menu.addAction(self.ipv6_action)  # 添加IPv6支持选项
 
     def show_menu(self, menu, button):
         """显示菜单
@@ -538,6 +554,53 @@ class UIManager:
                 QMessageBox.StandardButton.Ok,
             )
             msg_box.exec()
+            
+    def toggle_ipv6_support(self, enabled):
+        """切换IPv6支持
+        
+        Args:
+            enabled: 是否启用IPv6支持
+        """
+        print(f"Toggle IPv6 support: {enabled}")
+        
+        # 如果用户尝试启用IPv6，检查系统是否支持IPv6
+        if enabled:
+            # 检查是否可以访问IPv6
+            import socket
+            ipv6_supported = False
+            
+            try:
+                # 尝试创建一个IPv6套接字
+                socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+                ipv6_supported = True
+            except Exception:
+                ipv6_supported = False
+                
+            if not ipv6_supported:
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    "\n找不到IPv6地址，您的系统可能不支持IPv6。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+                
+                # 恢复复选框状态
+                self.ipv6_action.setChecked(False)
+                return
+                
+        # 保存设置到配置
+        if hasattr(self.main_window, 'config'):
+            self.main_window.config["ipv6_enabled"] = enabled
+            self.main_window.save_config(self.main_window.config)
+            
+        # 显示设置已保存的消息
+        status = "启用" if enabled else "禁用"
+        msg_box = msgbox_frame(
+            f"IPv6设置 - {APP_NAME}",
+            f"\nIPv6支持已{status}。新的设置将在下一次下载时生效。\n",
+            QMessageBox.StandardButton.Ok,
+        )
+        msg_box.exec()
             
     def clean_hosts_entries(self):
         """手动删除软件添加的hosts条目"""
