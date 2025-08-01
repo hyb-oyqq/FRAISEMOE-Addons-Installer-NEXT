@@ -75,6 +75,7 @@ This project uses Git for version control. You can view the currently available 
 1.  **Do not use modified applications**: The authors and developers are not responsible for any personal loss resulting from the use of applications from unknown or modified sources.
 2.  **Follow all rules**: Please strictly adhere to the rules in the [User Guide](https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ.md) and this document. The authors and developers are not liable for any violations.
 3.  **Free and Open Source**: This application is free and open-source. If you obtained it through a paid channel, please request a refund immediately and take action to protect your rights.
+4.  **System Compatibility**: This application has been tested and works with Windows 10/11 64-bit systems. Other platforms or versions have not been tested.
 
 ---
 

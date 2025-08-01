@@ -34,7 +34,7 @@
 
 > **2. Patches will not be installed for games you do not own ❗**
 
-> **3. This tool is only for installing patches, not for installing games ❗ It only runs on Windows x64 systems ❗**
+> **3. This tool is only for installing patches, not for installing games ❗ It only runs on Windows 10/11 64-bit systems (other platforms or versions have not been tested) ❗**
 
 > **4. The tool requires administrator privileges to run ❗
 > Reason: To prevent installation issues caused by the game running, the tool will get game process information to close the game before starting ❗**
