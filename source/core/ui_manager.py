@@ -283,11 +283,25 @@ class UIManager:
         self.ipv6_action = QAction("启用IPv6支持", self.main_window, checkable=True)
         self.ipv6_action.setFont(menu_font)
         
+        # 检查IPv6是否可用
+        ipv6_available = self._check_ipv6_availability()
+        if not ipv6_available:
+            self.ipv6_action.setText("启用IPv6支持 (不可用)")
+            self.ipv6_action.setEnabled(False)
+            self.ipv6_action.setToolTip("未检测到可用的IPv6连接")
+        
         # 检查配置中是否已启用IPv6
         config = getattr(self.main_window, 'config', {})
         ipv6_enabled = False
         if isinstance(config, dict):
             ipv6_enabled = config.get("ipv6_enabled", False)
+            # 如果配置中启用了IPv6但实际不可用，则强制禁用
+            if ipv6_enabled and not ipv6_available:
+                config["ipv6_enabled"] = False
+                ipv6_enabled = False
+                # 使用utils.save_config直接保存配置
+                from utils import save_config
+                save_config(config)
         
         self.ipv6_action.setChecked(ipv6_enabled)
         
@@ -367,6 +381,104 @@ class UIManager:
         self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
         self.dev_menu.addAction(self.ipv6_action)  # 添加IPv6支持选项
 
+    def _check_ipv6_availability(self):
+        """检查IPv6是否可用
+        
+        Returns:
+            bool: IPv6是否可用
+        """
+        import socket
+        import subprocess
+        import sys
+        import re
+        
+        # 方法1: 检查本地IPv6地址配置
+        def has_ipv6_address():
+            try:
+                # 尝试获取本机所有IPv6地址
+                addrs = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)
+                
+                for addr in addrs:
+                    # 检查是否是全局IPv6地址(非本地链路地址)
+                    ipv6 = addr[4][0]
+                    if not ipv6.startswith('fe80:') and not ipv6 == '::1':
+                        print(f"检测到IPv6地址: {ipv6}")
+                        return True
+                return False
+            except Exception as e:
+                print(f"获取IPv6地址时出错: {e}")
+                return False
+                
+        # 方法2: 尝试创建IPv6套接字
+        def can_create_ipv6_socket():
+            try:
+                socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+                return True
+            except Exception as e:
+                print(f"创建IPv6套接字失败: {e}")
+                return False
+        
+        # 方法3: ping6测试(仅适用于Windows)
+        def can_ping_ipv6():
+            if sys.platform != 'win32':
+                return False
+                
+            try:
+                # 尝试ping Cloudflare的IPv6地址
+                result = subprocess.run(
+                    ['ping', '-6', '-n', '1', '-w', '2000', '2606:4700:4700::1111'],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW
+                )
+                
+                # 检查是否ping成功
+                success = result.returncode == 0 and "回复" in result.stdout
+                if success:
+                    print("IPv6 ping测试成功")
+                return success
+            except Exception as e:
+                print(f"IPv6 ping测试失败: {e}")
+                return False
+        
+        # 方法4: 尝试TCP连接到公共IPv6服务器
+        def can_connect_ipv6_tcp():
+            # 尝试连接的IPv6服务器列表
+            ipv6_servers = [
+                ('2606:4700:4700::1111', 53),  # Cloudflare DNS
+                ('2001:4860:4860::8888', 53),  # Google DNS
+            ]
+            
+            for server, port in ipv6_servers:
+                try:
+                    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+                    sock.connect((server, port))
+                    sock.close()
+                    print(f"成功连接到IPv6服务器: {server}:{port}")
+                    return True
+                except Exception as e:
+                    print(f"连接IPv6服务器{server}:{port}失败: {e}")
+            
+            return False
+        
+        # 运行所有检测方法
+        methods = [
+            has_ipv6_address,
+            can_create_ipv6_socket,
+            can_ping_ipv6,
+            can_connect_ipv6_tcp
+        ]
+        
+        for method in methods:
+            if method():
+                print(f"IPv6检测通过: {method.__name__}")
+                return True
+        
+        print("所有IPv6检测方法均失败")
+        return False
+        
     def show_menu(self, menu, button):
         """显示菜单
         
@@ -565,21 +677,13 @@ class UIManager:
         
         # 如果用户尝试启用IPv6，检查系统是否支持IPv6
         if enabled:
-            # 检查是否可以访问IPv6
-            import socket
-            ipv6_supported = False
-            
-            try:
-                # 尝试创建一个IPv6套接字
-                socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-                ipv6_supported = True
-            except Exception:
-                ipv6_supported = False
+            # 使用改进的IPv6检测方法
+            ipv6_available = self._check_ipv6_availability()
                 
-            if not ipv6_supported:
+            if not ipv6_available:
                 msg_box = msgbox_frame(
                     f"错误 - {APP_NAME}",
-                    "\n找不到IPv6地址，您的系统可能不支持IPv6。\n",
+                    "\n未检测到可用的IPv6连接，无法启用IPv6支持。\n\n请确保您的网络环境支持IPv6且已正确配置。\n",
                     QMessageBox.StandardButton.Ok,
                 )
                 msg_box.exec()
@@ -591,7 +695,9 @@ class UIManager:
         # 保存设置到配置
         if hasattr(self.main_window, 'config'):
             self.main_window.config["ipv6_enabled"] = enabled
-            self.main_window.save_config(self.main_window.config)
+            # 直接使用utils.save_config保存配置
+            from utils import save_config
+            save_config(self.main_window.config)
             
         # 显示设置已保存的消息
         status = "启用" if enabled else "禁用"

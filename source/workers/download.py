@@ -204,7 +204,7 @@ class DownloadThread(QThread):
                 '--header', 'Sec-Fetch-Site: same-origin',
                 '--http-accept-gzip=true',
                 '--console-log-level=notice',
-                '--summary-interval=0.5',  # 减小摘要间隔到0.5秒，提高进度更新频率
+                '--summary-interval=1',  # 设置为最小整数值1秒，原值0.5不被aria2c支持
                 '--log-level=notice',
                 '--max-tries=3',
                 '--retry-wait=2',

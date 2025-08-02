@@ -333,7 +333,7 @@ class HostsManager:
             print(f"清理hosts文件失败: {e}")
             return False
 
-    def apply_ip(self, hostname, ip_address):
+    def apply_ip(self, hostname, ip_address, clean=True):
         if not self.original_content:
             if not self.backup():
                 return False
@@ -347,8 +347,9 @@ class HostsManager:
             return False
         
         try:
-            # 首先清理已有的同域名记录
-            self.clean_hostname_entries(hostname)
+            # 首先清理已有的同域名记录（如果需要）
+            if clean:
+                self.clean_hostname_entries(hostname)
             
             # 然后添加新记录
             lines = self.original_content.splitlines()

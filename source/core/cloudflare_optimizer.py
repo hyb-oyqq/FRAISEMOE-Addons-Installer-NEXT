@@ -319,18 +319,18 @@ class CloudflareOptimizer:
                 success_message += f"IPv6: {self.optimized_ipv6}\n"
                 
             if hostname:
-                # 先清理可能存在的旧记录
+                # 先清理可能存在的旧记录（只清理一次）
                 self.hosts_manager.clean_hostname_entries(hostname)
                 
                 success = False
                 
                 # 应用优选IP到hosts文件
                 if ipv4_success:
-                    success = self.hosts_manager.apply_ip(hostname, self.optimized_ip) or success
+                    success = self.hosts_manager.apply_ip(hostname, self.optimized_ip, clean=False) or success
                     
                 # 如果启用IPv6并且找到了IPv6地址，也应用到hosts
                 if ipv6_success:
-                    success = self.hosts_manager.apply_ip(hostname, self.optimized_ipv6) or success
+                    success = self.hosts_manager.apply_ip(hostname, self.optimized_ipv6, clean=False) or success
                 
                 if success:
                     msg_box = QtWidgets.QMessageBox(self.main_window)
