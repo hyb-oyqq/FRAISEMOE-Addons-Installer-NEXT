@@ -138,23 +138,6 @@ class DownloadThread(QThread):
         """返回当前下载是否处于暂停状态"""
         return self._is_paused
     
-    def _emit_progress(self, percent, threads, speed, eta):
-        """用于直接连接的进度发射方法
-        
-        Args:
-            percent: 完成百分比
-            threads: 线程数
-            speed: 下载速度
-            eta: 预计完成时间
-        """
-        self.progress.emit({
-            "game": self.game_version,
-            "percent": percent,
-            "threads": threads,
-            "speed": speed,
-            "eta": eta
-        })
-
     def run(self):
         try:
             if not self._is_running:
@@ -204,7 +187,7 @@ class DownloadThread(QThread):
                 '--header', 'Sec-Fetch-Site: same-origin',
                 '--http-accept-gzip=true',
                 '--console-log-level=notice',
-                '--summary-interval=1',  # 设置为最小整数值1秒，原值0.5不被aria2c支持
+                '--summary-interval=1',  
                 '--log-level=notice',
                 '--max-tries=3',
                 '--retry-wait=2',
@@ -268,16 +251,14 @@ class DownloadThread(QThread):
                         speed = match.group(3)
                         eta = match.group(4)
                         
-                        # 直接更新UI，不经过事件队列，减少延迟
-                        QtCore.QMetaObject.invokeMethod(
-                            self, 
-                            "_emit_progress", 
-                            Qt.ConnectionType.DirectConnection,
-                            QtCore.Q_ARG(int, percent),
-                            QtCore.Q_ARG(str, threads),
-                            QtCore.Q_ARG(str, speed),
-                            QtCore.Q_ARG(str, eta)
-                        )
+                        # 直接发送进度信号，不使用invokeMethod
+                        self.progress.emit({
+                            "game": self.game_version,
+                            "percent": percent,
+                            "threads": threads,
+                            "speed": speed,
+                            "eta": eta
+                        })
                         
                         last_update_time = current_time
 

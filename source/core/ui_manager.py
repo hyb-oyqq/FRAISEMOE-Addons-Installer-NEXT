@@ -283,8 +283,19 @@ class UIManager:
         self.ipv6_action = QAction("启用IPv6支持", self.main_window, checkable=True)
         self.ipv6_action.setFont(menu_font)
         
+        # 添加IPv6检测按钮，用于显示详细信息
+        self.ipv6_test_action = QAction("测试IPv6连接", self.main_window)
+        self.ipv6_test_action.setFont(menu_font)
+        self.ipv6_test_action.triggered.connect(self.show_ipv6_details)
+        
+        # 创建IPv6支持子菜单
+        self.ipv6_submenu = QMenu("IPv6支持", self.main_window)
+        self.ipv6_submenu.setFont(menu_font)
+        self.ipv6_submenu.setStyleSheet(menu_style)
+        
         # 检查IPv6是否可用
         ipv6_available = self._check_ipv6_availability()
+        
         if not ipv6_available:
             self.ipv6_action.setText("启用IPv6支持 (不可用)")
             self.ipv6_action.setEnabled(False)
@@ -307,6 +318,10 @@ class UIManager:
         
         # 连接IPv6支持切换事件
         self.ipv6_action.triggered.connect(self.toggle_ipv6_support)
+        
+        # 将选项添加到IPv6子菜单
+        self.ipv6_submenu.addAction(self.ipv6_action)
+        self.ipv6_submenu.addAction(self.ipv6_test_action)
         
         # 添加hosts子选项
         self.restore_hosts_action = QAction("还原软件备份的hosts文件", self.main_window)
@@ -379,105 +394,170 @@ class UIManager:
         # 添加Debug子菜单到开发者选项菜单
         self.dev_menu.addMenu(self.debug_submenu)
         self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
-        self.dev_menu.addAction(self.ipv6_action)  # 添加IPv6支持选项
-
+        self.dev_menu.addMenu(self.ipv6_submenu)  # 添加IPv6支持子菜单
+        
     def _check_ipv6_availability(self):
         """检查IPv6是否可用
+        
+        通过访问IPv6专用图片URL测试IPv6连接
         
         Returns:
             bool: IPv6是否可用
         """
-        import socket
-        import subprocess
-        import sys
-        import re
+        import urllib.request
+        import ssl
+        import time
         
-        # 方法1: 检查本地IPv6地址配置
-        def has_ipv6_address():
-            try:
-                # 尝试获取本机所有IPv6地址
-                addrs = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET6)
-                
-                for addr in addrs:
-                    # 检查是否是全局IPv6地址(非本地链路地址)
-                    ipv6 = addr[4][0]
-                    if not ipv6.startswith('fe80:') and not ipv6 == '::1':
-                        print(f"检测到IPv6地址: {ipv6}")
-                        return True
-                return False
-            except Exception as e:
-                print(f"获取IPv6地址时出错: {e}")
-                return False
-                
-        # 方法2: 尝试创建IPv6套接字
-        def can_create_ipv6_socket():
-            try:
-                socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-                return True
-            except Exception as e:
-                print(f"创建IPv6套接字失败: {e}")
-                return False
+        print("开始检测IPv6可用性...")
         
-        # 方法3: ping6测试(仅适用于Windows)
-        def can_ping_ipv6():
-            if sys.platform != 'win32':
-                return False
-                
-            try:
-                # 尝试ping Cloudflare的IPv6地址
-                result = subprocess.run(
-                    ['ping', '-6', '-n', '1', '-w', '2000', '2606:4700:4700::1111'],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW
-                )
-                
-                # 检查是否ping成功
-                success = result.returncode == 0 and "回复" in result.stdout
-                if success:
-                    print("IPv6 ping测试成功")
-                return success
-            except Exception as e:
-                print(f"IPv6 ping测试失败: {e}")
-                return False
+        # IPv6测试URL - 这是一个只能通过IPv6访问的资源
+        ipv6_test_url = "https://ipv6.testipv6.cn/images-nc/knob_green.png?&testdomain=www.test-ipv6.com&testname=sites"
         
-        # 方法4: 尝试TCP连接到公共IPv6服务器
-        def can_connect_ipv6_tcp():
-            # 尝试连接的IPv6服务器列表
-            ipv6_servers = [
-                ('2606:4700:4700::1111', 53),  # Cloudflare DNS
-                ('2001:4860:4860::8888', 53),  # Google DNS
-            ]
+        try:
+            # 设置3秒超时，避免长时间等待
+            context = ssl._create_unverified_context()
             
-            for server, port in ipv6_servers:
-                try:
-                    sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-                    sock.settimeout(2)
-                    sock.connect((server, port))
-                    sock.close()
-                    print(f"成功连接到IPv6服务器: {server}:{port}")
+            # 创建请求并添加常见的HTTP头
+            req = urllib.request.Request(ipv6_test_url)
+            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+            req.add_header('Accept', 'image/webp,image/apng,image/*,*/*;q=0.8')
+            
+            # 尝试连接
+            start_time = time.time()
+            with urllib.request.urlopen(req, timeout=3, context=context) as response:
+                # 读取图片数据
+                image_data = response.read()
+                
+                # 检查是否成功
+                if response.status == 200 and len(image_data) > 0:
+                    elapsed = time.time() - start_time
+                    print(f"IPv6测试成功! 用时: {elapsed:.2f}秒")
                     return True
-                except Exception as e:
-                    print(f"连接IPv6服务器{server}:{port}失败: {e}")
-            
+                else:
+                    print(f"IPv6测试失败: 状态码 {response.status}")
+                    return False
+        except Exception as e:
+            print(f"IPv6测试失败: {e}")
             return False
+    
+    def show_ipv6_details(self):
+        """显示IPv6连接详情"""
+        import threading
+        import urllib.request
+        import ssl
+        import time
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit, QProgressBar
+        from PySide6.QtCore import Signal, QObject
         
-        # 运行所有检测方法
-        methods = [
-            has_ipv6_address,
-            can_create_ipv6_socket,
-            can_ping_ipv6,
-            can_connect_ipv6_tcp
-        ]
+        class SignalEmitter(QObject):
+            update_signal = Signal(str)
+            complete_signal = Signal(bool, float)
         
-        for method in methods:
-            if method():
-                print(f"IPv6检测通过: {method.__name__}")
-                return True
+        # 创建对话框
+        dialog = QDialog(self.main_window)
+        dialog.setWindowTitle(f"IPv6连接测试 - {APP_NAME}")
+        dialog.resize(500, 300)
         
-        print("所有IPv6检测方法均失败")
-        return False
+        # 创建布局
+        layout = QVBoxLayout(dialog)
+        
+        # 创建状态标签
+        status_label = QLabel("正在测试IPv6连接...", dialog)
+        layout.addWidget(status_label)
+        
+        # 创建进度条
+        progress = QProgressBar(dialog)
+        progress.setRange(0, 0)  # 不确定进度
+        layout.addWidget(progress)
+        
+        # 创建结果文本框
+        result_text = QTextEdit(dialog)
+        result_text.setReadOnly(True)
+        layout.addWidget(result_text)
+        
+        # 创建关闭按钮
+        close_button = QPushButton("关闭", dialog)
+        close_button.clicked.connect(dialog.accept)
+        close_button.setEnabled(False)  # 测试完成前禁用
+        layout.addWidget(close_button)
+        
+        # 信号发射器
+        signal_emitter = SignalEmitter()
+        
+        # 连接信号
+        signal_emitter.update_signal.connect(
+            lambda text: result_text.append(text)
+        )
+        
+        def on_test_complete(success, elapsed_time):
+            # 停止进度条动画
+            progress.setRange(0, 100)
+            progress.setValue(100 if success else 0)
+            
+            # 更新状态
+            if success:
+                status_label.setText(f"IPv6连接测试完成: 可用 (用时: {elapsed_time:.2f}秒)")
+            else:
+                status_label.setText("IPv6连接测试完成: 不可用")
+            
+            # 启用关闭按钮
+            close_button.setEnabled(True)
+        
+        signal_emitter.complete_signal.connect(on_test_complete)
+        
+        # 测试函数
+        def test_ipv6():
+            try:
+                signal_emitter.update_signal.emit("正在测试IPv6连接，请稍候...")
+                
+                # 使用与_check_ipv6_availability相同的测试URL
+                ipv6_test_url = "https://ipv6.testipv6.cn/images-nc/knob_green.png?&testdomain=www.test-ipv6.com&testname=sites"
+                
+                try:
+                    # 设置3秒超时
+                    context = ssl._create_unverified_context()
+                    req = urllib.request.Request(ipv6_test_url)
+                    req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
+                    req.add_header('Accept', 'image/webp,image/apng,image/*,*/*;q=0.8')
+                    
+                    # 记录开始时间
+                    start_time = time.time()
+                    signal_emitter.update_signal.emit(f"开始连接: {ipv6_test_url}")
+                    
+                    # 尝试下载图片
+                    with urllib.request.urlopen(req, timeout=5, context=context) as response:
+                        image_data = response.read()
+                        
+                        # 计算耗时
+                        elapsed_time = time.time() - start_time
+                        
+                        # 检查是否成功
+                        if response.status == 200 and len(image_data) > 0:
+                            signal_emitter.update_signal.emit(f"✓ 成功! 已下载 {len(image_data)} 字节")
+                            signal_emitter.update_signal.emit(f"✓ 响应时间: {elapsed_time:.2f}秒")
+                            signal_emitter.update_signal.emit("\n结论: 您的网络支持IPv6连接 ✓")
+                            signal_emitter.complete_signal.emit(True, elapsed_time)
+                            return
+                        else:
+                            signal_emitter.update_signal.emit(f"✗ 失败: 状态码 {response.status}")
+                            signal_emitter.update_signal.emit("\n结论: 您的网络不支持IPv6连接 ✗")
+                            signal_emitter.complete_signal.emit(False, 0)
+                            return
+                            
+                except Exception as e:
+                    signal_emitter.update_signal.emit(f"✗ 连接失败: {e}")
+                    signal_emitter.update_signal.emit("\n结论: 您的网络不支持IPv6连接 ✗")
+                    signal_emitter.complete_signal.emit(False, 0)
+                
+            except Exception as e:
+                signal_emitter.update_signal.emit(f"测试过程中出错: {e}")
+                signal_emitter.complete_signal.emit(False, 0)
+        
+        # 启动测试线程
+        threading.Thread(target=test_ipv6, daemon=True).start()
+        
+        # 显示对话框
+        dialog.exec()
         
     def show_menu(self, menu, button):
         """显示菜单
@@ -675,9 +755,22 @@ class UIManager:
         """
         print(f"Toggle IPv6 support: {enabled}")
         
-        # 如果用户尝试启用IPv6，检查系统是否支持IPv6
+        # 如果用户尝试启用IPv6，检查系统是否支持IPv6并发出警告
         if enabled:
-            # 使用改进的IPv6检测方法
+            # 先显示警告提示
+            warning_msg_box = msgbox_frame(
+                f"警告 - {APP_NAME}",
+                "\n目前IPv6支持功能仍在测试阶段，可能会发生意料之外的bug！\n\n您确定需要启用吗？\n",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            response = warning_msg_box.exec()
+            
+            # 如果用户选择不启用，直接返回
+            if response != QMessageBox.StandardButton.Yes:
+                self.ipv6_action.setChecked(False)
+                return
+            
+            # 用户确认启用后，继续检查IPv6可用性
             ipv6_available = self._check_ipv6_availability()
                 
             if not ipv6_available:
