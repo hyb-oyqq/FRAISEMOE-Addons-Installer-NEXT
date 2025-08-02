@@ -302,7 +302,11 @@ class IpOptimizer:
 
 
 class IpOptimizerThread(QThread):
-    """用于在后台线程中运行IP优化的类"""
+    """用于在后台线程中运行IP优化的类
+    
+    注意：IPv6连接测试功能已迁移至IPv6Manager类，
+    本类仅负责IP优化相关功能
+    """
     finished = Signal(str)
 
     def __init__(self, url, parent=None, use_ipv6=False):

@@ -28,6 +28,7 @@ from core import (
     MultiStageAnimations, UIManager, DownloadManager, DebugManager,
     WindowManager, GameDetector, PatchManager, ConfigManager
 )
+from core.ipv6_manager import IPv6Manager
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -55,23 +56,30 @@ class MainWindow(QMainWindow):
         self.hash_manager = HashManager(BLOCK_SIZE)
         self.admin_privileges = AdminPrivileges()
         
-        # 初始化管理器
+        # 初始化各种管理器
+        # 1. 首先创建必要的基础管理器
         self.animator = MultiStageAnimations(self.ui, self)
-        self.ui_manager = UIManager(self)
-        
-        # 首先设置UI - 确保debug_action已初始化
-        self.ui_manager.setup_ui()
-        
-        # 初始化新的管理器类
         self.window_manager = WindowManager(self)
         self.debug_manager = DebugManager(self)
-        # 为debug_manager设置ui_manager引用
+        
+        # 2. 初始化IPv6Manager(应在UIManager之前)
+        self.ipv6_manager = IPv6Manager(self)
+        
+        # 3. 创建UIManager(依赖IPv6Manager)
+        self.ui_manager = UIManager(self)
+        
+        # 4. 为debug_manager设置ui_manager引用
         self.debug_manager.set_ui_manager(self.ui_manager)
+        
+        # 设置UI - 确保debug_action已初始化
+        self.ui_manager.setup_ui()
+        
+        # 5. 初始化其他管理器
         self.config_manager = ConfigManager(APP_NAME, CONFIG_URL, UA, self.debug_manager)
         self.game_detector = GameDetector(GAME_INFO, self.debug_manager)
         self.patch_manager = PatchManager(APP_NAME, GAME_INFO, self.debug_manager)
         
-        # 初始化下载管理器 - 应该放在其他管理器之后，因为它可能依赖于它们
+        # 6. 初始化下载管理器 - 放在最后，因为它可能依赖于其他管理器
         self.download_manager = DownloadManager(self)
         
         # 加载用户下载线程设置

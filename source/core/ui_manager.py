@@ -6,6 +6,7 @@ import os
 
 from utils import load_base64_image, msgbox_frame, resource_path
 from data.config import APP_NAME, APP_VERSION, LOG_FILE
+from core.ipv6_manager import IPv6Manager  # 导入新的IPv6Manager类
 
 class UIManager:
     def __init__(self, main_window):
@@ -23,6 +24,9 @@ class UIManager:
         self.privacy_menu = None  # 隐私协议菜单
         self.about_menu = None    # 关于菜单
         self.about_btn = None     # 关于按钮
+        
+        # 获取主窗口的IPv6Manager实例
+        self.ipv6_manager = getattr(main_window, 'ipv6_manager', None)
         
     def setup_ui(self):
         """设置UI元素，包括窗口图标、标题和菜单"""
@@ -286,7 +290,10 @@ class UIManager:
         # 添加IPv6检测按钮，用于显示详细信息
         self.ipv6_test_action = QAction("测试IPv6连接", self.main_window)
         self.ipv6_test_action.setFont(menu_font)
-        self.ipv6_test_action.triggered.connect(self.show_ipv6_details)
+        if self.ipv6_manager:
+            self.ipv6_test_action.triggered.connect(self.ipv6_manager.show_ipv6_details)
+        else:
+            self.ipv6_test_action.triggered.connect(self.show_ipv6_manager_not_ready)
         
         # 创建IPv6支持子菜单
         self.ipv6_submenu = QMenu("IPv6支持", self.main_window)
@@ -294,7 +301,9 @@ class UIManager:
         self.ipv6_submenu.setStyleSheet(menu_style)
         
         # 检查IPv6是否可用
-        ipv6_available = self._check_ipv6_availability()
+        ipv6_available = False
+        if self.ipv6_manager:
+            ipv6_available = self.ipv6_manager.check_ipv6_availability()
         
         if not ipv6_available:
             self.ipv6_action.setText("启用IPv6支持 (不可用)")
@@ -317,7 +326,7 @@ class UIManager:
         self.ipv6_action.setChecked(ipv6_enabled)
         
         # 连接IPv6支持切换事件
-        self.ipv6_action.triggered.connect(self.toggle_ipv6_support)
+        self.ipv6_action.triggered.connect(self._handle_ipv6_toggle)
         
         # 将选项添加到IPv6子菜单
         self.ipv6_submenu.addAction(self.ipv6_action)
@@ -332,9 +341,15 @@ class UIManager:
         self.clean_hosts_action.setFont(menu_font)
         self.clean_hosts_action.triggered.connect(self.clean_hosts_entries)
         
+        # 添加打开hosts文件选项
+        self.open_hosts_action = QAction("打开hosts文件", self.main_window)
+        self.open_hosts_action.setFont(menu_font)
+        self.open_hosts_action.triggered.connect(self.open_hosts_file)
+        
         # 添加到hosts子菜单
         self.hosts_submenu.addAction(self.restore_hosts_action)
         self.hosts_submenu.addAction(self.clean_hosts_action)
+        self.hosts_submenu.addAction(self.open_hosts_action)
         
         # 创建Debug开关选项
         self.debug_action = QAction("Debug开关", self.main_window, checkable=True)
@@ -396,169 +411,26 @@ class UIManager:
         self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
         self.dev_menu.addMenu(self.ipv6_submenu)  # 添加IPv6支持子菜单
         
-    def _check_ipv6_availability(self):
-        """检查IPv6是否可用
+    def _handle_ipv6_toggle(self, enabled):
+        """处理IPv6支持切换事件
         
-        通过访问IPv6专用图片URL测试IPv6连接
-        
-        Returns:
-            bool: IPv6是否可用
+        Args:
+            enabled: 是否启用IPv6支持
         """
-        import urllib.request
-        import ssl
-        import time
-        
-        print("开始检测IPv6可用性...")
-        
-        # IPv6测试URL - 这是一个只能通过IPv6访问的资源
-        ipv6_test_url = "https://ipv6.testipv6.cn/images-nc/knob_green.png?&testdomain=www.test-ipv6.com&testname=sites"
-        
-        try:
-            # 设置3秒超时，避免长时间等待
-            context = ssl._create_unverified_context()
+        if not self.ipv6_manager:
+            # 显示错误提示
+            msg_box = self._create_message_box("错误", "\nIPv6管理器尚未初始化，请稍后再试。\n")
+            msg_box.exec()
+            # 恢复复选框状态
+            self.ipv6_action.setChecked(not enabled)
+            return
             
-            # 创建请求并添加常见的HTTP头
-            req = urllib.request.Request(ipv6_test_url)
-            req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
-            req.add_header('Accept', 'image/webp,image/apng,image/*,*/*;q=0.8')
-            
-            # 尝试连接
-            start_time = time.time()
-            with urllib.request.urlopen(req, timeout=3, context=context) as response:
-                # 读取图片数据
-                image_data = response.read()
-                
-                # 检查是否成功
-                if response.status == 200 and len(image_data) > 0:
-                    elapsed = time.time() - start_time
-                    print(f"IPv6测试成功! 用时: {elapsed:.2f}秒")
-                    return True
-                else:
-                    print(f"IPv6测试失败: 状态码 {response.status}")
-                    return False
-        except Exception as e:
-            print(f"IPv6测试失败: {e}")
-            return False
-    
-    def show_ipv6_details(self):
-        """显示IPv6连接详情"""
-        import threading
-        import urllib.request
-        import ssl
-        import time
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit, QProgressBar
-        from PySide6.QtCore import Signal, QObject
-        
-        class SignalEmitter(QObject):
-            update_signal = Signal(str)
-            complete_signal = Signal(bool, float)
-        
-        # 创建对话框
-        dialog = QDialog(self.main_window)
-        dialog.setWindowTitle(f"IPv6连接测试 - {APP_NAME}")
-        dialog.resize(500, 300)
-        
-        # 创建布局
-        layout = QVBoxLayout(dialog)
-        
-        # 创建状态标签
-        status_label = QLabel("正在测试IPv6连接...", dialog)
-        layout.addWidget(status_label)
-        
-        # 创建进度条
-        progress = QProgressBar(dialog)
-        progress.setRange(0, 0)  # 不确定进度
-        layout.addWidget(progress)
-        
-        # 创建结果文本框
-        result_text = QTextEdit(dialog)
-        result_text.setReadOnly(True)
-        layout.addWidget(result_text)
-        
-        # 创建关闭按钮
-        close_button = QPushButton("关闭", dialog)
-        close_button.clicked.connect(dialog.accept)
-        close_button.setEnabled(False)  # 测试完成前禁用
-        layout.addWidget(close_button)
-        
-        # 信号发射器
-        signal_emitter = SignalEmitter()
-        
-        # 连接信号
-        signal_emitter.update_signal.connect(
-            lambda text: result_text.append(text)
-        )
-        
-        def on_test_complete(success, elapsed_time):
-            # 停止进度条动画
-            progress.setRange(0, 100)
-            progress.setValue(100 if success else 0)
-            
-            # 更新状态
-            if success:
-                status_label.setText(f"IPv6连接测试完成: 可用 (用时: {elapsed_time:.2f}秒)")
-            else:
-                status_label.setText("IPv6连接测试完成: 不可用")
-            
-            # 启用关闭按钮
-            close_button.setEnabled(True)
-        
-        signal_emitter.complete_signal.connect(on_test_complete)
-        
-        # 测试函数
-        def test_ipv6():
-            try:
-                signal_emitter.update_signal.emit("正在测试IPv6连接，请稍候...")
-                
-                # 使用与_check_ipv6_availability相同的测试URL
-                ipv6_test_url = "https://ipv6.testipv6.cn/images-nc/knob_green.png?&testdomain=www.test-ipv6.com&testname=sites"
-                
-                try:
-                    # 设置3秒超时
-                    context = ssl._create_unverified_context()
-                    req = urllib.request.Request(ipv6_test_url)
-                    req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
-                    req.add_header('Accept', 'image/webp,image/apng,image/*,*/*;q=0.8')
-                    
-                    # 记录开始时间
-                    start_time = time.time()
-                    signal_emitter.update_signal.emit(f"开始连接: {ipv6_test_url}")
-                    
-                    # 尝试下载图片
-                    with urllib.request.urlopen(req, timeout=5, context=context) as response:
-                        image_data = response.read()
-                        
-                        # 计算耗时
-                        elapsed_time = time.time() - start_time
-                        
-                        # 检查是否成功
-                        if response.status == 200 and len(image_data) > 0:
-                            signal_emitter.update_signal.emit(f"✓ 成功! 已下载 {len(image_data)} 字节")
-                            signal_emitter.update_signal.emit(f"✓ 响应时间: {elapsed_time:.2f}秒")
-                            signal_emitter.update_signal.emit("\n结论: 您的网络支持IPv6连接 ✓")
-                            signal_emitter.complete_signal.emit(True, elapsed_time)
-                            return
-                        else:
-                            signal_emitter.update_signal.emit(f"✗ 失败: 状态码 {response.status}")
-                            signal_emitter.update_signal.emit("\n结论: 您的网络不支持IPv6连接 ✗")
-                            signal_emitter.complete_signal.emit(False, 0)
-                            return
-                            
-                except Exception as e:
-                    signal_emitter.update_signal.emit(f"✗ 连接失败: {e}")
-                    signal_emitter.update_signal.emit("\n结论: 您的网络不支持IPv6连接 ✗")
-                    signal_emitter.complete_signal.emit(False, 0)
-                
-            except Exception as e:
-                signal_emitter.update_signal.emit(f"测试过程中出错: {e}")
-                signal_emitter.complete_signal.emit(False, 0)
-        
-        # 启动测试线程
-        threading.Thread(target=test_ipv6, daemon=True).start()
-        
-        # 显示对话框
-        dialog.exec()
-        
+        # 使用IPv6Manager处理切换
+        success = self.ipv6_manager.toggle_ipv6_support(enabled)
+        # 如果切换失败，恢复复选框状态
+        if not success:
+            self.ipv6_action.setChecked(not enabled)
+
     def show_menu(self, menu, button):
         """显示菜单
         
@@ -608,8 +480,8 @@ class UIManager:
     def revoke_privacy_agreement(self):
         """撤回隐私协议同意，并重启软件"""
         # 创建确认对话框
-        msg_box = msgbox_frame(
-            f"确认操作 - {APP_NAME}",
+        msg_box = self._create_message_box(
+            "确认操作",
             "\n您确定要撤回隐私协议同意吗？\n\n撤回后软件将立即重启，您需要重新阅读并同意隐私协议。\n",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
@@ -628,10 +500,9 @@ class UIManager:
                 privacy_manager = PrivacyManager()
                 if privacy_manager.reset_privacy_agreement():
                     # 显示重启提示
-                    restart_msg = msgbox_frame(
-                        f"操作成功 - {APP_NAME}",
-                        "\n已成功撤回隐私协议同意。\n\n软件将立即重启。\n",
-                        QMessageBox.StandardButton.Ok,
+                    restart_msg = self._create_message_box(
+                        "操作成功",
+                        "\n已成功撤回隐私协议同意。\n\n软件将立即重启。\n"
                     )
                     restart_msg.exec()
                     
@@ -649,28 +520,40 @@ class UIManager:
                     sys.exit(0)
                 else:
                     # 显示失败提示
-                    fail_msg = msgbox_frame(
-                        f"操作失败 - {APP_NAME}",
-                        "\n撤回隐私协议同意失败。\n\n请检查应用权限或稍后再试。\n",
-                        QMessageBox.StandardButton.Ok,
+                    fail_msg = self._create_message_box(
+                        "操作失败",
+                        "\n撤回隐私协议同意失败。\n\n请检查应用权限或稍后再试。\n"
                     )
                     fail_msg.exec()
             except Exception as e:
                 # 显示错误提示
-                error_msg = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    f"\n撤回隐私协议同意时发生错误：\n\n{str(e)}\n",
-                    QMessageBox.StandardButton.Ok,
+                error_msg = self._create_message_box(
+                    "错误",
+                    f"\n撤回隐私协议同意时发生错误：\n\n{str(e)}\n"
                 )
                 error_msg.exec()
 
+    def _create_message_box(self, title, message, buttons=QMessageBox.StandardButton.Ok):
+        """创建统一风格的消息框
+
+        Args:
+            title: 消息框标题
+            message: 消息内容
+            buttons: 按钮类型，默认为确定按钮
+
+        Returns:
+            QMessageBox: 配置好的消息框实例
+        """
+        msg_box = msgbox_frame(
+            f"{title} - {APP_NAME}",
+            message,
+            buttons,
+        )
+        return msg_box
+        
     def show_under_development(self):
         """显示功能正在开发中的提示"""
-        msg_box = msgbox_frame(
-            f"提示 - {APP_NAME}",
-            "\n该功能正在开发中，敬请期待！\n",
-            QMessageBox.StandardButton.Ok,
-        )
+        msg_box = self._create_message_box("提示", "\n该功能正在开发中，敬请期待！\n")
         msg_box.exec()
         
     def show_download_thread_settings(self):
@@ -679,36 +562,20 @@ class UIManager:
             self.main_window.download_manager.show_download_thread_settings()
         else:
             # 如果下载管理器不可用，显示错误信息
-            msg_box = msgbox_frame(
-                f"错误 - {APP_NAME}",
-                "\n下载管理器未初始化，无法修改下载线程设置。\n",
-                QMessageBox.StandardButton.Ok,
-            )
+            msg_box = self._create_message_box("错误", "\n下载管理器未初始化，无法修改下载线程设置。\n")
             msg_box.exec()
         
     def open_log_file(self):
         """打开log.txt文件"""
-        if os.path.exists(LOG_FILE):
-            try:
-                # 使用操作系统默认程序打开日志文件
-                if os.name == 'nt':  # Windows
-                    os.startfile(LOG_FILE)
-                else:  # macOS 和 Linux
-                    import subprocess
-                    subprocess.call(['xdg-open', LOG_FILE])
-            except Exception as e:
-                msg_box = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    f"\n打开log.txt文件失败：\n\n{str(e)}\n",
-                    QMessageBox.StandardButton.Ok,
-                )
-                msg_box.exec()
-        else:
-            msg_box = msgbox_frame(
-                f"提示 - {APP_NAME}",
-                "\nlog.txt文件不存在，请确保Debug模式已开启并生成日志。\n",
-                QMessageBox.StandardButton.Ok,
-            )
+        try:
+            # 使用操作系统默认程序打开日志文件
+            if os.name == 'nt':  # Windows
+                os.startfile(LOG_FILE)
+            else:  # macOS 和 Linux
+                import subprocess
+                subprocess.call(['xdg-open', LOG_FILE])
+        except Exception as e:
+            msg_box = self._create_message_box("错误", f"\n打开log.txt文件失败：\n\n{str(e)}\n")
             msg_box.exec()
             
     def restore_hosts_backup(self):
@@ -719,87 +586,17 @@ class UIManager:
                 result = self.main_window.download_manager.hosts_manager.restore()
                 
                 if result:
-                    msg_box = msgbox_frame(
-                        f"成功 - {APP_NAME}",
-                        "\nhosts文件已成功还原为备份版本。\n",
-                        QMessageBox.StandardButton.Ok,
-                    )
+                    msg_box = self._create_message_box("成功", "\nhosts文件已成功还原为备份版本。\n")
                 else:
-                    msg_box = msgbox_frame(
-                        f"警告 - {APP_NAME}",
-                        "\n还原hosts文件失败或没有找到备份文件。\n",
-                        QMessageBox.StandardButton.Ok,
-                    )
+                    msg_box = self._create_message_box("警告", "\n还原hosts文件失败或没有找到备份文件。\n")
                 
                 msg_box.exec()
             except Exception as e:
-                msg_box = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    f"\n还原hosts文件时发生错误：\n\n{str(e)}\n",
-                    QMessageBox.StandardButton.Ok,
-                )
+                msg_box = self._create_message_box("错误", f"\n还原hosts文件时发生错误：\n\n{str(e)}\n")
                 msg_box.exec()
         else:
-            msg_box = msgbox_frame(
-                f"错误 - {APP_NAME}",
-                "\n无法访问hosts管理器。\n",
-                QMessageBox.StandardButton.Ok,
-            )
+            msg_box = self._create_message_box("错误", "\n无法访问hosts管理器。\n")
             msg_box.exec()
-            
-    def toggle_ipv6_support(self, enabled):
-        """切换IPv6支持
-        
-        Args:
-            enabled: 是否启用IPv6支持
-        """
-        print(f"Toggle IPv6 support: {enabled}")
-        
-        # 如果用户尝试启用IPv6，检查系统是否支持IPv6并发出警告
-        if enabled:
-            # 先显示警告提示
-            warning_msg_box = msgbox_frame(
-                f"警告 - {APP_NAME}",
-                "\n目前IPv6支持功能仍在测试阶段，可能会发生意料之外的bug！\n\n您确定需要启用吗？\n",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            response = warning_msg_box.exec()
-            
-            # 如果用户选择不启用，直接返回
-            if response != QMessageBox.StandardButton.Yes:
-                self.ipv6_action.setChecked(False)
-                return
-            
-            # 用户确认启用后，继续检查IPv6可用性
-            ipv6_available = self._check_ipv6_availability()
-                
-            if not ipv6_available:
-                msg_box = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    "\n未检测到可用的IPv6连接，无法启用IPv6支持。\n\n请确保您的网络环境支持IPv6且已正确配置。\n",
-                    QMessageBox.StandardButton.Ok,
-                )
-                msg_box.exec()
-                
-                # 恢复复选框状态
-                self.ipv6_action.setChecked(False)
-                return
-                
-        # 保存设置到配置
-        if hasattr(self.main_window, 'config'):
-            self.main_window.config["ipv6_enabled"] = enabled
-            # 直接使用utils.save_config保存配置
-            from utils import save_config
-            save_config(self.main_window.config)
-            
-        # 显示设置已保存的消息
-        status = "启用" if enabled else "禁用"
-        msg_box = msgbox_frame(
-            f"IPv6设置 - {APP_NAME}",
-            f"\nIPv6支持已{status}。新的设置将在下一次下载时生效。\n",
-            QMessageBox.StandardButton.Ok,
-        )
-        msg_box.exec()
             
     def clean_hosts_entries(self):
         """手动删除软件添加的hosts条目"""
@@ -809,32 +606,43 @@ class UIManager:
                 result = self.main_window.download_manager.hosts_manager.check_and_clean_all_entries()
                 
                 if result:
-                    msg_box = msgbox_frame(
-                        f"成功 - {APP_NAME}",
-                        "\n已成功清理软件添加的hosts条目。\n",
-                        QMessageBox.StandardButton.Ok,
-                    )
+                    msg_box = self._create_message_box("成功", "\n已成功清理软件添加的hosts条目。\n")
                 else:
-                    msg_box = msgbox_frame(
-                        f"提示 - {APP_NAME}",
-                        "\n未发现软件添加的hosts条目或清理操作失败。\n",
-                        QMessageBox.StandardButton.Ok,
-                    )
+                    msg_box = self._create_message_box("提示", "\n未发现软件添加的hosts条目或清理操作失败。\n")
                 
                 msg_box.exec()
             except Exception as e:
-                msg_box = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    f"\n清理hosts条目时发生错误：\n\n{str(e)}\n",
-                    QMessageBox.StandardButton.Ok,
-                )
+                msg_box = self._create_message_box("错误", f"\n清理hosts条目时发生错误：\n\n{str(e)}\n")
                 msg_box.exec()
         else:
-            msg_box = msgbox_frame(
-                f"错误 - {APP_NAME}",
-                "\n无法访问hosts管理器。\n",
-                QMessageBox.StandardButton.Ok,
-            )
+            msg_box = self._create_message_box("错误", "\n无法访问hosts管理器。\n")
+            msg_box.exec()
+
+    def open_hosts_file(self):
+        """打开系统hosts文件"""
+        try:
+            # 获取hosts文件路径
+            hosts_path = os.path.join(os.environ['SystemRoot'], 'System32', 'drivers', 'etc', 'hosts')
+            
+            # 检查文件是否存在
+            if os.path.exists(hosts_path):
+                # 使用操作系统默认程序打开hosts文件
+                if os.name == 'nt':  # Windows
+                    # 尝试以管理员权限打开记事本编辑hosts文件
+                    try:
+                        # 使用PowerShell以管理员身份启动记事本
+                        subprocess.Popen(["powershell", "Start-Process", "notepad", hosts_path, "-Verb", "RunAs"])
+                    except Exception as e:
+                        # 如果失败，尝试直接打开
+                        os.startfile(hosts_path)
+                else:  # macOS 和 Linux
+                    import subprocess
+                    subprocess.call(['xdg-open', hosts_path])
+            else:
+                msg_box = self._create_message_box("错误", f"\nhosts文件不存在：\n{hosts_path}\n")
+                msg_box.exec()
+        except Exception as e:
+            msg_box = self._create_message_box("错误", f"\n打开hosts文件时发生错误：\n\n{str(e)}\n")
             msg_box.exec()
 
     def show_about_dialog(self):
@@ -857,4 +665,9 @@ class UIManager:
             QMessageBox.StandardButton.Ok,
         )
         msg_box.setTextFormat(Qt.TextFormat.RichText)  # 使用Qt.TextFormat
+        msg_box.exec() 
+
+    def show_ipv6_manager_not_ready(self):
+        """显示IPv6管理器未准备好的提示"""
+        msg_box = self._create_message_box("错误", "\nIPv6管理器尚未初始化，请稍后再试。\n")
         msg_box.exec() 
