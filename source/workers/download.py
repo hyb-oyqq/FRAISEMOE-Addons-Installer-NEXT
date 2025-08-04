@@ -12,7 +12,6 @@ import signal
 import ctypes
 import time
 
-# Windows API常量和函数
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
     PROCESS_ALL_ACCESS = 0x1F0FFF
@@ -30,7 +29,6 @@ if sys.platform == 'win32':
             ('dwFlags', ctypes.c_ulong)
         ]
 
-# 下载线程类
 class DownloadThread(QThread):
     progress = Signal(dict)
     finished = Signal(bool, str)
@@ -49,7 +47,6 @@ class DownloadThread(QThread):
         if self.process and self.process.poll() is None:
             self._is_running = False
             try:
-                # 使用 taskkill 强制终止进程及其子进程，并隐藏窗口
                 subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
                 print(f"停止下载进程时出错: {e}")
@@ -81,13 +78,11 @@ class DownloadThread(QThread):
         if not self._is_paused and self.process and self.process.poll() is None:
             try:
                 if sys.platform == 'win32':
-                    # 获取所有线程
                     self.threads = self._get_process_threads(self.process.pid)
                     if not self.threads:
                         print("未找到可暂停的线程")
                         return False
                         
-                    # 暂停所有线程
                     for thread_id in self.threads:
                         h_thread = kernel32.OpenThread(THREAD_SUSPEND_RESUME, False, thread_id)
                         if h_thread:
@@ -98,7 +93,6 @@ class DownloadThread(QThread):
                     print(f"下载进程已暂停: PID {self.process.pid}, 线程数: {len(self.threads)}")
                     return True
                 else:
-                    # 在Unix系统上使用SIGSTOP
                     os.kill(self.process.pid, signal.SIGSTOP)
                     self._is_paused = True
                     print(f"下载进程已暂停: PID {self.process.pid}")
@@ -113,7 +107,6 @@ class DownloadThread(QThread):
         if self._is_paused and self.process and self.process.poll() is None:
             try:
                 if sys.platform == 'win32':
-                    # 恢复所有线程
                     for thread_id in self.threads:
                         h_thread = kernel32.OpenThread(THREAD_SUSPEND_RESUME, False, thread_id)
                         if h_thread:
@@ -124,7 +117,6 @@ class DownloadThread(QThread):
                     print(f"下载进程已恢复: PID {self.process.pid}, 线程数: {len(self.threads)}")
                     return True
                 else:
-                    # 在Unix系统上使用SIGCONT
                     os.kill(self.process.pid, signal.SIGCONT)
                     self._is_paused = False
                     print(f"下载进程已恢复: PID {self.process.pid}")
@@ -155,21 +147,16 @@ class DownloadThread(QThread):
                 aria2c_path,
             ]
 
-            # 获取主窗口的下载管理器对象
             thread_count = 64  # 默认值
             if hasattr(self.parent(), 'download_manager'):
-                # 从下载管理器获取线程数设置
                 thread_count = self.parent().download_manager.get_download_thread_count()
                 
-            # 检查是否启用IPv6支持
             ipv6_enabled = False
             if hasattr(self.parent(), 'config'):
                 ipv6_enabled = self.parent().config.get("ipv6_enabled", False)
                 
-            # 打印IPv6状态
             print(f"IPv6支持状态: {ipv6_enabled}")
 
-            # 将所有的优化参数应用于每个下载任务
             command.extend([
                 '--dir', download_dir,
                 '--out', file_name,
@@ -196,36 +183,31 @@ class DownloadThread(QThread):
                 '--auto-file-renaming=false',
                 '--allow-overwrite=true',
                 '--split=128',                     
-                f'--max-connection-per-server={thread_count}',  # 使用动态的线程数
-                '--min-split-size=1M',             # 减小最小分片大小
-                '--optimize-concurrent-downloads=true',  # 优化并发下载
-                '--file-allocation=none',          # 禁用文件预分配加快开始
-                '--async-dns=true',                # 使用异步DNS
+                f'--max-connection-per-server={thread_count}',
+                '--min-split-size=1M',
+                '--optimize-concurrent-downloads=true',
+                '--file-allocation=none',
+                '--async-dns=true',
             ])
             
-            # 根据IPv6设置决定是否禁用IPv6
             if not ipv6_enabled:
                 command.append('--disable-ipv6=true')
                 print("已禁用IPv6支持")
             else:
                 print("已启用IPv6支持")
             
-            # 证书验证现在总是需要，因为我们依赖hosts文件
             command.append('--check-certificate=false')
             
             command.append(self.url)
             
-            # 打印将要执行的命令，用于调试
             print(f"即将执行的 Aria2c 命令: {' '.join(command)}")
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creation_flags)
 
-            # 正则表达式用于解析aria2c的输出
-            # 例如: #1 GID[...](  5%) CN:1 DL:10.5MiB/s ETA:1m30s
+            # 正则表达式用于解析aria2c的输出: #1 GID[...](  5%) CN:1 DL:10.5MiB/s ETA:1m30s
             progress_pattern = re.compile(r'\((\d{1,3})%\).*?CN:(\d+).*?DL:\s*([^\s]+).*?ETA:\s*([^\s\]]+)')
 
-            # 添加限流计时器，防止更新过于频繁导致UI卡顿
             last_update_time = 0
             update_interval = 0.2  # 限制UI更新频率，每0.2秒最多更新一次
             
@@ -239,11 +221,10 @@ class DownloadThread(QThread):
                     break
                 
                 full_output.append(line)
-                print(line.strip()) # 在控制台输出实时日志
+                print(line.strip())
 
                 match = progress_pattern.search(line)
                 if match:
-                    # 检查是否达到更新间隔
                     current_time = time.time()
                     if current_time - last_update_time >= update_interval:
                         percent = int(match.group(1))
@@ -251,7 +232,6 @@ class DownloadThread(QThread):
                         speed = match.group(3)
                         eta = match.group(4)
                         
-                        # 直接发送进度信号，不使用invokeMethod
                         self.progress.emit({
                             "game": self.game_version,
                             "percent": percent,
@@ -264,7 +244,7 @@ class DownloadThread(QThread):
 
             return_code = self.process.wait()
             
-            if not self._is_running: # 如果是手动停止的
+            if not self._is_running:
                 self.finished.emit(False, "下载已手动停止。")
                 return
 
@@ -285,7 +265,6 @@ class DownloadThread(QThread):
             if self._is_running:
                 self.finished.emit(False, f"\n下载时发生未知错误\n\n【错误信息】: {e}\n")
 
-# 下载进度窗口类
 class ProgressWindow(QDialog):
     def __init__(self, parent=None):
         super(ProgressWindow, self).__init__(parent)
@@ -300,18 +279,14 @@ class ProgressWindow(QDialog):
         self.progress_bar.setValue(0)
         self.stats_label = QLabel("速度: - | 线程: - | 剩余时间: -")
         
-        # 创建按钮布局
         button_layout = QHBoxLayout()
         
-        # 创建暂停/恢复按钮
         self.pause_resume_button = QtWidgets.QPushButton("暂停下载")
         self.pause_resume_button.setToolTip("暂停或恢复下载")
         
-        # 创建停止按钮
         self.stop_button = QtWidgets.QPushButton("取消下载")
         self.stop_button.setToolTip("取消整个下载过程")
         
-        # 添加按钮到按钮布局
         button_layout.addWidget(self.pause_resume_button)
         button_layout.addWidget(self.stop_button)
 
@@ -321,10 +296,7 @@ class ProgressWindow(QDialog):
         layout.addLayout(button_layout)
         self.setLayout(layout)
         
-        # 设置暂停/恢复状态
         self.is_paused = False
-        
-        # 添加最后进度记录，用于优化UI更新
         self._last_percent = -1
         
     def update_pause_button_state(self, is_paused):
@@ -346,16 +318,12 @@ class ProgressWindow(QDialog):
         threads = data.get("threads", "-")
         eta = data.get("eta", "-")
         
-        # 清除ETA值中可能存在的"]"符号
         if isinstance(eta, str):
             eta = eta.replace("]", "")
         
-        # 优化UI更新
         if hasattr(self, '_last_percent') and self._last_percent == percent and percent < 100:
-            # 如果百分比没变，只更新速度和ETA信息
             self.stats_label.setText(f"速度: {speed} | 线程: {threads} | 剩余时间: {eta}")
         else:
-            # 百分比变化或初次更新，更新所有信息
             self._last_percent = percent
             self.game_label.setText(f"正在下载 {game_version} 的补丁")
             self.progress_bar.setValue(int(percent))
@@ -368,5 +336,4 @@ class ProgressWindow(QDialog):
             QTimer.singleShot(1500, self.accept)
 
     def closeEvent(self, event):
-        # 覆盖默认的关闭事件，防止用户通过其他方式关闭窗口
         event.ignore()

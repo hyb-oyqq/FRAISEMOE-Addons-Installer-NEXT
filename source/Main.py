@@ -5,13 +5,11 @@ from core.privacy_manager import PrivacyManager
 from utils.logger import setup_logger
 
 if __name__ == "__main__":
-    # 初始化日志
     logger = setup_logger("main")
     logger.info("应用启动")
     
     app = QApplication(sys.argv)
     
-    # 初始化隐私协议管理器
     try:
         privacy_manager = PrivacyManager()
     except Exception as e:
@@ -23,12 +21,10 @@ if __name__ == "__main__":
         )
         sys.exit(1)
     
-    # 显示隐私协议对话框
     if not privacy_manager.show_privacy_dialog():
         logger.info("用户未同意隐私协议，程序退出")
-        sys.exit(0)  # 如果用户不同意隐私协议，退出程序
+        sys.exit(0)
     
-    # 用户已同意隐私协议，继续启动程序
     logger.info("隐私协议已同意，启动主程序")
     window = MainWindow()
     window.show()
