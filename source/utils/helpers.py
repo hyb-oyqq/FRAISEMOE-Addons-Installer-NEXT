@@ -273,7 +273,53 @@ class HostsManager:
         self.original_content = None
         self.modified = False
         self.modified_hostnames = set()  # 跟踪被修改的主机名
+        self.auto_restore_disabled = False  # 是否禁用自动还原hosts
 
+    def get_hostname_entries(self, hostname):
+        """获取hosts文件中指定域名的所有IP记录
+        
+        Args:
+            hostname: 要查询的域名
+            
+        Returns:
+            list: 域名对应的IP地址列表，如果未找到则返回空列表
+        """
+        try:
+            # 如果original_content为空，先读取hosts文件
+            if not self.original_content:
+                try:
+                    with open(self.hosts_path, 'r', encoding='utf-8') as f:
+                        self.original_content = f.read()
+                except Exception as e:
+                    print(f"读取hosts文件失败: {e}")
+                    return []
+            
+            # 解析hosts文件中的每一行
+            ip_addresses = []
+            lines = self.original_content.splitlines()
+            
+            for line in lines:
+                # 跳过注释和空行
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                # 分割行内容获取IP和域名
+                parts = line.split()
+                if len(parts) >= 2:  # 至少包含IP和一个域名
+                    ip = parts[0]
+                    domains = parts[1:]
+                    
+                    # 如果当前行包含目标域名
+                    if hostname in domains:
+                        ip_addresses.append(ip)
+            
+            return ip_addresses
+            
+        except Exception as e:
+            print(f"获取hosts记录失败: {e}")
+            return []
+            
     def backup(self):
         if not AdminPrivileges().is_admin():
             print("需要管理员权限来备份hosts文件。")
@@ -373,12 +419,58 @@ class HostsManager:
             msg_box.exec()
             return False
 
+    def set_auto_restore_disabled(self, disabled):
+        """设置是否禁用自动还原hosts
+        
+        Args:
+            disabled: 是否禁用自动还原hosts
+            
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            # 更新状态
+            self.auto_restore_disabled = disabled
+            
+            # 从配置文件读取当前配置
+            from utils import load_config, save_config
+            config = load_config()
+            
+            # 更新配置
+            config['disable_auto_restore_hosts'] = disabled
+            
+            # 保存配置
+            save_config(config)
+            
+            print(f"已{'禁用' if disabled else '启用'}自动还原hosts")
+            return True
+        except Exception as e:
+            print(f"设置自动还原hosts状态失败: {e}")
+            return False
+            
+    def is_auto_restore_disabled(self):
+        """检查是否禁用了自动还原hosts
+        
+        Returns:
+            bool: 是否禁用自动还原hosts
+        """
+        from utils import load_config
+        config = load_config()
+        auto_restore_disabled = config.get('disable_auto_restore_hosts', False)
+        self.auto_restore_disabled = auto_restore_disabled
+        return auto_restore_disabled
+
     def check_and_clean_all_entries(self):
         """检查并清理所有由本应用程序添加的hosts记录
         
         Returns:
             bool: 清理是否成功
         """
+        # 如果禁用了自动还原，则不执行清理操作
+        if self.is_auto_restore_disabled():
+            print("已禁用自动还原hosts，跳过清理操作")
+            return True
+            
         if not AdminPrivileges().is_admin():
             print("需要管理员权限来检查和清理hosts文件。")
             return False
@@ -423,6 +515,11 @@ class HostsManager:
             return False
 
     def restore(self):
+        # 如果禁用了自动还原，则不执行还原操作
+        if self.is_auto_restore_disabled():
+            print("已禁用自动还原hosts，跳过还原操作")
+            return True
+            
         if not self.modified:
             if os.path.exists(self.backup_path):
                 try:

@@ -341,12 +341,26 @@ class UIManager:
         self.clean_hosts_action.setFont(menu_font)
         self.clean_hosts_action.triggered.connect(self.clean_hosts_entries)
         
+        # 添加禁用自动还原hosts的选项
+        self.disable_auto_restore_action = QAction("禁用关闭/重启自动还原hosts", self.main_window, checkable=True)
+        self.disable_auto_restore_action.setFont(menu_font)
+        
+        # 从配置中读取当前状态
+        config = getattr(self.main_window, 'config', {})
+        disable_auto_restore = False
+        if isinstance(config, dict):
+            disable_auto_restore = config.get("disable_auto_restore_hosts", False)
+        
+        self.disable_auto_restore_action.setChecked(disable_auto_restore)
+        self.disable_auto_restore_action.triggered.connect(self.toggle_disable_auto_restore_hosts)
+        
         # 添加打开hosts文件选项
         self.open_hosts_action = QAction("打开hosts文件", self.main_window)
         self.open_hosts_action.setFont(menu_font)
         self.open_hosts_action.triggered.connect(self.open_hosts_file)
         
         # 添加到hosts子菜单
+        self.hosts_submenu.addAction(self.disable_auto_restore_action)
         self.hosts_submenu.addAction(self.restore_hosts_action)
         self.hosts_submenu.addAction(self.clean_hosts_action)
         self.hosts_submenu.addAction(self.open_hosts_action)
@@ -643,6 +657,54 @@ class UIManager:
                 msg_box.exec()
         except Exception as e:
             msg_box = self._create_message_box("错误", f"\n打开hosts文件时发生错误：\n\n{str(e)}\n")
+            msg_box.exec()
+
+    def toggle_disable_auto_restore_hosts(self, checked):
+        """切换禁用自动还原hosts的状态
+        
+        Args:
+            checked: 是否禁用自动还原
+        """
+        if hasattr(self.main_window, 'download_manager') and hasattr(self.main_window.download_manager, 'hosts_manager'):
+            try:
+                # 调用HostsManager的方法设置自动还原标志
+                result = self.main_window.download_manager.hosts_manager.set_auto_restore_disabled(checked)
+                
+                if result:
+                    # 同时更新内部配置，确保立即生效
+                    if hasattr(self.main_window, 'config'):
+                        self.main_window.config['disable_auto_restore_hosts'] = checked
+                    
+                    # 显示成功提示
+                    status = "禁用" if checked else "启用"
+                    msg_box = self._create_message_box(
+                        "设置已更新", 
+                        f"\n已{status}关闭/重启时自动还原hosts。\n\n{'hosts将被保留' if checked else 'hosts将在关闭时自动还原'}。\n"
+                    )
+                    msg_box.exec()
+                else:
+                    # 如果设置失败，恢复复选框状态
+                    self.disable_auto_restore_action.setChecked(not checked)
+                    msg_box = self._create_message_box(
+                        "设置失败", 
+                        "\n更新设置时发生错误，请稍后再试。\n"
+                    )
+                    msg_box.exec()
+            except Exception as e:
+                # 如果发生异常，恢复复选框状态
+                self.disable_auto_restore_action.setChecked(not checked)
+                msg_box = self._create_message_box(
+                    "错误", 
+                    f"\n更新设置时发生异常：\n\n{str(e)}\n"
+                )
+                msg_box.exec()
+        else:
+            # 如果hosts管理器不可用，恢复复选框状态
+            self.disable_auto_restore_action.setChecked(not checked)
+            msg_box = self._create_message_box(
+                "错误", 
+                "\nhosts管理器不可用，无法更新设置。\n"
+            )
             msg_box.exec()
 
     def show_about_dialog(self):

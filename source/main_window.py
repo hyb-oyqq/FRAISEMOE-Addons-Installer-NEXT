@@ -456,10 +456,10 @@ class MainWindow(QMainWindow):
                     event.ignore()
                 return
                 
-        # 恢复hosts文件
+        # 恢复hosts文件（如果未禁用自动还原）
         self.download_manager.hosts_manager.restore()
         
-        # 额外检查并清理hosts文件中的残留记录
+        # 额外检查并清理hosts文件中的残留记录（如果未禁用自动还原）
         self.download_manager.hosts_manager.check_and_clean_all_entries()
         
         # 停止日志记录

@@ -28,6 +28,7 @@ class CloudflareOptimizer:
         self.optimization_cancelled = False
         self.ip_optimizer_thread = None
         self.ipv6_optimizer_thread = None
+        self.has_optimized_in_session = False  # 本次启动是否已执行过优选
         
     def is_optimization_done(self):
         """检查是否已完成优化
@@ -67,6 +68,39 @@ class CloudflareOptimizer:
         Args:
             url: 用于优化的URL
         """
+        # 解析域名
+        hostname = urlparse(url).hostname
+        
+        # 检查hosts文件中是否已有该域名的IP记录
+        existing_ips = self.hosts_manager.get_hostname_entries(hostname) if hostname else []
+        
+        # 判断是否继续优选的逻辑
+        if existing_ips and self.has_optimized_in_session:
+            # 如果本次会话中已执行过优选且hosts中存在记录，则跳过优选过程
+            print(f"发现hosts文件中已有域名 {hostname} 的优选IP记录且本次会话已优选过，跳过优选过程")
+            
+            # 设置标记为已优选完成
+            self.optimization_done = True
+            self.countdown_finished = True
+            
+            # 尝试获取现有的IPv4和IPv6地址
+            ipv4_entries = [ip for ip in existing_ips if ':' not in ip]  # IPv4地址不含冒号
+            ipv6_entries = [ip for ip in existing_ips if ':' in ip]      # IPv6地址包含冒号
+            
+            if ipv4_entries:
+                self.optimized_ip = ipv4_entries[0]
+            if ipv6_entries:
+                self.optimized_ipv6 = ipv6_entries[0]
+                
+            print(f"使用已存在的优选IP - IPv4: {self.optimized_ip}, IPv6: {self.optimized_ipv6}")
+            return True
+        else:
+            # 如果本次会话尚未优选过，或hosts中没有记录，则显示优选窗口
+            if existing_ips:
+                print(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，但本次会话尚未优选过")
+                # 清理已有的hosts记录，准备重新优选
+                self.hosts_manager.clean_hostname_entries(hostname)
+            
         # 创建取消状态标记
         self.optimization_cancelled = False
         self.countdown_finished = False
@@ -331,6 +365,15 @@ class CloudflareOptimizer:
                 # 如果启用IPv6并且找到了IPv6地址，也应用到hosts
                 if ipv6_success:
                     success = self.hosts_manager.apply_ip(hostname, self.optimized_ipv6, clean=False) or success
+                
+                # 记录此次优选操作对hosts文件进行了更新
+                if hasattr(self.main_window, 'config'):
+                    self.main_window.config['last_hosts_optimized_hostname'] = hostname
+                    from utils import save_config
+                    save_config(self.main_window.config)
+                
+                # 记录本次会话已执行过优选
+                self.has_optimized_in_session = True
                 
                 if success:
                     msg_box = QtWidgets.QMessageBox(self.main_window)

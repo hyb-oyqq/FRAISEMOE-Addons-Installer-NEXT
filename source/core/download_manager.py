@@ -406,6 +406,38 @@ class DownloadManager:
                 
     def _show_cloudflare_option(self):
         """显示Cloudflare加速选择对话框"""
+        # 首先检查队列中第一个URL的域名是否已在hosts中有优选IP
+        if self.download_queue:
+            first_url = self.download_queue[0][0]
+            hostname = urlparse(first_url).hostname
+            
+            # 检查hosts文件中是否已有该域名的IP记录
+            if hostname:
+                existing_ips = self.cloudflare_optimizer.hosts_manager.get_hostname_entries(hostname)
+                
+                if existing_ips:
+                    print(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，跳过询问直接使用")
+                    
+                    # 设置标记为已优选完成
+                    self.cloudflare_optimizer.optimization_done = True
+                    self.cloudflare_optimizer.countdown_finished = True
+                    
+                    # 尝试获取现有的IPv4和IPv6地址
+                    ipv4_entries = [ip for ip in existing_ips if ':' not in ip]
+                    ipv6_entries = [ip for ip in existing_ips if ':' in ip]
+                    
+                    if ipv4_entries:
+                        self.cloudflare_optimizer.optimized_ip = ipv4_entries[0]
+                    if ipv6_entries:
+                        self.cloudflare_optimizer.optimized_ipv6 = ipv6_entries[0]
+                    
+                    # 保存当前URL供CloudflareOptimizer使用
+                    self.main_window.current_url = first_url
+                    
+                    # 直接开始下载，跳过询问
+                    self.next_download_task()
+                    return
+                    
         # 临时启用窗口以显示对话框
         self.main_window.setEnabled(True)
         
