@@ -8,6 +8,7 @@ import re
 from PySide6 import QtWidgets, QtCore
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon, QPixmap, QFont
+from PySide6.QtWidgets import QPushButton, QDialog, QHBoxLayout
 
 from utils import msgbox_frame, HostsManager, resource_path
 from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL, DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL
