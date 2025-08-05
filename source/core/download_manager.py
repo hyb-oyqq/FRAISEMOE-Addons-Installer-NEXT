@@ -209,19 +209,75 @@ class DownloadManager:
         
         installable_games = []
         already_installed_games = []
+        disabled_patch_games = []  # 存储检测到禁用补丁的游戏
+        
         for game_version, game_dir in game_dirs.items():
+            # 检查游戏是否已安装补丁
             if self.main_window.installed_status.get(game_version, False):
                 if debug_mode:
                     print(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
                 already_installed_games.append(game_version)
             else:
-                if debug_mode:
-                    print(f"DEBUG: {game_version} 未安装补丁，可以安装")
-                installable_games.append(game_version)
+                # 检查是否存在被禁用的补丁
+                is_disabled, disabled_path = self.main_window.patch_manager.check_patch_disabled(game_dir, game_version)
+                if is_disabled:
+                    if debug_mode:
+                        print(f"DEBUG: {game_version} 存在被禁用的补丁: {disabled_path}")
+                    disabled_patch_games.append(game_version)
+                else:
+                    if debug_mode:
+                        print(f"DEBUG: {game_version} 未安装补丁，可以安装")
+                    installable_games.append(game_version)
         
         status_message = ""
         if already_installed_games:
             status_message += f"已安装补丁的游戏：\n{chr(10).join(already_installed_games)}\n\n"
+            
+        # 处理禁用补丁的情况
+        if disabled_patch_games:
+            # 构建提示消息
+            disabled_msg = f"检测到以下游戏的补丁已被禁用：\n{chr(10).join(disabled_patch_games)}\n\n是否要启用这些补丁？"
+            
+            reply = QtWidgets.QMessageBox.question(
+                self.main_window, 
+                f"检测到禁用补丁 - {APP_NAME}", 
+                disabled_msg,
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No
+            )
+            
+            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                # 用户选择启用补丁
+                if debug_mode:
+                    print(f"DEBUG: 用户选择启用被禁用的补丁")
+                
+                # 为每个禁用的游戏创建目录映射
+                disabled_game_dirs = {game: game_dirs[game] for game in disabled_patch_games}
+                
+                # 批量启用补丁
+                success_count, fail_count, results = self.main_window.patch_manager.batch_toggle_patches(
+                    disabled_game_dirs, 
+                    operation="enable"
+                )
+                
+                # 显示启用结果
+                self.main_window.patch_manager.show_toggle_result(success_count, fail_count, results)
+                
+                # 更新安装状态
+                for game_version in disabled_patch_games:
+                    self.main_window.installed_status[game_version] = True
+                    if game_version in installable_games:
+                        installable_games.remove(game_version)
+                    if game_version not in already_installed_games:
+                        already_installed_games.append(game_version)
+            else:
+                if debug_mode:
+                    print(f"DEBUG: 用户选择不启用被禁用的补丁，这些游戏将被添加到可安装列表")
+                # 用户选择不启用，将这些游戏视为可以安装补丁
+                installable_games.extend(disabled_patch_games)
+
+        # 更新status_message
+        if already_installed_games:
+            status_message = f"已安装补丁的游戏：\n{chr(10).join(already_installed_games)}\n\n"
             
         if not installable_games:
             QtWidgets.QMessageBox.information(
@@ -233,28 +289,28 @@ class DownloadManager:
             self.main_window.ui.start_install_text.setText("开始安装")
             return
             
-        dialog = QDialog(self.main_window)
+        dialog = QtWidgets.QDialog(self.main_window)
         dialog.setWindowTitle("选择要安装的游戏")
         dialog.resize(400, 300)
         
-        layout = QVBoxLayout(dialog)
+        layout = QtWidgets.QVBoxLayout(dialog)
         
         if already_installed_games:
-            already_installed_label = QLabel("已安装补丁的游戏:", dialog)
-            already_installed_label.setFont(QFont(already_installed_label.font().family(), already_installed_label.font().pointSize(), QFont.Bold))
+            already_installed_label = QtWidgets.QLabel("已安装补丁的游戏:", dialog)
+            already_installed_label.setFont(QFont(already_installed_label.font().family(), already_installed_label.font().pointSize(), QFont.Weight.Bold))
             layout.addWidget(already_installed_label)
             
-            already_installed_list = QLabel(chr(10).join(already_installed_games), dialog)
+            already_installed_list = QtWidgets.QLabel(chr(10).join(already_installed_games), dialog)
             layout.addWidget(already_installed_list)
             
             layout.addSpacing(10)
         
-        info_label = QLabel("请选择你需要安装补丁的游戏:", dialog)
-        info_label.setFont(QFont(info_label.font().family(), info_label.font().pointSize(), QFont.Bold))
+        info_label = QtWidgets.QLabel("请选择你需要安装补丁的游戏:", dialog)
+        info_label.setFont(QFont(info_label.font().family(), info_label.font().pointSize(), QFont.Weight.Bold))
         layout.addWidget(info_label)
         
-        list_widget = QListWidget(dialog)
-        list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        list_widget = QtWidgets.QListWidget(dialog)
+        list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         for game in installable_games:
             list_widget.addItem(game)
         layout.addWidget(list_widget)

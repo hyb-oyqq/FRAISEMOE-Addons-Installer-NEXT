@@ -49,6 +49,7 @@ class MultiStageAnimations(QObject):
             # 移除菜单背景动画
             # {"widget": ui.menubg, "end_pos": QPoint(720, 55), "duration": 600},
             {"widget": ui.button_container, "end_pos": None, "duration": 600},
+            {"widget": ui.toggle_patch_container, "end_pos": None, "duration": 600},  # 添加禁/启用补丁按钮
             {"widget": ui.uninstall_container, "end_pos": None, "duration": 600},  # 添加卸载补丁按钮
             {"widget": ui.exit_container, "end_pos": None, "duration": 600}
         ]
@@ -301,18 +302,29 @@ class MultiStageAnimations(QObject):
             if hasattr(self.ui, 'button_container'):
                 btn_width = self.ui.button_container.width()
                 x_pos = width - btn_width - right_margin
-                y_pos = int((height - 65) * 0.28) - 10  # 与resizeEvent中保持一致
+                y_pos = int((height - 65) * 0.18) - 10  # 从0.28改为0.18，向上移动
                 
                 # 更新动画目标位置
                 for item in self.menu_widgets:
                     if item["widget"] == self.ui.button_container:
                         item["end_pos"] = QPoint(x_pos, y_pos)
             
+            # 禁用补丁按钮
+            if hasattr(self.ui, 'toggle_patch_container'):
+                btn_width = self.ui.toggle_patch_container.width()
+                x_pos = width - btn_width - right_margin
+                y_pos = int((height - 65) * 0.36) - 10  # 从0.46改为0.36，向上移动
+                
+                # 更新动画目标位置
+                for item in self.menu_widgets:
+                    if item["widget"] == self.ui.toggle_patch_container:
+                        item["end_pos"] = QPoint(x_pos, y_pos)
+                
             # 卸载补丁按钮
             if hasattr(self.ui, 'uninstall_container'):
                 btn_width = self.ui.uninstall_container.width()
                 x_pos = width - btn_width - right_margin
-                y_pos = int((height - 65) * 0.46) - 10  # 与resizeEvent中保持一致
+                y_pos = int((height - 65) * 0.54) - 10  # 从0.64改为0.54，向上移动
                 
                 # 更新动画目标位置
                 for item in self.menu_widgets:
@@ -323,7 +335,7 @@ class MultiStageAnimations(QObject):
             if hasattr(self.ui, 'exit_container'):
                 btn_width = self.ui.exit_container.width()
                 x_pos = width - btn_width - right_margin
-                y_pos = int((height - 65) * 0.64) - 10  # 与resizeEvent中保持一致
+                y_pos = int((height - 65) * 0.72) - 10  # 从0.82改为0.72，向上移动
                 
                 # 更新动画目标位置
                 for item in self.menu_widgets:
@@ -334,10 +346,12 @@ class MultiStageAnimations(QObject):
             for item in self.menu_widgets:
                 if item["widget"] == self.ui.button_container:
                     item["end_pos"] = QPoint(1050, 200)
-                elif item["widget"] == self.ui.uninstall_container:
+                elif item["widget"] == self.ui.toggle_patch_container:
                     item["end_pos"] = QPoint(1050, 310)
-                elif item["widget"] == self.ui.exit_container:
+                elif item["widget"] == self.ui.uninstall_container:
                     item["end_pos"] = QPoint(1050, 420)
+                elif item["widget"] == self.ui.exit_container:
+                    item["end_pos"] = QPoint(1050, 530)
     
     def start_animations(self):
         """启动完整动画序列"""

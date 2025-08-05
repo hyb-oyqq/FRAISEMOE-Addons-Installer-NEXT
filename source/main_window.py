@@ -123,6 +123,7 @@ class MainWindow(QMainWindow):
         # 连接信号 - 绑定到新按钮
         self.ui.start_install_btn.clicked.connect(self.handle_install_button_click)
         self.ui.uninstall_btn.clicked.connect(self.handle_uninstall_button_click)  # 添加卸载补丁按钮事件连接
+        self.ui.toggle_patch_btn.clicked.connect(self.handle_toggle_patch_button_click)  # 添加禁/启用补丁按钮事件连接
         self.ui.exit_btn.clicked.connect(self.shutdown_app)
         
         # 初始化按钮状态标记
@@ -176,6 +177,7 @@ class MainWindow(QMainWindow):
         # 启用所有菜单按钮
         self.ui.start_install_btn.setEnabled(True)
         self.ui.uninstall_btn.setEnabled(True)
+        self.ui.toggle_patch_btn.setEnabled(True)  # 启用禁/启用补丁按钮
         self.ui.exit_btn.setEnabled(True)
         
         # 只有在配置有效时才启用开始安装按钮
@@ -689,6 +691,320 @@ class MainWindow(QMainWindow):
                 # 两种方式都未识别到游戏
                 if debug_mode:
                     print(f"DEBUG: 卸载功能 - 无法识别游戏")
+                    
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    "\n所选目录不是有效的NEKOPARA游戏目录。\n请选择包含游戏可执行文件的目录或其上级目录。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+    
+    def handle_toggle_patch_button_click(self):
+        """处理禁/启用补丁按钮点击事件
+        打开文件选择对话框选择游戏目录，然后禁用或启用对应游戏的补丁
+        """
+        # 获取游戏目录
+        from PySide6.QtWidgets import QFileDialog
+        
+        debug_mode = self.debug_manager._is_debug_mode()
+        
+        # 提示用户选择目录
+        file_dialog_info = "选择游戏上级目录" if debug_mode else "选择游戏目录"
+        selected_folder = QFileDialog.getExistingDirectory(self, file_dialog_info, "")
+        
+        if not selected_folder or selected_folder == "":
+            return  # 用户取消了选择
+        
+        if debug_mode:
+            print(f"DEBUG: 禁/启用功能 - 用户选择了目录: {selected_folder}")
+        
+        # 首先尝试将选择的目录视为上级目录，使用增强的目录识别功能
+        game_dirs = self.game_detector.identify_game_directories_improved(selected_folder)
+        
+        if game_dirs and len(game_dirs) > 0:
+            if debug_mode:
+                print(f"DEBUG: 禁/启用功能 - 在上级目录中找到以下游戏: {list(game_dirs.keys())}")
+            
+            # 查找已安装补丁的游戏，只处理那些已安装补丁的游戏
+            games_with_patch = {}
+            for game_version, game_dir in game_dirs.items():
+                if self.patch_manager.check_patch_installed(game_dir, game_version):
+                    # 检查补丁当前状态（是否禁用）
+                    is_disabled, disabled_path = self.patch_manager.check_patch_disabled(game_dir, game_version)
+                    status = "已禁用" if is_disabled else "已启用"
+                    games_with_patch[game_version] = {
+                        "dir": game_dir,
+                        "disabled": is_disabled,
+                        "status": status
+                    }
+                    if debug_mode:
+                        print(f"DEBUG: 禁/启用功能 - {game_version} 已安装补丁，当前状态: {status}")
+            
+            # 检查是否有已安装补丁的游戏
+            if not games_with_patch:
+                QMessageBox.information(
+                    self,
+                    f"提示 - {APP_NAME}",
+                    "\n未在选择的目录中找到已安装补丁的游戏。\n请确认您选择了正确的游戏目录，并且该目录中的游戏已安装过补丁。\n",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
+            
+            # 创建自定义选择对话框，允许多选
+            from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout, QAbstractItemView, QRadioButton, QButtonGroup
+            
+            dialog = QDialog(self)
+            dialog.setWindowTitle("选择要操作的游戏补丁")
+            dialog.resize(400, 400)  # 增加高度以适应新增的单选按钮
+            
+            layout = QVBoxLayout(dialog)
+            
+            # 添加"已安装补丁的游戏"标签
+            already_installed_label = QLabel("已安装补丁的游戏:", dialog)
+            already_installed_label.setFont(QFont(already_installed_label.font().family(), already_installed_label.font().pointSize(), QFont.Bold))
+            layout.addWidget(already_installed_label)
+            
+            # 添加游戏列表和状态
+            games_status_text = ""
+            for game, info in games_with_patch.items():
+                games_status_text += f"{game} ({info['status']})\n"
+            games_status_label = QLabel(games_status_text.strip(), dialog)
+            layout.addWidget(games_status_label)
+            
+            # 添加一些间距
+            layout.addSpacing(10)
+            
+            # 添加"请选择要操作的游戏"标签
+            info_label = QLabel("请选择要操作的游戏:", dialog)
+            info_label.setFont(QFont(info_label.font().family(), info_label.font().pointSize(), QFont.Bold))
+            layout.addWidget(info_label)
+            
+            # 添加列表控件，只显示已安装补丁的游戏
+            list_widget = QListWidget(dialog)
+            list_widget.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)  # 允许多选
+            for game, info in games_with_patch.items():
+                list_widget.addItem(f"{game} ({info['status']})")
+            layout.addWidget(list_widget)
+            
+            # 添加全选按钮
+            select_all_btn = QPushButton("全选", dialog)
+            select_all_btn.clicked.connect(lambda: list_widget.selectAll())
+            layout.addWidget(select_all_btn)
+            
+            # 添加操作选择单选按钮
+            operation_label = QLabel("请选择要执行的操作:", dialog)
+            operation_label.setFont(QFont(operation_label.font().family(), operation_label.font().pointSize(), QFont.Bold))
+            layout.addWidget(operation_label)
+            
+            # 创建单选按钮组
+            radio_button_group = QButtonGroup(dialog)
+            
+            # 添加"自动切换状态"单选按钮（默认选中）
+            auto_toggle_radio = QRadioButton("自动切换状态（禁用<->启用）", dialog)
+            auto_toggle_radio.setChecked(True)
+            radio_button_group.addButton(auto_toggle_radio, 0)
+            layout.addWidget(auto_toggle_radio)
+            
+            # 添加"全部禁用"单选按钮
+            disable_all_radio = QRadioButton("禁用选中的补丁", dialog)
+            radio_button_group.addButton(disable_all_radio, 1)
+            layout.addWidget(disable_all_radio)
+            
+            # 添加"全部启用"单选按钮
+            enable_all_radio = QRadioButton("启用选中的补丁", dialog)
+            radio_button_group.addButton(enable_all_radio, 2)
+            layout.addWidget(enable_all_radio)
+            
+            # 添加确定和取消按钮
+            buttons_layout = QHBoxLayout()
+            ok_button = QPushButton("确定", dialog)
+            cancel_button = QPushButton("取消", dialog)
+            buttons_layout.addWidget(ok_button)
+            buttons_layout.addWidget(cancel_button)
+            layout.addLayout(buttons_layout)
+            
+            # 连接按钮事件
+            ok_button.clicked.connect(dialog.accept)
+            cancel_button.clicked.connect(dialog.reject)
+            
+            # 显示对话框并等待用户选择
+            result = dialog.exec()
+            
+            if result != QDialog.DialogCode.Accepted or list_widget.selectedItems() == []:
+                # 用户取消或未选择任何游戏
+                return
+                
+            # 获取用户选择的游戏
+            selected_items = [item.text() for item in list_widget.selectedItems()]
+            selected_games = []
+            
+            # 从选中项文本中提取游戏名称
+            for item in selected_items:
+                # 去除状态后缀 " (已启用)" 或 " (已禁用)"
+                game_name = item.split(" (")[0]
+                selected_games.append(game_name)
+                
+            if debug_mode:
+                print(f"DEBUG: 禁/启用功能 - 用户选择了以下游戏进行操作: {selected_games}")
+            
+            # 获取选中的操作类型
+            operation = None
+            if radio_button_group.checkedId() == 1:  # 禁用选中的补丁
+                operation = "disable"
+                operation_text = "禁用"
+            elif radio_button_group.checkedId() == 2:  # 启用选中的补丁
+                operation = "enable"
+                operation_text = "启用"
+            else:  # 自动切换状态
+                operation = None
+                operation_text = "切换"
+            
+            # 过滤games_with_patch，只保留选中的游戏
+            selected_game_dirs = {}
+            for game in selected_games:
+                if game in games_with_patch:
+                    selected_game_dirs[game] = games_with_patch[game]["dir"]
+            
+            # 确认操作
+            game_list = '\n'.join([f"{game} ({games_with_patch[game]['status']})" for game in selected_games])
+            reply = QMessageBox.question(
+                self,
+                f"确认{operation_text}操作 - {APP_NAME}",
+                f"\n确定要{operation_text}以下游戏补丁吗？\n\n{game_list}\n",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.No:
+                return
+                
+            # 执行批量操作
+            success_count = 0
+            fail_count = 0
+            results = []
+            
+            for game_version, game_dir in selected_game_dirs.items():
+                try:
+                    # 使用静默模式进行操作
+                    result = self.patch_manager.toggle_patch(game_dir, game_version, operation=operation, silent=True)
+                    
+                    if result["success"]:
+                        success_count += 1
+                    else:
+                        fail_count += 1
+                    
+                    results.append({
+                        "version": game_version,
+                        "success": result["success"],
+                        "message": result["message"],
+                        "action": result["action"]
+                    })
+                        
+                except Exception as e:
+                    if debug_mode:
+                        print(f"DEBUG: 切换 {game_version} 补丁状态时出错: {str(e)}")
+                    fail_count += 1
+                    results.append({
+                        "version": game_version,
+                        "success": False,
+                        "message": f"操作出错: {str(e)}",
+                        "action": "none"
+                    })
+            
+            # 显示操作结果
+            self.patch_manager.show_toggle_result(success_count, fail_count, results)
+            
+        else:
+            # 未找到游戏目录，尝试将选择的目录作为游戏目录
+            if debug_mode:
+                print(f"DEBUG: 禁/启用功能 - 未在上级目录找到游戏，尝试将选择的目录视为游戏目录")
+                
+            game_version = self.game_detector.identify_game_version(selected_folder)
+            
+            if game_version:
+                if debug_mode:
+                    print(f"DEBUG: 禁/启用功能 - 识别为游戏: {game_version}")
+                
+                # 检查是否已安装补丁
+                if self.patch_manager.check_patch_installed(selected_folder, game_version):
+                    # 检查补丁当前状态
+                    is_disabled, disabled_path = self.patch_manager.check_patch_disabled(selected_folder, game_version)
+                    current_status = "已禁用" if is_disabled else "已启用"
+                    
+                    # 创建简单对话框询问操作
+                    from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QRadioButton, QButtonGroup, QPushButton, QHBoxLayout
+                    
+                    dialog = QDialog(self)
+                    dialog.setWindowTitle(f"{game_version} 补丁操作")
+                    dialog.resize(300, 200)
+                    
+                    layout = QVBoxLayout(dialog)
+                    
+                    # 添加当前状态标签
+                    status_label = QLabel(f"当前补丁状态: {current_status}", dialog)
+                    status_label.setFont(QFont(status_label.font().family(), status_label.font().pointSize(), QFont.Bold))
+                    layout.addWidget(status_label)
+                    
+                    # 添加操作选择单选按钮
+                    operation_label = QLabel("请选择要执行的操作:", dialog)
+                    layout.addWidget(operation_label)
+                    
+                    # 创建单选按钮组
+                    radio_button_group = QButtonGroup(dialog)
+                    
+                    # 添加可选操作
+                    if is_disabled:
+                        # 当前是禁用状态，显示启用选项
+                        enable_radio = QRadioButton("启用补丁", dialog)
+                        enable_radio.setChecked(True)
+                        radio_button_group.addButton(enable_radio, 0)
+                        layout.addWidget(enable_radio)
+                    else:
+                        # 当前是启用状态，显示禁用选项
+                        disable_radio = QRadioButton("禁用补丁", dialog)
+                        disable_radio.setChecked(True)
+                        radio_button_group.addButton(disable_radio, 0)
+                        layout.addWidget(disable_radio)
+                    
+                    # 添加确定和取消按钮
+                    buttons_layout = QHBoxLayout()
+                    ok_button = QPushButton("确定", dialog)
+                    cancel_button = QPushButton("取消", dialog)
+                    buttons_layout.addWidget(ok_button)
+                    buttons_layout.addWidget(cancel_button)
+                    layout.addLayout(buttons_layout)
+                    
+                    # 连接按钮事件
+                    ok_button.clicked.connect(dialog.accept)
+                    cancel_button.clicked.connect(dialog.reject)
+                    
+                    # 显示对话框并等待用户选择
+                    result = dialog.exec()
+                    
+                    if result != QDialog.DialogCode.Accepted:
+                        # 用户取消
+                        return
+                    
+                    # 根据当前状态确定操作
+                    operation = "enable" if is_disabled else "disable"
+                    
+                    # 执行操作
+                    result = self.patch_manager.toggle_patch(selected_folder, game_version, operation=operation)
+                    if not result["success"]:
+                        # 操作失败的消息已在toggle_patch中显示
+                        pass
+                else:
+                    # 没有安装补丁
+                    QMessageBox.information(
+                        self,
+                        f"提示 - {APP_NAME}",
+                        f"\n未在 {game_version} 中找到已安装的补丁。\n请确认该游戏已经安装过补丁。\n",
+                        QMessageBox.StandardButton.Ok
+                    )
+            else:
+                # 两种方式都未识别到游戏
+                if debug_mode:
+                    print(f"DEBUG: 禁/启用功能 - 无法识别游戏")
                     
                 msg_box = msgbox_frame(
                     f"错误 - {APP_NAME}",

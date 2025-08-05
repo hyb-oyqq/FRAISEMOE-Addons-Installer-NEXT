@@ -365,7 +365,7 @@ class Ui_MainWindows(object):
         # 调整开始安装按钮的位置
         self.button_container = QWidget(self.inner_content)
         self.button_container.setObjectName(u"start_install_container")
-        self.button_container.setGeometry(QRect(1050, 200, 211, 111))  # 调整Y坐标，上移至200
+        self.button_container.setGeometry(QRect(1045, 20, 211, 111))  # 调整坐标，Y设为20，X稍微左移
         # 不要隐藏容器，让动画系统来控制它的可见性和位置
 
         # 使用原来的按钮背景图片
@@ -397,10 +397,44 @@ class Ui_MainWindows(object):
             }
         """)
 
+        # 添加禁/启用补丁按钮 - 新增在开始安装和卸载补丁之间
+        self.toggle_patch_container = QWidget(self.inner_content)
+        self.toggle_patch_container.setObjectName(u"toggle_patch_container")
+        self.toggle_patch_container.setGeometry(QRect(1050, 180, 211, 111))  # 调整Y坐标，设为180，增大与开始安装的间距
+
+        # 使用相同的按钮背景图片
+        self.toggle_patch_bg = QLabel(self.toggle_patch_container)
+        self.toggle_patch_bg.setObjectName(u"toggle_patch_bg")
+        self.toggle_patch_bg.setGeometry(QRect(10, 10, 191, 91))  # 居中放置在扩大的容器中
+        self.toggle_patch_bg.setPixmap(button_pixmap)
+        self.toggle_patch_bg.setScaledContents(True)
+
+        self.toggle_patch_text = QLabel(self.toggle_patch_container)
+        self.toggle_patch_text.setObjectName(u"toggle_patch_text")
+        self.toggle_patch_text.setGeometry(QRect(10, 7, 191, 91))  # 居中放置在扩大的容器中
+        self.toggle_patch_text.setText("禁/启用补丁")
+        self.toggle_patch_text.setFont(self.custom_font)
+        self.toggle_patch_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.toggle_patch_text.setStyleSheet("letter-spacing: 1px;")
+
+        # 点击区域透明按钮
+        self.toggle_patch_btn = QPushButton(self.toggle_patch_container)
+        self.toggle_patch_btn.setObjectName(u"toggle_patch_btn")
+        self.toggle_patch_btn.setGeometry(QRect(10, 10, 191, 91))  # 居中放置在扩大的容器中
+        self.toggle_patch_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))  # 设置鼠标悬停时为手形光标
+        self.toggle_patch_btn.setFlat(True)
+        self.toggle_patch_btn.raise_()  # 确保按钮在最上层
+        self.toggle_patch_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+            }
+        """)
+        
         # 添加卸载补丁按钮 - 新增
         self.uninstall_container = QWidget(self.inner_content)
         self.uninstall_container.setObjectName(u"uninstall_container")
-        self.uninstall_container.setGeometry(QRect(1050, 310, 211, 111))  # 调整Y坐标，位于310位置
+        self.uninstall_container.setGeometry(QRect(1050, 320, 211, 111))  # 设置Y坐标为320
 
         # 使用相同的按钮背景图片
         self.uninstall_bg = QLabel(self.uninstall_container)
@@ -434,7 +468,7 @@ class Ui_MainWindows(object):
         # 退出按钮 - 基于背景图片和标签组合，调整位置
         self.exit_container = QWidget(self.inner_content)
         self.exit_container.setObjectName(u"exit_container")
-        self.exit_container.setGeometry(QRect(1050, 420, 211, 111))  # 调整Y坐标，下移至420
+        self.exit_container.setGeometry(QRect(1050, 450, 211, 111))  # 调整Y坐标，设为450
         # 不要隐藏容器，让动画系统来控制它的可见性和位置
 
         # 使用原来的按钮背景图片
@@ -476,11 +510,28 @@ class Ui_MainWindows(object):
         self.vol4bg.raise_()
         self.afterbg.raise_()
         self.Mainbg.raise_()
+        # 显式单独抬升开始安装按钮的所有组件
         self.button_container.raise_()
-        self.uninstall_container.raise_()  # 添加新按钮到层级顺序
+        self.start_install_bg.raise_()
+        self.start_install_text.raise_()
+        self.start_install_btn.raise_()
+        # 显式单独抬升禁/启用补丁按钮的所有组件
+        self.toggle_patch_container.raise_()
+        self.toggle_patch_bg.raise_()
+        self.toggle_patch_text.raise_()
+        self.toggle_patch_btn.raise_()
+        # 显式单独抬升卸载补丁按钮的所有组件
+        self.uninstall_container.raise_()
+        self.uninstall_bg.raise_()
+        self.uninstall_text.raise_()
+        self.uninstall_btn.raise_()
+        # 显式单独抬升退出按钮的所有组件
         self.exit_container.raise_()
+        self.exit_bg.raise_()
+        self.exit_text.raise_()
+        self.exit_btn.raise_()
+        # 其他UI元素
         self.menu_area.raise_()  # 确保菜单区域在背景之上
-        # self.menubar.raise_()  # 不再需要菜单栏
         self.settings_btn.raise_()  # 确保设置按钮在上层
         self.help_btn.raise_()  # 确保帮助按钮在上层
         self.title_bar.raise_()  # 确保标题栏在最上层

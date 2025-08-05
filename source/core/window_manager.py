@@ -115,22 +115,30 @@ class WindowManager:
             btn_width = 211  # 扩大后的容器宽度
             btn_height = 111  # 扩大后的容器高度
             x_pos = new_width - btn_width - right_margin
-            y_pos = int((new_height - 65) * 0.28) - 10  # 调整为更靠上的位置
+            y_pos = int((new_height - 65) * 0.18) - 10  # 从0.28改为0.18，向上移动
             self.ui.button_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
+            
+        # 添加禁/启用补丁按钮容器的位置调整
+        if hasattr(self.ui, 'toggle_patch_container'):
+            btn_width = 211  # 扩大后的容器宽度
+            btn_height = 111  # 扩大后的容器高度
+            x_pos = new_width - btn_width - right_margin
+            y_pos = int((new_height - 65) * 0.36) - 10  # 从0.46改为0.36，向上移动
+            self.ui.toggle_patch_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
             
         # 添加卸载补丁按钮容器的位置调整
         if hasattr(self.ui, 'uninstall_container'):
             btn_width = 211  # 扩大后的容器宽度
             btn_height = 111  # 扩大后的容器高度
             x_pos = new_width - btn_width - right_margin
-            y_pos = int((new_height - 65) * 0.46) - 10  # 调整为中间位置
+            y_pos = int((new_height - 65) * 0.54) - 10  # 从0.64改为0.54，向上移动
             self.ui.uninstall_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
             
         if hasattr(self.ui, 'exit_container'):
             btn_width = 211  # 扩大后的容器宽度
             btn_height = 111  # 扩大后的容器高度
             x_pos = new_width - btn_width - right_margin
-            y_pos = int((new_height - 65) * 0.64) - 10  # 调整为更靠下的位置
+            y_pos = int((new_height - 65) * 0.72) - 10  # 从0.82改为0.72，向上移动
             self.ui.exit_container.setGeometry(x_pos, y_pos, btn_width, btn_height)
             
         # 更新圆角
