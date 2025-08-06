@@ -5,6 +5,10 @@ import os
 import re
 import sys
 from datetime import datetime
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("privacy_policy")
 
 # 隐私协议的缩略版内容
 PRIVACY_POLICY_BRIEF = """
@@ -83,14 +87,14 @@ def get_local_privacy_policy():
                     try:
                         date_obj = datetime.strptime(date_str, '%Y年%m月%d日')
                         date_version = date_obj.strftime('%Y.%m.%d')
-                        print(f"成功读取本地隐私协议文件: {path}, 版本: {date_version}")
+                        logger.info(f"成功读取本地隐私协议文件: {path}, 版本: {date_version}")
                         return content, date_version, ""
                     except ValueError:
-                        print(f"本地隐私协议日期格式解析错误: {path}")
+                        logger.error(f"本地隐私协议日期格式解析错误: {path}")
                 else:
-                    print(f"本地隐私协议未找到更新日期: {path}")
+                    logger.warning(f"本地隐私协议未找到更新日期: {path}")
         except Exception as e:
-            print(f"读取本地隐私协议失败 {path}: {str(e)}")
+            logger.error(f"读取本地隐私协议失败 {path}: {str(e)}")
     
     # 所有路径都尝试失败，使用默认版本
     return PRIVACY_POLICY_BRIEF, PRIVACY_POLICY_VERSION, "无法读取本地隐私协议文件" 

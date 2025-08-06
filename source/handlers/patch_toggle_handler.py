@@ -6,6 +6,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QObject
 from PySide6.QtGui import QFont
 from utils import msgbox_frame
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("patch_toggle_handler")
 
 class PatchToggleHandler(QObject):
     """
@@ -41,7 +45,7 @@ class PatchToggleHandler(QObject):
             return  # 用户取消了选择
         
         if debug_mode:
-            print(f"DEBUG: 禁/启用功能 - 用户选择了目录: {selected_folder}")
+            logger.debug(f"DEBUG: 禁/启用功能 - 用户选择了目录: {selected_folder}")
         
         # 首先尝试将选择的目录视为上级目录，使用增强的目录识别功能
         game_dirs = self.game_detector.identify_game_directories_improved(selected_folder)
@@ -60,7 +64,7 @@ class PatchToggleHandler(QObject):
             debug_mode: 是否为调试模式
         """
         if debug_mode:
-            print(f"DEBUG: 禁/启用功能 - 在上级目录中找到以下游戏: {list(game_dirs.keys())}")
+            logger.debug(f"DEBUG: 禁/启用功能 - 在上级目录中找到以下游戏: {list(game_dirs.keys())}")
         
         # 查找已安装补丁的游戏，只处理那些已安装补丁的游戏
         games_with_patch = {}
@@ -75,7 +79,7 @@ class PatchToggleHandler(QObject):
                     "status": status
                 }
                 if debug_mode:
-                    print(f"DEBUG: 禁/启用功能 - {game_version} 已安装补丁，当前状态: {status}")
+                    logger.debug(f"DEBUG: 禁/启用功能 - {game_version} 已安装补丁，当前状态: {status}")
         
         # 检查是否有已安装补丁的游戏
         if not games_with_patch:
@@ -126,13 +130,13 @@ class PatchToggleHandler(QObject):
         """
         # 未找到游戏目录，尝试将选择的目录作为游戏目录
         if debug_mode:
-            print(f"DEBUG: 禁/启用功能 - 未在上级目录找到游戏，尝试将选择的目录视为游戏目录")
+            logger.debug(f"DEBUG: 禁/启用功能 - 未在上级目录找到游戏，尝试将选择的目录视为游戏目录")
             
         game_version = self.game_detector.identify_game_version(selected_folder)
         
         if game_version:
             if debug_mode:
-                print(f"DEBUG: 禁/启用功能 - 识别为游戏: {game_version}")
+                logger.debug(f"DEBUG: 禁/启用功能 - 识别为游戏: {game_version}")
             
             # 检查是否已安装补丁
             if self.patch_manager.check_patch_installed(selected_folder, game_version):
@@ -162,7 +166,7 @@ class PatchToggleHandler(QObject):
         else:
             # 两种方式都未识别到游戏
             if debug_mode:
-                print(f"DEBUG: 禁/启用功能 - 无法识别游戏")
+                logger.debug(f"DEBUG: 禁/启用功能 - 无法识别游戏")
                 
             msg_box = msgbox_frame(
                 f"错误 - {self.app_name}",
@@ -380,7 +384,7 @@ class PatchToggleHandler(QObject):
                     
             except Exception as e:
                 if debug_mode:
-                    print(f"DEBUG: 切换 {game_version} 补丁状态时出错: {str(e)}")
+                    logger.error(f"DEBUG: 切换 {game_version} 补丁状态时出错: {str(e)}")
                 fail_count += 1
                 results.append({
                     "version": game_version,

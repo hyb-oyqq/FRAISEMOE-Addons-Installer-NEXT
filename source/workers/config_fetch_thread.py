@@ -4,6 +4,11 @@ import webbrowser
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QMessageBox
 import sys
+from utils.logger import setup_logger
+from utils.url_censor import censor_url
+
+# 初始化logger
+logger = setup_logger("config_fetch")
 
 class ConfigFetchThread(QThread):
     finished = Signal(object, str)  # data, error_message
@@ -17,28 +22,27 @@ class ConfigFetchThread(QThread):
     def run(self):
         try:
             if self.debug_mode:
-                print("--- Starting to fetch cloud config ---")
+                logger.info("--- Starting to fetch cloud config ---")
                 # 完全隐藏URL
-                print(f"DEBUG: Requesting URL: ***URL protection***")
-                print(f"DEBUG: Using Headers: {self.headers}")
+                logger.debug(f"DEBUG: Requesting URL: ***URL protection***")
+                logger.debug(f"DEBUG: Using Headers: {self.headers}")
 
             response = requests.get(self.url, headers=self.headers, timeout=10)
 
             if self.debug_mode:
-                print(f"DEBUG: Response Status Code: {response.status_code}")
-                print(f"DEBUG: Response Headers: {response.headers}")
+                logger.debug(f"DEBUG: Response Status Code: {response.status_code}")
+                logger.debug(f"DEBUG: Response Headers: {response.headers}")
                 
                 # 解析并隐藏响应中的敏感URL
                 try:
                     response_data = response.json()
                     # 创建安全版本用于日志输出
                     safe_response = self._create_safe_config_for_logging(response_data)
-                    print(f"DEBUG: Response Text: {json.dumps(safe_response, indent=2)}")
+                    logger.debug(f"DEBUG: Response Text: {json.dumps(safe_response, indent=2)}")
                 except:
                     # 如果不是JSON，直接打印文本
-                    from utils.helpers import censor_url
                     censored_text = censor_url(response.text)
-                    print(f"DEBUG: Response Text: {censored_text}")
+                    logger.debug(f"DEBUG: Response Text: {censored_text}")
 
             response.raise_for_status()
             
@@ -74,7 +78,7 @@ class ConfigFetchThread(QThread):
             self.finished.emit(None, error_msg)
         finally:
             if self.debug_mode:
-                print("--- Finished fetching cloud config ---")
+                logger.info("--- Finished fetching cloud config ---")
                 
     def _create_safe_config_for_logging(self, config_data):
         """创建用于日志记录的安全配置副本，隐藏敏感URL

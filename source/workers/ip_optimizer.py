@@ -7,6 +7,11 @@ from urllib.parse import urlparse
 
 from PySide6.QtCore import QThread, Signal
 from utils import resource_path
+from utils.logger import setup_logger
+from utils.url_censor import censor_url
+
+# 初始化logger
+logger = setup_logger("ip_optimizer")
 
 class IpOptimizer:
     def __init__(self):
@@ -25,7 +30,7 @@ class IpOptimizer:
         try:
             cst_path = resource_path("cfst.exe")
             if not os.path.exists(cst_path):
-                print(f"错误: cfst.exe 未在资源路径中找到。")
+                logger.error(f"错误: cfst.exe 未在资源路径中找到。")
                 return None
 
             ip_txt_path = resource_path("ip.txt")
@@ -51,8 +56,8 @@ class IpOptimizer:
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             
-            print("--- CloudflareSpeedTest 开始执行 ---")
-            print(f"执行命令: {' '.join(safe_command)}")
+            logger.info("--- CloudflareSpeedTest 开始执行 ---")
+            logger.info(f"执行命令: {' '.join(safe_command)}")
             
             self.process = subprocess.Popen(
                 command,
@@ -74,7 +79,7 @@ class IpOptimizer:
 
             stdout = self.process.stdout
             if not stdout:
-                print("错误: 无法获取子进程的输出流。")
+                logger.error("错误: 无法获取子进程的输出流。")
                 return None
 
             optimal_ip = None
@@ -94,7 +99,7 @@ class IpOptimizer:
                     if not ready or not line:
                         timeout_counter += 1
                         if timeout_counter > max_timeout:
-                            print("超时: CloudflareSpeedTest 响应超时")
+                            logger.warning("超时: CloudflareSpeedTest 响应超时")
                             break
                         time.sleep(1)
                         continue
@@ -102,18 +107,17 @@ class IpOptimizer:
                     timeout_counter = 0
                     
                     # 处理输出行，隐藏可能包含的URL
-                    from utils.helpers import censor_url
                     cleaned_line = censor_url(line.strip())
                     if cleaned_line:
-                        print(cleaned_line)
+                        logger.debug(cleaned_line)
                         
                         if "IP 地址" in cleaned_line and "平均延迟" in cleaned_line:
-                            print("检测到IP结果表头，准备获取IP地址...")
+                            logger.info("检测到IP结果表头，准备获取IP地址...")
                             found_header = True
                             continue
                         
                         if "完整测速结果已写入" in cleaned_line or "按下 回车键 或 Ctrl+C 退出" in cleaned_line:
-                            print("检测到测速完成信息")
+                            logger.info("检测到测速完成信息")
                             found_completion = True
                             
                             if optimal_ip:
@@ -123,17 +127,17 @@ class IpOptimizer:
                             match = ip_pattern.search(cleaned_line)
                             if match and not optimal_ip:
                                 optimal_ip = match.group(1)
-                                print(f"找到最优 IP: {optimal_ip}")
+                                logger.info(f"找到最优 IP: {optimal_ip}")
                                 break
                             
                 except Exception as e:
-                    print(f"读取输出时发生错误: {e}")
+                    logger.error(f"读取输出时发生错误: {e}")
                     break
             
             if self.process and self.process.poll() is None:
                 try:
                     if self.process.stdin and not self.process.stdin.closed:
-                        print("发送退出信号...")
+                        logger.debug("发送退出信号...")
                         self.process.stdin.write('\n')
                         self.process.stdin.flush()
                 except:
@@ -141,11 +145,11 @@ class IpOptimizer:
             
             self.stop()
             
-            print("--- CloudflareSpeedTest 执行结束 ---")
+            logger.info("--- CloudflareSpeedTest 执行结束 ---")
             return optimal_ip
 
         except Exception as e:
-            print(f"执行 CloudflareSpeedTest 时发生错误: {e}")
+            logger.error(f"执行 CloudflareSpeedTest 时发生错误: {e}")
             return None
 
     def get_optimal_ipv6(self, url: str) -> str | None:
@@ -161,12 +165,12 @@ class IpOptimizer:
         try:
             cst_path = resource_path("cfst.exe")
             if not os.path.exists(cst_path):
-                print(f"错误: cfst.exe 未在资源路径中找到。")
+                logger.error(f"错误: cfst.exe 未在资源路径中找到。")
                 return None
 
             ipv6_txt_path = resource_path("data/ipv6.txt")
             if not os.path.exists(ipv6_txt_path):
-                print(f"错误: ipv6.txt 未在资源路径中找到。")
+                logger.error(f"错误: ipv6.txt 未在资源路径中找到。")
                 return None
             
             # 隐藏敏感URL
@@ -190,8 +194,8 @@ class IpOptimizer:
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             
-            print("--- CloudflareSpeedTest IPv6 开始执行 ---")
-            print(f"执行命令: {' '.join(safe_command)}")
+            logger.info("--- CloudflareSpeedTest IPv6 开始执行 ---")
+            logger.info(f"执行命令: {' '.join(safe_command)}")
             
             self.process = subprocess.Popen(
                 command,
@@ -213,7 +217,7 @@ class IpOptimizer:
 
             stdout = self.process.stdout
             if not stdout:
-                print("错误: 无法获取子进程的输出流。")
+                logger.error("错误: 无法获取子进程的输出流。")
                 return None
 
             optimal_ipv6 = None
@@ -233,7 +237,7 @@ class IpOptimizer:
                     if not ready or not line:
                         timeout_counter += 1
                         if timeout_counter > max_timeout:
-                            print("超时: CloudflareSpeedTest IPv6 响应超时")
+                            logger.warning("超时: CloudflareSpeedTest IPv6 响应超时")
                             break
                         time.sleep(1)
                         continue
@@ -241,18 +245,17 @@ class IpOptimizer:
                     timeout_counter = 0
                     
                     # 处理输出行，隐藏可能包含的URL
-                    from utils.helpers import censor_url
                     cleaned_line = censor_url(line.strip())
                     if cleaned_line:
-                        print(cleaned_line)
+                        logger.debug(cleaned_line)
                         
                         if "IP 地址" in cleaned_line and "平均延迟" in cleaned_line:
-                            print("检测到IPv6结果表头，准备获取IPv6地址...")
+                            logger.info("检测到IPv6结果表头，准备获取IPv6地址...")
                             found_header = True
                             continue
                         
                         if "完整测速结果已写入" in cleaned_line or "按下 回车键 或 Ctrl+C 退出" in cleaned_line:
-                            print("检测到IPv6测速完成信息")
+                            logger.info("检测到IPv6测速完成信息")
                             found_completion = True
                             
                             if optimal_ipv6:
@@ -262,17 +265,17 @@ class IpOptimizer:
                             match = ipv6_pattern.search(cleaned_line)
                             if match and not optimal_ipv6:
                                 optimal_ipv6 = match.group(1)
-                                print(f"找到最优 IPv6: {optimal_ipv6}")
+                                logger.info(f"找到最优 IPv6: {optimal_ipv6}")
                                 break
                             
                 except Exception as e:
-                    print(f"读取输出时发生错误: {e}")
+                    logger.error(f"读取输出时发生错误: {e}")
                     break
             
             if self.process and self.process.poll() is None:
                 try:
                     if self.process.stdin and not self.process.stdin.closed:
-                        print("发送退出信号...")
+                        logger.debug("发送退出信号...")
                         self.process.stdin.write('\n')
                         self.process.stdin.flush()
                 except:
@@ -280,16 +283,16 @@ class IpOptimizer:
             
             self.stop()
             
-            print("--- CloudflareSpeedTest IPv6 执行结束 ---")
+            logger.info("--- CloudflareSpeedTest IPv6 执行结束 ---")
             return optimal_ipv6
 
         except Exception as e:
-            print(f"执行 CloudflareSpeedTest IPv6 时发生错误: {e}")
+            logger.error(f"执行 CloudflareSpeedTest IPv6 时发生错误: {e}")
             return None
 
     def stop(self):
         if self.process and self.process.poll() is None:
-            print("正在终止 CloudflareSpeedTest 进程...")
+            logger.info("正在终止 CloudflareSpeedTest 进程...")
             try:
                 if self.process.stdin and not self.process.stdin.closed:
                     self.process.stdin.write('\n')
@@ -304,7 +307,7 @@ class IpOptimizer:
             except subprocess.TimeoutExpired:
                 self.process.kill()
                 self.process.wait()
-            print("CloudflareSpeedTest 进程已终止。")
+            logger.info("CloudflareSpeedTest 进程已终止。")
 
 
 class IpOptimizerThread(QThread):

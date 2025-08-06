@@ -8,9 +8,14 @@ from PySide6.QtCore import (Qt, Signal, QThread, QTimer)
 from PySide6.QtWidgets import (QLabel, QProgressBar, QVBoxLayout, QDialog, QHBoxLayout)
 from utils import resource_path
 from data.config import APP_NAME, UA
+from utils.logger import setup_logger
 import signal
 import ctypes
 import time
+from utils.url_censor import censor_url
+
+# 初始化logger
+logger = setup_logger("download")
 
 if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
@@ -49,7 +54,7 @@ class DownloadThread(QThread):
             try:
                 subprocess.run(['taskkill', '/F', '/T', '/PID', str(self.process.pid)], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             except (subprocess.CalledProcessError, FileNotFoundError) as e:
-                print(f"停止下载进程时出错: {e}")
+                logger.error(f"停止下载进程时出错: {e}")
                 
     def _get_process_threads(self, pid):
         """获取进程的所有线程ID"""
@@ -80,7 +85,7 @@ class DownloadThread(QThread):
                 if sys.platform == 'win32':
                     self.threads = self._get_process_threads(self.process.pid)
                     if not self.threads:
-                        print("未找到可暂停的线程")
+                        logger.warning("未找到可暂停的线程")
                         return False
                         
                     for thread_id in self.threads:
@@ -90,15 +95,15 @@ class DownloadThread(QThread):
                             kernel32.CloseHandle(h_thread)
                             
                     self._is_paused = True
-                    print(f"下载进程已暂停: PID {self.process.pid}, 线程数: {len(self.threads)}")
+                    logger.info(f"下载进程已暂停: PID {self.process.pid}, 线程数: {len(self.threads)}")
                     return True
                 else:
                     os.kill(self.process.pid, signal.SIGSTOP)
                     self._is_paused = True
-                    print(f"下载进程已暂停: PID {self.process.pid}")
+                    logger.info(f"下载进程已暂停: PID {self.process.pid}")
                     return True
             except Exception as e:
-                print(f"暂停下载进程时出错: {e}")
+                logger.error(f"暂停下载进程时出错: {e}")
                 return False
         return False
                 
@@ -114,15 +119,15 @@ class DownloadThread(QThread):
                             kernel32.CloseHandle(h_thread)
                             
                     self._is_paused = False
-                    print(f"下载进程已恢复: PID {self.process.pid}, 线程数: {len(self.threads)}")
+                    logger.info(f"下载进程已恢复: PID {self.process.pid}, 线程数: {len(self.threads)}")
                     return True
                 else:
                     os.kill(self.process.pid, signal.SIGCONT)
                     self._is_paused = False
-                    print(f"下载进程已恢复: PID {self.process.pid}")
+                    logger.info(f"下载进程已恢复: PID {self.process.pid}")
                     return True
             except Exception as e:
-                print(f"恢复下载进程时出错: {e}")
+                logger.error(f"恢复下载进程时出错: {e}")
                 return False
         return False
 
@@ -155,7 +160,7 @@ class DownloadThread(QThread):
             if hasattr(self.parent(), 'config'):
                 ipv6_enabled = self.parent().config.get("ipv6_enabled", False)
                 
-            print(f"IPv6支持状态: {ipv6_enabled}")
+            logger.info(f"IPv6支持状态: {ipv6_enabled}")
 
             command.extend([
                 '--dir', download_dir,
@@ -192,9 +197,9 @@ class DownloadThread(QThread):
             
             if not ipv6_enabled:
                 command.append('--disable-ipv6=true')
-                print("已禁用IPv6支持")
+                logger.info("已禁用IPv6支持")
             else:
-                print("已启用IPv6支持")
+                logger.info("已启用IPv6支持")
             
             command.append('--check-certificate=false')
             
@@ -208,7 +213,7 @@ class DownloadThread(QThread):
                 if isinstance(url, str) and url.startswith("http"):
                     safe_command[-1] = "***URL protection***"
             
-            print(f"即将执行的 Aria2c 命令: {' '.join(safe_command)}")
+            logger.info(f"即将执行的 Aria2c 命令: {' '.join(safe_command)}")
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creation_flags)
@@ -229,10 +234,9 @@ class DownloadThread(QThread):
                     break
                 
                 # 处理输出行，隐藏可能包含的URL
-                from utils.helpers import censor_url
                 censored_line = censor_url(line)
                 full_output.append(censored_line)
-                print(censored_line.strip())
+                logger.debug(censored_line.strip())
 
                 match = progress_pattern.search(line)
                 if match:

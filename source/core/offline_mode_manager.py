@@ -3,10 +3,15 @@ import hashlib
 import shutil
 import tempfile
 import py7zr
+import traceback
 from PySide6.QtWidgets import QMessageBox
 
 from data.config import PLUGIN, PLUGIN_HASH, GAME_INFO
 from utils import msgbox_frame
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("offline_mode_manager")
 
 class OfflineModeManager:
     """离线模式管理器，用于管理离线模式下的补丁安装和检测"""
@@ -57,7 +62,7 @@ class OfflineModeManager:
             
         debug_mode = self._is_debug_mode()
         if debug_mode:
-            print(f"DEBUG: 扫描离线补丁文件，目录: {directory}")
+            logger.debug(f"DEBUG: 扫描离线补丁文件，目录: {directory}")
             
         # 要查找的补丁文件名
         patch_files = ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]
@@ -72,7 +77,7 @@ class OfflineModeManager:
                     patch_name = file.lower()
                     found_patches[patch_name] = file_path
                     if debug_mode:
-                        print(f"DEBUG: 找到离线补丁文件: {patch_name} 路径: {file_path}")
+                        logger.debug(f"DEBUG: 找到离线补丁文件: {patch_name} 路径: {file_path}")
                         
         self.offline_patches = found_patches
         return found_patches
@@ -110,7 +115,7 @@ class OfflineModeManager:
                 return False
                 
             if debug_mode:
-                print("DEBUG: 已启用离线模式（调试模式下允许强制启用）")
+                logger.debug("DEBUG: 已启用离线模式（调试模式下允许强制启用）")
                 
         self.is_offline_mode = enabled
         
@@ -125,7 +130,7 @@ class OfflineModeManager:
                 self.main_window.ui.title_label.setText(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
         
         if debug_mode:
-            print(f"DEBUG: 离线模式已{'启用' if enabled else '禁用'}")
+            logger.debug(f"DEBUG: 离线模式已{'启用' if enabled else '禁用'}")
             
         return True
         
@@ -187,12 +192,12 @@ class OfflineModeManager:
             shutil.copy2(source_path, target_path)
             
             if debug_mode:
-                print(f"DEBUG: 已复制离线补丁文件 {source_path} 到 {target_path}")
+                logger.debug(f"DEBUG: 已复制离线补丁文件 {source_path} 到 {target_path}")
                 
             return True
         except Exception as e:
             if debug_mode:
-                print(f"DEBUG: 复制离线补丁文件失败: {e}")
+                logger.error(f"DEBUG: 复制离线补丁文件失败: {e}")
             return False
             
     def verify_patch_hash(self, game_version, file_path):
@@ -220,66 +225,65 @@ class OfflineModeManager:
             expected_hash = PLUGIN_HASH.get("after", "")
             
         if not expected_hash:
-            print(f"DEBUG: 未找到 {game_version} 的预期哈希值")
+            logger.warning(f"DEBUG: 未找到 {game_version} 的预期哈希值")
             return False
             
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            print(f"DEBUG: 开始验证离线补丁文件: {file_path}")
-            print(f"DEBUG: 游戏版本: {game_version}")
-            print(f"DEBUG: 预期哈希值: {expected_hash}")
+            logger.debug(f"DEBUG: 开始验证离线补丁文件: {file_path}")
+            logger.debug(f"DEBUG: 游戏版本: {game_version}")
+            logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
             
         try:
             # 检查文件是否存在
             if not os.path.exists(file_path):
                 if debug_mode:
-                    print(f"DEBUG: 补丁文件不存在: {file_path}")
+                    logger.warning(f"DEBUG: 补丁文件不存在: {file_path}")
                 return False
                 
             # 检查文件大小
             file_size = os.path.getsize(file_path)
             if debug_mode:
-                print(f"DEBUG: 补丁文件大小: {file_size} 字节")
+                logger.debug(f"DEBUG: 补丁文件大小: {file_size} 字节")
                 
             if file_size == 0:
                 if debug_mode:
-                    print(f"DEBUG: 补丁文件大小为0，无效文件")
+                    logger.warning(f"DEBUG: 补丁文件大小为0，无效文件")
                 return False
                 
             # 创建临时目录用于解压文件
             with tempfile.TemporaryDirectory() as temp_dir:
                 if debug_mode:
-                    print(f"DEBUG: 创建临时目录: {temp_dir}")
+                    logger.debug(f"DEBUG: 创建临时目录: {temp_dir}")
                     
                 # 解压补丁文件
                 try:
                     if debug_mode:
-                        print(f"DEBUG: 开始解压文件: {file_path}")
+                        logger.debug(f"DEBUG: 开始解压文件: {file_path}")
                         
                     with py7zr.SevenZipFile(file_path, mode="r") as archive:
                         # 获取压缩包内文件列表
                         file_list = archive.getnames()
                         if debug_mode:
-                            print(f"DEBUG: 压缩包内文件列表: {file_list}")
+                            logger.debug(f"DEBUG: 压缩包内文件列表: {file_list}")
                             
                         # 解压所有文件
                         archive.extractall(path=temp_dir)
                         
                         if debug_mode:
-                            print(f"DEBUG: 解压完成")
+                            logger.debug(f"DEBUG: 解压完成")
                             # 列出解压后的文件
                             extracted_files = []
                             for root, dirs, files in os.walk(temp_dir):
                                 for file in files:
                                     extracted_files.append(os.path.join(root, file))
-                            print(f"DEBUG: 解压后的文件列表: {extracted_files}")
+                            logger.debug(f"DEBUG: 解压后的文件列表: {extracted_files}")
                 except Exception as e:
                     if debug_mode:
-                        print(f"DEBUG: 解压补丁文件失败: {e}")
-                        print(f"DEBUG: 错误类型: {type(e).__name__}")
-                        import traceback
-                        print(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
+                        logger.error(f"DEBUG: 解压补丁文件失败: {e}")
+                        logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
+                        logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
                     return False
                 
                 # 获取补丁文件路径
@@ -297,7 +301,7 @@ class OfflineModeManager:
                 
                 if not patch_file or not os.path.exists(patch_file):
                     if debug_mode:
-                        print(f"DEBUG: 未找到解压后的补丁文件: {patch_file}")
+                        logger.warning(f"DEBUG: 未找到解压后的补丁文件: {patch_file}")
                         # 尝试查找可能的替代文件
                         alternative_files = []
                         for root, dirs, files in os.walk(temp_dir):
@@ -305,18 +309,18 @@ class OfflineModeManager:
                                 if file.endswith('.xp3') or file.endswith('.int'):
                                     alternative_files.append(os.path.join(root, file))
                         if alternative_files:
-                            print(f"DEBUG: 找到可能的替代文件: {alternative_files}")
+                            logger.debug(f"DEBUG: 找到可能的替代文件: {alternative_files}")
                         
                         # 检查解压目录结构
-                        print(f"DEBUG: 检查解压目录结构:")
+                        logger.debug(f"DEBUG: 检查解压目录结构:")
                         for root, dirs, files in os.walk(temp_dir):
-                            print(f"DEBUG: 目录: {root}")
-                            print(f"DEBUG: 子目录: {dirs}")
-                            print(f"DEBUG: 文件: {files}")
+                            logger.debug(f"DEBUG: 目录: {root}")
+                            logger.debug(f"DEBUG: 子目录: {dirs}")
+                            logger.debug(f"DEBUG: 文件: {files}")
                     return False
                 
                 if debug_mode:
-                    print(f"DEBUG: 找到解压后的补丁文件: {patch_file}")
+                    logger.debug(f"DEBUG: 找到解压后的补丁文件: {patch_file}")
                     
                 # 计算补丁文件哈希值
                 try:
@@ -327,22 +331,21 @@ class OfflineModeManager:
                     result = file_hash.lower() == expected_hash.lower()
                     
                     if debug_mode:
-                        print(f"DEBUG: 补丁文件 {patch_file} 哈希值验证: {'成功' if result else '失败'}")
-                        print(f"DEBUG: 预期哈希值: {expected_hash}")
-                        print(f"DEBUG: 实际哈希值: {file_hash}")
+                        logger.debug(f"DEBUG: 补丁文件 {patch_file} 哈希值验证: {'成功' if result else '失败'}")
+                        logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
+                        logger.debug(f"DEBUG: 实际哈希值: {file_hash}")
                         
                     return result
                 except Exception as e:
                     if debug_mode:
-                        print(f"DEBUG: 计算补丁文件哈希值失败: {e}")
-                        print(f"DEBUG: 错误类型: {type(e).__name__}")
+                        logger.error(f"DEBUG: 计算补丁文件哈希值失败: {e}")
+                        logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
                     return False
         except Exception as e:
             if debug_mode:
-                print(f"DEBUG: 验证补丁哈希值失败: {e}")
-                print(f"DEBUG: 错误类型: {type(e).__name__}")
-                import traceback
-                print(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
+                logger.error(f"DEBUG: 验证补丁哈希值失败: {e}")
+                logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
+                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
             return False
             
     def is_offline_mode_available(self):
@@ -378,11 +381,11 @@ class OfflineModeManager:
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            print(f"DEBUG: 开始离线安装流程，选择的游戏: {selected_games}")
+            logger.debug(f"DEBUG: 开始离线安装流程，选择的游戏: {selected_games}")
             
         if not self.is_in_offline_mode():
             if debug_mode:
-                print("DEBUG: 当前不是离线模式，无法使用离线安装")
+                logger.warning("DEBUG: 当前不是离线模式，无法使用离线安装")
             return False
             
         # 确保已扫描过补丁文件
@@ -391,7 +394,7 @@ class OfflineModeManager:
             
         if not self.offline_patches:
             if debug_mode:
-                print("DEBUG: 未找到任何离线补丁文件")
+                logger.warning("DEBUG: 未找到任何离线补丁文件")
             msgbox_frame(
                 f"离线安装错误 - {self.app_name}",
                 "\n未找到任何离线补丁文件，无法进行离线安装。\n\n请将补丁文件放置在软件所在目录后再尝试。\n",
@@ -406,7 +409,7 @@ class OfflineModeManager:
         
         if not game_dirs:
             if debug_mode:
-                print("DEBUG: 未识别到任何游戏目录")
+                logger.warning("DEBUG: 未识别到任何游戏目录")
             return False
             
         # 显示文件检验窗口
@@ -453,11 +456,11 @@ class OfflineModeManager:
                 if self.get_offline_patch_path(game_version):
                     installable_games.append(game_version)
                 elif debug_mode:
-                    print(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
+                    logger.warning(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
                     
         if not installable_games:
             if debug_mode:
-                print("DEBUG: 没有需要安装的游戏或未找到对应的离线补丁")
+                logger.info("DEBUG: 没有需要安装的游戏或未找到对应的离线补丁")
             msgbox_frame(
                 f"离线安装信息 - {self.app_name}",
                 "\n没有需要安装的游戏或未找到对应的离线补丁文件。\n",
@@ -468,7 +471,7 @@ class OfflineModeManager:
             
         # 开始安装流程
         if debug_mode:
-            print(f"DEBUG: 开始离线安装流程，安装游戏: {installable_games}")
+            logger.info(f"DEBUG: 开始离线安装流程，安装游戏: {installable_games}")
             
         # 创建安装任务列表
         install_tasks = []
@@ -522,7 +525,7 @@ class OfflineModeManager:
         if not install_tasks:
             # 所有任务完成，进行后检查
             if debug_mode:
-                print("DEBUG: 所有离线安装任务完成，进行后检查")
+                logger.info("DEBUG: 所有离线安装任务完成，进行后检查")
             self.main_window.after_hash_compare()
             return
             
@@ -530,9 +533,9 @@ class OfflineModeManager:
         patch_file, game_folder, game_version, _7z_path, plugin_path = install_tasks.pop(0)
         
         if debug_mode:
-            print(f"DEBUG: 处理离线安装任务: {game_version}")
-            print(f"DEBUG: 补丁文件: {patch_file}")
-            print(f"DEBUG: 游戏目录: {game_folder}")
+            logger.debug(f"DEBUG: 处理离线安装任务: {game_version}")
+            logger.debug(f"DEBUG: 补丁文件: {patch_file}")
+            logger.debug(f"DEBUG: 游戏目录: {game_folder}")
             
         # 确保目标目录存在
         os.makedirs(os.path.dirname(_7z_path), exist_ok=True)
@@ -542,8 +545,8 @@ class OfflineModeManager:
             shutil.copy2(patch_file, _7z_path)
             
             if debug_mode:
-                print(f"DEBUG: 已复制补丁文件到缓存目录: {_7z_path}")
-                print(f"DEBUG: 开始验证补丁文件哈希值")
+                logger.debug(f"DEBUG: 已复制补丁文件到缓存目录: {_7z_path}")
+                logger.debug(f"DEBUG: 开始验证补丁文件哈希值")
                 
             # 获取预期的哈希值
             expected_hash = None
@@ -559,7 +562,7 @@ class OfflineModeManager:
                 expected_hash = PLUGIN_HASH.get("after", "")
                 
             if debug_mode and expected_hash:
-                print(f"DEBUG: 预期哈希值: {expected_hash}")
+                logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
             
             # 显示哈希验证窗口 - 使用离线特定消息
             self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="offline_verify", is_offline=True)
@@ -574,7 +577,7 @@ class OfflineModeManager:
             
             if hash_valid:
                 if debug_mode:
-                    print(f"DEBUG: 补丁文件哈希验证成功，开始解压")
+                    logger.info(f"DEBUG: 补丁文件哈希验证成功，开始解压")
                 
                 # 显示解压窗口 - 使用离线特定消息
                 self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="offline_extraction", is_offline=True)
@@ -596,7 +599,7 @@ class OfflineModeManager:
                     extraction_thread.start()
                 except Exception as e:
                     if debug_mode:
-                        print(f"DEBUG: 创建或启动解压线程失败: {e}")
+                        logger.error(f"DEBUG: 创建或启动解压线程失败: {e}")
                     
                     # 关闭解压窗口
                     if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
@@ -614,7 +617,7 @@ class OfflineModeManager:
                     self.process_next_offline_install_task(install_tasks)
             else:
                 if debug_mode:
-                    print(f"DEBUG: 补丁文件哈希验证失败")
+                    logger.warning(f"DEBUG: 补丁文件哈希验证失败")
                     
                 # 显示错误消息
                 msgbox_frame(
@@ -627,7 +630,7 @@ class OfflineModeManager:
                 self.process_next_offline_install_task(install_tasks)
         except Exception as e:
             if debug_mode:
-                print(f"DEBUG: 离线安装任务处理失败: {e}")
+                logger.error(f"DEBUG: 离线安装任务处理失败: {e}")
                 
             # 显示错误消息
             msgbox_frame(
@@ -656,9 +659,9 @@ class OfflineModeManager:
             self.main_window.hash_msg_box = None
         
         if debug_mode:
-            print(f"DEBUG: 离线解压完成，状态: {'成功' if success else '失败'}")
+            logger.debug(f"DEBUG: 离线解压完成，状态: {'成功' if success else '失败'}")
             if not success:
-                print(f"DEBUG: 错误信息: {error_message}")
+                logger.error(f"DEBUG: 错误信息: {error_message}")
         
         if not success:
             # 显示错误消息
@@ -686,7 +689,7 @@ class OfflineModeManager:
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            print("DEBUG: 离线解压完成，继续处理下一个任务")
+            logger.debug("DEBUG: 离线解压完成，继续处理下一个任务")
             
         # 处理下一个任务
         self.process_next_offline_install_task(remaining_tasks) 

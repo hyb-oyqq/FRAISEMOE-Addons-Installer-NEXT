@@ -30,6 +30,10 @@ from core import (
 )
 from core.ipv6_manager import IPv6Manager
 from handlers import PatchToggleHandler, UninstallHandler
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("main_window")
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -768,77 +772,52 @@ class MainWindow(QMainWindow):
                     self.download_manager.file_dialog()
 
     def check_and_set_offline_mode(self):
-        """检查是否有离线补丁文件，如果有则自动切换到离线模式"""
+        """检查是否有离线补丁文件，如果有则自动启用离线模式
+        
+        Returns:
+            bool: 是否成功切换到离线模式
+        """
         try:
-            # 检查是否有离线补丁文件
-            has_offline_patches = self.offline_mode_manager.has_offline_patches()
+            # 初始化离线模式管理器
+            if not hasattr(self, 'offline_mode_manager') or self.offline_mode_manager is None:
+                from core.offline_mode_manager import OfflineModeManager
+                self.offline_mode_manager = OfflineModeManager(self)
             
-            # 获取调试模式状态
-            debug_mode = False
-            if hasattr(self.debug_manager, '_is_debug_mode'):
-                debug_mode = self.debug_manager._is_debug_mode()
+            # 扫描离线补丁文件
+            self.offline_mode_manager.scan_for_offline_patches()
             
-            # 检查配置中是否已设置离线模式
-            offline_mode_enabled = False
-            if isinstance(self.config, dict):
-                offline_mode_enabled = self.config.get("offline_mode", False)
-            
-            # 如果有离线补丁文件或者调试模式下强制启用离线模式
-            if has_offline_patches or (debug_mode and offline_mode_enabled):
-                # 设置离线模式
+            # 如果找到离线补丁文件，启用离线模式
+            if self.offline_mode_manager.has_offline_patches():
                 self.offline_mode_manager.set_offline_mode(True)
                 
-                # 更新UI中的离线模式选项
-                if hasattr(self.ui_manager, 'offline_mode_action') and self.ui_manager.offline_mode_action:
-                    self.ui_manager.offline_mode_action.setChecked(True)
-                    self.ui_manager.online_mode_action.setChecked(False)
-                    
-                # 更新配置
-                self.config["offline_mode"] = True
-                self.save_config(self.config)
-                
-                # 在离线模式下始终启用开始安装按钮
+                # 启用开始安装按钮
                 self.set_start_button_enabled(True)
                 
-                # 清除版本警告标志
-                self.version_warning = False
-                
-                if debug_mode:
-                    print(f"DEBUG: 已自动切换到离线模式，找到离线补丁文件: {list(self.offline_mode_manager.offline_patches.keys())}")
-                    print(f"DEBUG: 离线模式下启用开始安装按钮")
+                logger.debug(f"DEBUG: 已自动切换到离线模式，找到离线补丁文件: {list(self.offline_mode_manager.offline_patches.keys())}")
+                logger.debug(f"DEBUG: 离线模式下启用开始安装按钮")
+                return True
             else:
-                # 如果没有离线补丁文件，确保使用在线模式
+                # 如果没有找到离线补丁文件，禁用离线模式
                 self.offline_mode_manager.set_offline_mode(False)
                 
-                # 更新UI中的在线模式选项
-                if hasattr(self.ui_manager, 'online_mode_action') and self.ui_manager.online_mode_action:
-                    self.ui_manager.online_mode_action.setChecked(True)
-                    self.ui_manager.offline_mode_action.setChecked(False)
-                    
-                # 更新配置
-                self.config["offline_mode"] = False
-                self.save_config(self.config)
+                # 检查是否有云端配置，如果没有则禁用开始安装按钮
+                if not self.config_valid:
+                    self.set_start_button_enabled(False)
                 
-                # 如果当前版本过低，设置版本警告标志
-                if hasattr(self, 'last_error_message') and self.last_error_message == "update_required":
-                    # 设置版本警告标志
-                    self.version_warning = True
-                
-                if debug_mode:
-                    print("DEBUG: 未找到离线补丁文件，使用在线模式")
-                    
-            # 确保标题标签显示正确的模式
-            if hasattr(self, 'ui') and hasattr(self.ui, 'title_label'):
-                from data.config import APP_NAME, APP_VERSION
-                mode_indicator = "[离线模式]" if self.offline_mode_manager.is_in_offline_mode() else "[在线模式]"
-                self.ui.title_label.setText(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
+                logger.debug("DEBUG: 未找到离线补丁文件，使用在线模式")
+                return False
                 
         except Exception as e:
-            # 捕获任何异常，确保程序不会崩溃
-            print(f"错误: 检查离线模式时发生异常: {e}")
-            # 默认使用在线模式
-            if hasattr(self, 'offline_mode_manager'):
-                self.offline_mode_manager.is_offline_mode = False
+            # 如果出现异常，禁用离线模式
+            if hasattr(self, 'offline_mode_manager') and self.offline_mode_manager is not None:
+                self.offline_mode_manager.set_offline_mode(False)
+            
+            # 检查是否有云端配置，如果没有则禁用开始安装按钮
+            if not self.config_valid:
+                self.set_start_button_enabled(False)
+                
+            logger.error(f"错误: 检查离线模式时发生异常: {e}")
+            return False
 
     def select_all_games(self, game_checkboxes, checked):
         """选择或取消选择所有游戏

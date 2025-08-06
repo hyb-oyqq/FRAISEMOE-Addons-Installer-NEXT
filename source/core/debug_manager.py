@@ -2,7 +2,11 @@ import os
 import sys
 from PySide6 import QtWidgets
 from data.config import LOG_FILE
+from utils.logger import setup_logger
 from utils import Logger
+
+# 初始化logger
+logger = setup_logger("debug_manager")
 
 class DebugManager:
     def __init__(self, main_window):
@@ -52,7 +56,7 @@ class DebugManager:
         Args:
             checked: 是否启用调试模式
         """
-        print(f"Toggle debug mode: {checked}")
+        logger.info(f"Toggle debug mode: {checked}")
         self.main_window.config["debug_mode"] = checked
         self.main_window.save_config(self.main_window.config)
         
@@ -70,7 +74,7 @@ class DebugManager:
                 
                 # 如果配置中已设置离线模式，则在调试模式下强制启用
                 if offline_mode_enabled:
-                    print("DEBUG: 调试模式下强制启用离线模式")
+                    logger.debug("DEBUG: 调试模式下强制启用离线模式")
                     self.main_window.offline_mode_manager.set_offline_mode(True)
                     
                     # 更新UI中的离线模式选项
@@ -79,7 +83,7 @@ class DebugManager:
                         self.ui_manager.online_mode_action.setChecked(False)
         else:
             self.stop_logging()
-    
+
     def start_logging(self):
         """启动日志记录"""
         if self.logger is None:
@@ -93,7 +97,7 @@ class DebugManager:
                 self.logger = Logger(LOG_FILE, self.original_stdout)
                 sys.stdout = self.logger
                 sys.stderr = self.logger
-                print("--- Debug mode enabled ---")
+                logger.info("--- Debug mode enabled ---")
             except (IOError, OSError) as e:
                 QtWidgets.QMessageBox.critical(self.main_window, "错误", f"无法创建日志文件: {e}")
                 self.logger = None
@@ -101,7 +105,7 @@ class DebugManager:
     def stop_logging(self):
         """停止日志记录"""
         if self.logger:
-            print("--- Debug mode disabled ---")
+            logger.info("--- Debug mode disabled ---")
             sys.stdout = self.original_stdout
             sys.stderr = self.original_stderr
             self.logger.close()

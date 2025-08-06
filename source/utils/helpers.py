@@ -10,6 +10,10 @@ from PySide6 import QtCore, QtWidgets
 import re
 from PySide6.QtGui import QIcon, QPixmap
 from data.config import APP_NAME, CONFIG_FILE
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("helpers")
 
 def resource_path(relative_path):
     """获取资源的绝对路径，适用于开发环境和Nuitka打包环境"""
@@ -83,7 +87,7 @@ def save_config(config):
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=4)
     except IOError as e:
-        print(f"Error saving config: {e}")
+        logger.error(f"Error saving config: {e}")
 
 
 class HashManager:
@@ -109,7 +113,7 @@ class HashManager:
                     results[file_path] = future.result()
                 except Exception as e:
                     results[file_path] = None # Mark as failed
-                    print(f"Error calculating hash for {file_path}: {e}")
+                    logger.error(f"Error calculating hash for {file_path}: {e}")
         return results
 
     def hash_pop_window(self, check_type="default", is_offline=False):
@@ -166,7 +170,7 @@ class HashManager:
             if not os.path.exists(install_path):
                 status_copy[game_version] = False
                 if debug_mode:
-                    print(f"DEBUG: 哈希预检查 - {game_version} 补丁文件不存在: {install_path}")
+                    logger.debug(f"DEBUG: 哈希预检查 - {game_version} 补丁文件不存在: {install_path}")
                 continue
 
             try:
@@ -174,11 +178,11 @@ class HashManager:
                 file_hash = self.hash_calculate(install_path)
                 
                 if debug_mode:
-                    print(f"DEBUG: 哈希预检查 - {game_version}")
-                    print(f"DEBUG: 文件路径: {install_path}")
-                    print(f"DEBUG: 预期哈希值: {expected_hash}")
-                    print(f"DEBUG: 实际哈希值: {file_hash}")
-                    print(f"DEBUG: 哈希匹配: {file_hash == expected_hash}")
+                    logger.debug(f"DEBUG: 哈希预检查 - {game_version}")
+                    logger.debug(f"DEBUG: 文件路径: {install_path}")
+                    logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
+                    logger.debug(f"DEBUG: 实际哈希值: {file_hash}")
+                    logger.debug(f"DEBUG: 哈希匹配: {file_hash == expected_hash}")
                 
                 if file_hash == expected_hash:
                     status_copy[game_version] = True
@@ -187,7 +191,7 @@ class HashManager:
             except Exception as e:
                 status_copy[game_version] = False
                 if debug_mode:
-                    print(f"DEBUG: 哈希预检查异常 - {game_version}: {str(e)}")
+                    logger.debug(f"DEBUG: 哈希预检查异常 - {game_version}: {str(e)}")
         
         return status_copy
 
@@ -213,15 +217,15 @@ class HashManager:
                 file_hash = hash_results.get(file_path)
                 
                 if debug_mode:
-                    print(f"DEBUG: 哈希后检查 - {game}")
-                    print(f"DEBUG: 文件路径: {file_path}")
-                    print(f"DEBUG: 预期哈希值: {expected_hash}")
-                    print(f"DEBUG: 实际哈希值: {file_hash if file_hash else '计算失败'}")
+                    logger.debug(f"DEBUG: 哈希后检查 - {game}")
+                    logger.debug(f"DEBUG: 文件路径: {file_path}")
+                    logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
+                    logger.debug(f"DEBUG: 实际哈希值: {file_hash if file_hash else '计算失败'}")
                 
                 if file_hash is None:
                     installed_status[game] = False
                     if debug_mode:
-                        print(f"DEBUG: 哈希后检查失败 - 无法计算文件哈希值: {game}")
+                        logger.debug(f"DEBUG: 哈希后检查失败 - 无法计算文件哈希值: {game}")
                     return {
                         "passed": False,
                         "game": game,
@@ -231,7 +235,7 @@ class HashManager:
                 if file_hash != expected_hash:
                     installed_status[game] = False
                     if debug_mode:
-                        print(f"DEBUG: 哈希后检查失败 - 哈希值不匹配: {game}")
+                        logger.debug(f"DEBUG: 哈希后检查失败 - 哈希值不匹配: {game}")
                     return {
                         "passed": False,
                         "game": game,
@@ -239,7 +243,7 @@ class HashManager:
                     }
         
         if debug_mode:
-            print(f"DEBUG: 哈希后检查通过 - 所有文件哈希值匹配")
+            logger.debug(f"DEBUG: 哈希后检查通过 - 所有文件哈希值匹配")
         return {"passed": True}
 
 class AdminPrivileges:
@@ -351,7 +355,7 @@ class HostsManager:
                     with open(self.hosts_path, 'r', encoding='utf-8') as f:
                         self.original_content = f.read()
                 except Exception as e:
-                    print(f"读取hosts文件失败: {e}")
+                    logger.error(f"读取hosts文件失败: {e}")
                     return []
             
             # 解析hosts文件中的每一行
@@ -377,22 +381,22 @@ class HostsManager:
             return ip_addresses
             
         except Exception as e:
-            print(f"获取hosts记录失败: {e}")
+            logger.error(f"获取hosts记录失败: {e}")
             return []
             
     def backup(self):
         if not AdminPrivileges().is_admin():
-            print("需要管理员权限来备份hosts文件。")
+            logger.warning("需要管理员权限来备份hosts文件。")
             return False
         try:
             with open(self.hosts_path, 'r', encoding='utf-8') as f:
                 self.original_content = f.read()
             with open(self.backup_path, 'w', encoding='utf-8') as f:
                 f.write(self.original_content)
-            print(f"Hosts文件已备份到: {self.backup_path}")
+            logger.info(f"Hosts文件已备份到: {self.backup_path}")
             return True
         except IOError as e:
-            print(f"备份hosts文件失败: {e}")
+            logger.error(f"备份hosts文件失败: {e}")
             msg_box = msgbox_frame(f"错误 - {APP_NAME}", f"\n无法备份hosts文件，请检查权限。\n\n【错误信息】：{e}\n", QtWidgets.QMessageBox.StandardButton.Ok)
             msg_box.exec()
             return False
@@ -412,11 +416,11 @@ class HostsManager:
         
         # 确保original_content不为None
         if not self.original_content:
-            print("无法读取hosts文件内容，操作中止。")
+            logger.error("无法读取hosts文件内容，操作中止。")
             return False
             
         if not AdminPrivileges().is_admin():
-            print("需要管理员权限来修改hosts文件。")
+            logger.warning("需要管理员权限来修改hosts文件。")
             return False
             
         try:
@@ -425,7 +429,7 @@ class HostsManager:
             
             # 如果没有变化，不需要写入
             if len(new_lines) == len(lines):
-                print(f"Hosts文件中没有找到 {hostname} 的记录")
+                logger.info(f"Hosts文件中没有找到 {hostname} 的记录")
                 return True
                 
             with open(self.hosts_path, 'w', encoding='utf-8') as f:
@@ -433,10 +437,10 @@ class HostsManager:
             
             # 更新原始内容
             self.original_content = '\n'.join(new_lines)
-            print(f"已从hosts文件中清理 {hostname} 的记录")
+            logger.info(f"已从hosts文件中清理 {hostname} 的记录")
             return True
         except IOError as e:
-            print(f"清理hosts文件失败: {e}")
+            logger.error(f"清理hosts文件失败: {e}")
             return False
 
     def apply_ip(self, hostname, ip_address, clean=True):
@@ -445,11 +449,11 @@ class HostsManager:
                 return False
         
         if not self.original_content: # 再次检查，确保backup成功
-            print("无法读取hosts文件内容，操作中止。")
+            logger.error("无法读取hosts文件内容，操作中止。")
             return False
 
         if not AdminPrivileges().is_admin():
-            print("需要管理员权限来修改hosts文件。")
+            logger.warning("需要管理员权限来修改hosts文件。")
             return False
         
         try:
@@ -471,10 +475,10 @@ class HostsManager:
             self.modified = True
             # 记录被修改的主机名，用于最终清理
             self.modified_hostnames.add(hostname)
-            print(f"Hosts文件已更新: {new_entry}")
+            logger.info(f"Hosts文件已更新: {new_entry}")
             return True
         except IOError as e:
-            print(f"修改hosts文件失败: {e}")
+            logger.error(f"修改hosts文件失败: {e}")
             msg_box = msgbox_frame(f"错误 - {APP_NAME}", f"\n无法修改hosts文件，请检查权限。\n\n【错误信息】：{e}\n", QtWidgets.QMessageBox.StandardButton.Ok)
             msg_box.exec()
             return False
@@ -502,10 +506,10 @@ class HostsManager:
             # 保存配置
             save_config(config)
             
-            print(f"已{'禁用' if disabled else '启用'}自动还原hosts")
+            logger.info(f"已{'禁用' if disabled else '启用'}自动还原hosts")
             return True
         except Exception as e:
-            print(f"设置自动还原hosts状态失败: {e}")
+            logger.error(f"设置自动还原hosts状态失败: {e}")
             return False
             
     def is_auto_restore_disabled(self):
@@ -528,11 +532,11 @@ class HostsManager:
         """
         # 如果禁用了自动还原，则不执行清理操作
         if self.is_auto_restore_disabled():
-            print("已禁用自动还原hosts，跳过清理操作")
+            logger.info("已禁用自动还原hosts，跳过清理操作")
             return True
             
         if not AdminPrivileges().is_admin():
-            print("需要管理员权限来检查和清理hosts文件。")
+            logger.warning("需要管理员权限来检查和清理hosts文件。")
             return False
             
         try:
@@ -560,24 +564,24 @@ class HostsManager:
                 
             # 检查是否有变化
             if len(new_lines) == len(lines):
-                print("Hosts文件中没有找到由本应用添加的记录")
+                logger.info("Hosts文件中没有找到由本应用添加的记录")
                 return True
                 
             # 写回清理后的内容
             with open(self.hosts_path, 'w', encoding='utf-8') as f:
                 f.write('\n'.join(new_lines))
                 
-            print(f"已清理所有由 {APP_NAME} 添加的hosts记录")
+            logger.info(f"已清理所有由 {APP_NAME} 添加的hosts记录")
             return True
                 
         except IOError as e:
-            print(f"检查和清理hosts文件失败: {e}")
+            logger.error(f"检查和清理hosts文件失败: {e}")
             return False
 
     def restore(self):
         # 如果禁用了自动还原，则不执行还原操作
         if self.is_auto_restore_disabled():
-            print("已禁用自动还原hosts，跳过还原操作")
+            logger.info("已禁用自动还原hosts，跳过还原操作")
             return True
             
         if not self.modified:
@@ -591,7 +595,7 @@ class HostsManager:
             return True
 
         if not AdminPrivileges().is_admin():
-            print("需要管理员权限来恢复hosts文件。")
+            logger.warning("需要管理员权限来恢复hosts文件。")
             return False
             
         if self.original_content:
@@ -599,7 +603,7 @@ class HostsManager:
                 with open(self.hosts_path, 'w', encoding='utf-8') as f:
                     f.write(self.original_content)
                 self.modified = False
-                print("Hosts文件已从内存恢复。")
+                logger.info("Hosts文件已从内存恢复。")
                 if os.path.exists(self.backup_path):
                     try:
                         os.remove(self.backup_path)
@@ -608,15 +612,15 @@ class HostsManager:
                 # 恢复后再检查一次是否有残留
                 self.check_and_clean_all_entries()
                 return True
-            except IOError as e:
-                print(f"从内存恢复hosts文件失败: {e}")
+            except (IOError, OSError) as e:
+                logger.error(f"从内存恢复hosts文件失败: {e}")
                 return self.restore_from_backup_file()
         else:
             return self.restore_from_backup_file()
 
     def restore_from_backup_file(self):
         if not os.path.exists(self.backup_path):
-            print("未找到hosts备份文件，无法恢复。")
+            logger.warning("未找到hosts备份文件，无法恢复。")
             # 即使没有备份文件，也尝试清理可能的残留
             self.check_and_clean_all_entries()
             return False
@@ -627,30 +631,14 @@ class HostsManager:
                 hf.write(backup_content)
             os.remove(self.backup_path)
             self.modified = False
-            print("Hosts文件已从备份文件恢复。")
+            logger.info("Hosts文件已从备份文件恢复。")
             # 恢复后再检查一次是否有残留
             self.check_and_clean_all_entries()
             return True
         except (IOError, OSError) as e:
-            print(f"从备份文件恢复hosts失败: {e}")
+            logger.error(f"从备份文件恢复hosts失败: {e}")
             msg_box = msgbox_frame(f"警告 - {APP_NAME}", f"\n自动恢复hosts文件失败，请手动从 {self.backup_path} 恢复。\n\n【错误信息】：{e}\n", QtWidgets.QMessageBox.StandardButton.Ok)
             msg_box.exec()
             # 尽管恢复失败，仍然尝试清理可能的残留
             self.check_and_clean_all_entries()
             return False
-
-def censor_url(text):
-    """Censors URLs in a given text string, replacing them with a protection message.
-    
-    Args:
-        text: 要处理的文本
-        
-    Returns:
-        str: 处理后的文本，URL被完全隐藏
-    """
-    if not isinstance(text, str):
-        text = str(text)
-    
-    # 匹配URL并替换为固定文本
-    url_pattern = re.compile(r'https?://[^\s/$.?#].[^\s]*')
-    return url_pattern.sub('***URL protection***', text)

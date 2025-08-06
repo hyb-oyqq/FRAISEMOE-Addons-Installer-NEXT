@@ -6,6 +6,10 @@ from PySide6.QtGui import QIcon, QPixmap
 
 from utils import msgbox_frame, resource_path
 from workers import IpOptimizerThread
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("cloudflare_optimizer")
 
 
 class CloudflareOptimizer:
@@ -77,7 +81,7 @@ class CloudflareOptimizer:
         # 判断是否继续优选的逻辑
         if existing_ips and self.has_optimized_in_session:
             # 如果本次会话中已执行过优选且hosts中存在记录，则跳过优选过程
-            print(f"发现hosts文件中已有域名 {hostname} 的优选IP记录且本次会话已优选过，跳过优选过程")
+            logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录且本次会话已优选过，跳过优选过程")
             
             # 设置标记为已优选完成
             self.optimization_done = True
@@ -92,12 +96,12 @@ class CloudflareOptimizer:
             if ipv6_entries:
                 self.optimized_ipv6 = ipv6_entries[0]
                 
-            print(f"使用已存在的优选IP - IPv4: {self.optimized_ip}, IPv6: {self.optimized_ipv6}")
+            logger.info(f"使用已存在的优选IP - IPv4: {self.optimized_ip}, IPv6: {self.optimized_ipv6}")
             return True
         else:
             # 如果本次会话尚未优选过，或hosts中没有记录，则显示优选窗口
             if existing_ips:
-                print(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，但本次会话尚未优选过")
+                logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，但本次会话尚未优选过")
                 # 清理已有的hosts记录，准备重新优选
                 self.hosts_manager.clean_hostname_entries(hostname)
             
@@ -175,7 +179,7 @@ class CloudflareOptimizer:
         
         # 如果启用IPv6，同时启动IPv6优化线程
         if use_ipv6:
-            print("IPv6已启用，将同时优选IPv6地址")
+            logger.info("IPv6已启用，将同时优选IPv6地址")
             self.ipv6_optimizer_thread = IpOptimizerThread(url, use_ipv6=True)
             self.ipv6_optimizer_thread.finished.connect(self.on_ipv6_optimization_finished)
             self.ipv6_optimizer_thread.start()
@@ -225,11 +229,11 @@ class CloudflareOptimizer:
             return
             
         self.optimized_ip = ip
-        print(f"IPv4优选完成，结果: {ip if ip else '未找到合适的IP'}")
+        logger.info(f"IPv4优选完成，结果: {ip if ip else '未找到合适的IP'}")
         
         # 检查是否还有IPv6优化正在运行
         if hasattr(self, 'ipv6_optimizer_thread') and self.ipv6_optimizer_thread and self.ipv6_optimizer_thread.isRunning():
-            print("等待IPv6优选完成...")
+            logger.info("等待IPv6优选完成...")
             return
         
         # 所有优选都已完成，继续处理
@@ -256,11 +260,11 @@ class CloudflareOptimizer:
             return
             
         self.optimized_ipv6 = ipv6
-        print(f"IPv6优选完成，结果: {ipv6 if ipv6 else '未找到合适的IPv6'}")
+        logger.info(f"IPv6优选完成，结果: {ipv6 if ipv6 else '未找到合适的IPv6'}")
         
         # 检查IPv4优化是否已完成
         if hasattr(self, 'ip_optimizer_thread') and self.ip_optimizer_thread and self.ip_optimizer_thread.isRunning():
-            print("等待IPv4优选完成...")
+            logger.info("等待IPv4优选完成...")
             return
             
         # 所有优选都已完成，继续处理

@@ -16,6 +16,10 @@ from workers import IpOptimizerThread
 from core.cloudflare_optimizer import CloudflareOptimizer
 from core.download_task_manager import DownloadTaskManager
 from core.extraction_handler import ExtractionHandler
+from utils.logger import setup_logger
+
+# 初始化logger
+logger = setup_logger("download_manager")
 
 class DownloadManager:
     def __init__(self, main_window):
@@ -67,8 +71,8 @@ class DownloadManager:
                 install_path = os.path.join(game_dir, os.path.basename(info["install_path"]))
                 install_paths[game] = install_path
                 if debug_mode:
-                    print(f"DEBUG: 使用识别到的游戏目录 {game}: {game_dir}")
-                    print(f"DEBUG: 安装路径设置为: {install_path}")
+                    logger.debug(f"DEBUG: 使用识别到的游戏目录 {game}: {game_dir}")
+                    logger.debug(f"DEBUG: 安装路径设置为: {install_path}")
                     
         return install_paths
 
@@ -88,7 +92,7 @@ class DownloadManager:
         try:
             if self.main_window.cloud_config:
                 if self.is_debug_mode():
-                    print("--- Using pre-fetched cloud config ---")
+                    logger.info("--- Using pre-fetched cloud config ---")
                 config_data = self.main_window.cloud_config
             else:
                 headers = {"User-Agent": UA}
@@ -102,7 +106,7 @@ class DownloadManager:
             if self.is_debug_mode():
                 # 创建安全版本的配置数据用于调试输出
                 safe_config = self._create_safe_config_for_logging(config_data)
-                print(f"DEBUG: Parsed JSON data: {json.dumps(safe_config, indent=2)}")
+                logger.debug(f"DEBUG: Parsed JSON data: {json.dumps(safe_config, indent=2)}")
 
             urls = {}
             for i in range(4):
@@ -138,8 +142,8 @@ class DownloadManager:
                         safe_urls[key] = f"{domain}/***隐藏URL路径***"
                     else:
                         safe_urls[key] = "***隐藏URL***"
-                print(f"DEBUG: Extracted URLs: {safe_urls}")
-                print("--- Finished getting download URL successfully ---")
+                logger.debug(f"DEBUG: Extracted URLs: {safe_urls}")
+                logger.info("--- Finished getting download URL successfully ---")
             return urls
 
         except requests.exceptions.RequestException as e:
@@ -153,7 +157,7 @@ class DownloadManager:
                 json_message = "配置文件异常，无法解析错误信息"
 
             if self.is_debug_mode():
-                print(f"ERROR: Failed to get download config due to RequestException: {e}")
+                logger.error(f"ERROR: Failed to get download config due to RequestException: {e}")
             
             QtWidgets.QMessageBox.critical(
                 self.main_window,
@@ -163,7 +167,7 @@ class DownloadManager:
             return {}
         except ValueError as e:
             if self.is_debug_mode():
-                print(f"ERROR: Failed to parse download config due to ValueError: {e}")
+                logger.error(f"ERROR: Failed to parse download config due to ValueError: {e}")
 
             QtWidgets.QMessageBox.critical(
                 self.main_window,
@@ -204,17 +208,17 @@ class DownloadManager:
         if hasattr(self.main_window, 'game_detector') and hasattr(self.main_window.game_detector, 'clear_directory_cache'):
             self.main_window.game_detector.clear_directory_cache()
             if self.is_debug_mode():
-                print("DEBUG: 已清除游戏目录缓存，确保获取最新状态")
+                logger.debug("DEBUG: 已清除游戏目录缓存，确保获取最新状态")
         
         game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
         
         debug_mode = self.is_debug_mode()
         if debug_mode:
-            print(f"DEBUG: 开始下载流程, 识别到 {len(game_dirs)} 个游戏目录")
+            logger.debug(f"DEBUG: 开始下载流程, 识别到 {len(game_dirs)} 个游戏目录")
         
         if not game_dirs:
             if debug_mode:
-                print("DEBUG: 未识别到任何游戏目录，设置目录未找到错误")
+                logger.warning("DEBUG: 未识别到任何游戏目录，设置目录未找到错误")
             self.main_window.last_error_message = "directory_not_found"
             QtWidgets.QMessageBox.warning(
                 self.main_window, 
@@ -259,18 +263,18 @@ class DownloadManager:
             # 检查游戏是否已安装补丁
             if self.main_window.installed_status.get(game_version, False):
                 if debug_mode:
-                    print(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
+                    logger.info(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
                 already_installed_games.append(game_version)
             else:
                 # 检查是否存在被禁用的补丁
                 is_disabled, disabled_path = self.main_window.patch_manager.check_patch_disabled(game_dir, game_version)
                 if is_disabled:
                     if debug_mode:
-                        print(f"DEBUG: {game_version} 存在被禁用的补丁: {disabled_path}")
+                        logger.info(f"DEBUG: {game_version} 存在被禁用的补丁: {disabled_path}")
                     disabled_patch_games.append(game_version)
                 else:
                     if debug_mode:
-                        print(f"DEBUG: {game_version} 未安装补丁，可以安装")
+                        logger.info(f"DEBUG: {game_version} 未安装补丁，可以安装")
                     installable_games.append(game_version)
         
         status_message = ""
@@ -292,7 +296,7 @@ class DownloadManager:
             if reply == QtWidgets.QMessageBox.StandardButton.Yes:
                 # 用户选择启用补丁
                 if debug_mode:
-                    print(f"DEBUG: 用户选择启用被禁用的补丁")
+                    logger.debug(f"DEBUG: 用户选择启用被禁用的补丁")
                 
                 # 为每个禁用的游戏创建目录映射
                 disabled_game_dirs = {game: game_dirs[game] for game in disabled_patch_games}
@@ -315,7 +319,7 @@ class DownloadManager:
                         already_installed_games.append(game_version)
             else:
                 if debug_mode:
-                    print(f"DEBUG: 用户选择不启用被禁用的补丁，这些游戏将被添加到可安装列表")
+                    logger.info(f"DEBUG: 用户选择不启用被禁用的补丁，这些游戏将被添加到可安装列表")
                 # 用户选择不启用，将这些游戏视为可以安装补丁
                 installable_games.extend(disabled_patch_games)
 
@@ -382,7 +386,7 @@ class DownloadManager:
             
         selected_games = [item.text() for item in list_widget.selectedItems()]
         if debug_mode:
-            print(f"DEBUG: 用户选择了以下游戏进行安装: {selected_games}")
+            logger.debug(f"DEBUG: 用户选择了以下游戏进行安装: {selected_games}")
             
         selected_game_dirs = {game: game_dirs[game] for game in selected_games if game in game_dirs}
         
@@ -395,7 +399,7 @@ class DownloadManager:
             
         if is_offline_mode:
             if debug_mode:
-                print("DEBUG: 使用离线模式，跳过网络配置获取")
+                logger.info("DEBUG: 使用离线模式，跳过网络配置获取")
             self._fill_offline_download_queue(selected_game_dirs)
         else:
             config = self.get_download_url()
@@ -416,7 +420,7 @@ class DownloadManager:
         # 如果是离线模式，直接开始下一个下载任务
         if is_offline_mode:
             if debug_mode:
-                print("DEBUG: 离线模式，跳过Cloudflare优化")
+                logger.info("DEBUG: 离线模式，跳过Cloudflare优化")
             self.next_download_task()
         else:
             self._show_cloudflare_option()
@@ -435,7 +439,7 @@ class DownloadManager:
         
         debug_mode = self.is_debug_mode()
         if debug_mode:
-            print(f"DEBUG: 填充下载队列, 游戏目录: {game_dirs}")
+            logger.debug(f"DEBUG: 填充下载队列, 游戏目录: {game_dirs}")
         
         for i in range(1, 5):
             game_version = f"NEKOPARA Vol.{i}"
@@ -445,7 +449,7 @@ class DownloadManager:
                 
                 game_folder = game_dirs[game_version]
                 if debug_mode:
-                    print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                    logger.debug(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
                 
                 _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
@@ -458,7 +462,7 @@ class DownloadManager:
             if url:
                 game_folder = game_dirs[game_version]
                 if debug_mode:
-                    print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                    logger.debug(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
                 
                 _7z_path = os.path.join(PLUGIN, "after.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
@@ -478,12 +482,12 @@ class DownloadManager:
         
         debug_mode = self.is_debug_mode()
         if debug_mode:
-            print(f"DEBUG: 填充离线下载队列, 游戏目录: {game_dirs}")
+            logger.debug(f"DEBUG: 填充离线下载队列, 游戏目录: {game_dirs}")
         
         # 检查是否有离线模式管理器
         if not hasattr(self.main_window, 'offline_mode_manager'):
             if debug_mode:
-                print("DEBUG: 离线模式管理器未初始化，无法使用离线模式")
+                logger.warning("DEBUG: 离线模式管理器未初始化，无法使用离线模式")
             return
             
         for i in range(1, 5):
@@ -493,13 +497,13 @@ class DownloadManager:
                 offline_patch_path = self.main_window.offline_mode_manager.get_offline_patch_path(game_version)
                 if not offline_patch_path:
                     if debug_mode:
-                        print(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
+                        logger.warning(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
                     continue
                     
                 game_folder = game_dirs[game_version]
                 if debug_mode:
-                    print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
-                    print(f"DEBUG: 使用离线补丁文件: {offline_patch_path}")
+                    logger.debug(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                    logger.debug(f"DEBUG: 使用离线补丁文件: {offline_patch_path}")
                 
                 _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
@@ -515,8 +519,8 @@ class DownloadManager:
             if offline_patch_path:
                 game_folder = game_dirs[game_version]
                 if debug_mode:
-                    print(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
-                    print(f"DEBUG: 使用离线补丁文件: {offline_patch_path}")
+                    logger.debug(f"DEBUG: 使用识别到的游戏目录 {game_version}: {game_folder}")
+                    logger.debug(f"DEBUG: 使用离线补丁文件: {offline_patch_path}")
                 
                 _7z_path = os.path.join(PLUGIN, "after.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
@@ -525,7 +529,7 @@ class DownloadManager:
                 self.download_queue.append((offline_patch_path, game_folder, game_version, _7z_path, plugin_path))
                 self.main_window.download_queue_history.append(game_version)
             elif debug_mode:
-                print(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
+                logger.warning(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
 
     def _show_cloudflare_option(self):
         """显示Cloudflare加速选择对话框"""
@@ -537,7 +541,7 @@ class DownloadManager:
                 existing_ips = self.cloudflare_optimizer.hosts_manager.get_hostname_entries(hostname)
                 
                 if existing_ips:
-                    print(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，跳过询问直接使用")
+                    logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，跳过询问直接使用")
                     
                     self.cloudflare_optimizer.optimization_done = True
                     self.cloudflare_optimizer.countdown_finished = True
@@ -629,12 +633,12 @@ class DownloadManager:
         
         debug_mode = self.is_debug_mode()
         if debug_mode:
-            print(f"DEBUG: 准备下载游戏 {game_version}")
-            print(f"DEBUG: 游戏文件夹: {game_folder}")
+            logger.debug(f"DEBUG: 准备下载游戏 {game_version}")
+            logger.debug(f"DEBUG: 游戏文件夹: {game_folder}")
             
             # 隐藏敏感URL
             safe_url = "***URL protection***"  # 完全隐藏URL
-            print(f"DEBUG: 下载URL: {safe_url}")
+            logger.debug(f"DEBUG: 下载URL: {safe_url}")
             
         game_exe_exists = True
         
@@ -643,9 +647,9 @@ class DownloadManager:
             or self.main_window.installed_status[game_version]
         ):
             if debug_mode:
-                print(f"DEBUG: 跳过下载游戏 {game_version}")
-                print(f"DEBUG: 游戏存在: {game_exe_exists}")
-                print(f"DEBUG: 已安装补丁: {self.main_window.installed_status[game_version]}")
+                logger.debug(f"DEBUG: 跳过下载游戏 {game_version}")
+                logger.debug(f"DEBUG: 游戏存在: {game_exe_exists}")
+                logger.debug(f"DEBUG: 已安装补丁: {self.main_window.installed_status[game_version]}")
             self.main_window.installed_status[game_version] = False if not game_exe_exists else True
             self.next_download_task()
             return
@@ -658,7 +662,7 @@ class DownloadManager:
         # 如果是离线模式且URL是本地文件路径
         if is_offline_mode and os.path.isfile(url):
             if debug_mode:
-                print(f"DEBUG: 离线模式，复制本地补丁文件 {url} 到 {_7z_path}")
+                logger.debug(f"DEBUG: 离线模式，复制本地补丁文件 {url} 到 {_7z_path}")
             
             try:
                 # 确保目标目录存在
@@ -672,24 +676,24 @@ class DownloadManager:
                 hash_valid = False
                 if hasattr(self.main_window, 'offline_mode_manager'):
                     if debug_mode:
-                        print(f"DEBUG: 开始验证补丁文件哈希: {_7z_path}")
+                        logger.debug(f"DEBUG: 开始验证补丁文件哈希: {_7z_path}")
                     hash_valid = self.main_window.offline_mode_manager.verify_patch_hash(game_version, _7z_path)
                     if debug_mode:
-                        print(f"DEBUG: 补丁文件哈希验证结果: {'成功' if hash_valid else '失败'}")
+                        logger.debug(f"DEBUG: 补丁文件哈希验证结果: {'成功' if hash_valid else '失败'}")
                 else:
                     if debug_mode:
-                        print("DEBUG: 离线模式管理器不可用，跳过哈希验证")
+                        logger.warning("DEBUG: 离线模式管理器不可用，跳过哈希验证")
                     hash_valid = True  # 如果没有离线模式管理器，假设验证成功
                 
                 if hash_valid:
                     if debug_mode:
-                        print(f"DEBUG: 成功复制并验证补丁文件 {_7z_path}")
+                        logger.info(f"DEBUG: 成功复制并验证补丁文件 {_7z_path}")
                     # 直接进入解压阶段
                     self.main_window.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
                     self.main_window.extraction_handler.extraction_finished.connect(self.on_extraction_finished)
                 else:
                     if debug_mode:
-                        print(f"DEBUG: 补丁文件哈希验证失败")
+                        logger.warning(f"DEBUG: 补丁文件哈希验证失败")
                     # 显示错误消息
                     QtWidgets.QMessageBox.critical(
                         self.main_window,
@@ -700,7 +704,7 @@ class DownloadManager:
                     self.next_download_task()
             except Exception as e:
                 if debug_mode:
-                    print(f"DEBUG: 复制补丁文件失败: {e}")
+                    logger.error(f"DEBUG: 复制补丁文件失败: {e}")
                 # 显示错误消息
                 QtWidgets.QMessageBox.critical(
                     self.main_window,
@@ -715,9 +719,9 @@ class DownloadManager:
             
             self.optimized_ip = self.cloudflare_optimizer.get_optimized_ip()
             if self.optimized_ip:
-                print(f"已为 {game_version} 获取到优选IP: {self.optimized_ip}")
+                logger.info(f"已为 {game_version} 获取到优选IP: {self.optimized_ip}")
             else:
-                print(f"未能为 {game_version} 获取优选IP，将使用默认线路。")
+                logger.info(f"未能为 {game_version} 获取优选IP，将使用默认线路。")
 
             self.download_task_manager.start_download(url, _7z_path, game_version, game_folder, plugin_path)
 
@@ -738,9 +742,9 @@ class DownloadManager:
             self.main_window.progress_window = None
 
         if not success:
-            print(f"--- Download Failed: {game_version} ---")
-            print(error)
-            print("------------------------------------")
+            logger.error(f"--- Download Failed: {game_version} ---")
+            logger.error(error)
+            logger.error("------------------------------------")
             
             self.main_window.setEnabled(True)
             
@@ -793,7 +797,7 @@ class DownloadManager:
                 self.main_window.progress_window.reject()
             self.main_window.progress_window = None
 
-        print("下载已全部停止。")
+        logger.info("下载已全部停止。")
         
         self.main_window.setEnabled(True)
         self.main_window.ui.start_install_text.setText("开始安装")

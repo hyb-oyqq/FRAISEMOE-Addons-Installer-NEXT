@@ -1,4 +1,4 @@
-from .helpers import censor_url
+from .url_censor import censor_url
 import logging
 import os
 from data.config import CACHE
