@@ -4,6 +4,8 @@ from PySide6 import QtWidgets
 from data.config import LOG_FILE
 from utils.logger import setup_logger
 from utils import Logger
+import datetime
+from data.config import APP_NAME
 
 # 初始化logger
 logger = setup_logger("debug_manager")
@@ -60,6 +62,25 @@ class DebugManager:
         self.main_window.config["debug_mode"] = checked
         self.main_window.save_config(self.main_window.config)
         
+        # 创建或删除debug_mode.txt标记文件
+        try:
+            from data.config import CACHE
+            debug_file = os.path.join(os.path.dirname(CACHE), "debug_mode.txt")
+            
+            if checked:
+                # 确保目录存在
+                os.makedirs(os.path.dirname(debug_file), exist_ok=True)
+                # 创建标记文件
+                with open(debug_file, 'w', encoding='utf-8') as f:
+                    f.write(f"Debug mode enabled at {os.path.abspath(debug_file)}\n")
+                logger.info(f"已创建调试模式标记文件: {debug_file}")
+            elif os.path.exists(debug_file):
+                # 删除标记文件
+                os.remove(debug_file)
+                logger.info(f"已删除调试模式标记文件: {debug_file}")
+        except Exception as e:
+            logger.warning(f"处理调试模式标记文件时发生错误: {e}")
+        
         # 更新打开log文件按钮状态
         if hasattr(self, 'ui_manager') and hasattr(self.ui_manager, 'open_log_action'):
             self.ui_manager.open_log_action.setEnabled(checked)
@@ -88,16 +109,32 @@ class DebugManager:
         """启动日志记录"""
         if self.logger is None:
             try:
-                if os.path.exists(LOG_FILE):
-                    os.remove(LOG_FILE)
+                # 确保log目录存在
+                log_dir = os.path.dirname(LOG_FILE)
+                if not os.path.exists(log_dir):
+                    os.makedirs(log_dir, exist_ok=True)
+                    logger.info(f"已创建日志目录: {log_dir}")
+                
+                # 创建新的日志文件，使用覆盖模式而不是追加模式
+                with open(LOG_FILE, 'w', encoding='utf-8') as f:
+                    current_time = datetime.datetime.now()
+                    formatted_date = current_time.strftime("%Y-%m-%d")
+                    formatted_time = current_time.strftime("%H:%M:%S")
+                    f.write(f"--- 新调试会话开始于 {os.path.basename(LOG_FILE)} ---\n")
+                    f.write(f"--- 应用版本: {APP_NAME} ---\n")
+                    f.write(f"--- 日期: {formatted_date} 时间: {formatted_time} ---\n\n")
+                    logger.info(f"已创建日志文件: {os.path.abspath(LOG_FILE)}")
+                
                 # 保存原始的 stdout 和 stderr
                 self.original_stdout = sys.stdout
                 self.original_stderr = sys.stderr
+                
                 # 创建 Logger 实例
                 self.logger = Logger(LOG_FILE, self.original_stdout)
                 sys.stdout = self.logger
                 sys.stderr = self.logger
-                logger.info("--- Debug mode enabled ---")
+                
+                logger.info(f"--- Debug mode enabled (log file: {os.path.abspath(LOG_FILE)}) ---")
             except (IOError, OSError) as e:
                 QtWidgets.QMessageBox.critical(self.main_window, "错误", f"无法创建日志文件: {e}")
                 self.logger = None

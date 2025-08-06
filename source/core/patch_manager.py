@@ -1,6 +1,8 @@
 import os
 import shutil
+import traceback
 from PySide6.QtWidgets import QMessageBox
+from utils.logger import setup_logger
 
 class PatchManager:
     """补丁管理器，用于处理补丁的安装和卸载"""
@@ -17,6 +19,7 @@ class PatchManager:
         self.game_info = game_info
         self.debug_manager = debug_manager
         self.installed_status = {}  # 游戏版本的安装状态
+        self.logger = setup_logger("patch_manager")
         
     def _is_debug_mode(self):
         """检查是否处于调试模式
@@ -70,7 +73,7 @@ class PatchManager:
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            print(f"DEBUG: 开始卸载 {game_version} 补丁，目录: {game_dir}")
+            self.logger.debug(f"开始卸载 {game_version} 补丁，目录: {game_dir}")
         
         if game_version not in self.game_info:
             if not silent:
@@ -99,7 +102,7 @@ class PatchManager:
             ]
             
             if debug_mode:
-                print(f"DEBUG: 查找以下可能的补丁文件路径: {patch_files_to_check}")
+                self.logger.debug(f"查找以下可能的补丁文件路径: {patch_files_to_check}")
             
             # 查找并删除补丁文件，包括启用和禁用的
             patch_file_found = False
@@ -110,7 +113,7 @@ class PatchManager:
                     os.remove(patch_path)
                     files_removed += 1
                     if debug_mode:
-                        print(f"DEBUG: 已删除补丁文件: {patch_path}")
+                        self.logger.debug(f"已删除补丁文件: {patch_path}")
                 
                 # 检查被禁用的补丁文件（带.fain后缀）
                 disabled_path = f"{patch_path}.fain"
@@ -119,11 +122,11 @@ class PatchManager:
                     os.remove(disabled_path)
                     files_removed += 1
                     if debug_mode:
-                        print(f"DEBUG: 已删除被禁用的补丁文件: {disabled_path}")
+                        self.logger.debug(f"已删除被禁用的补丁文件: {disabled_path}")
             
             if not patch_file_found and debug_mode:
-                print(f"DEBUG: 未找到补丁文件，检查了以下路径: {patch_files_to_check}")
-                print(f"DEBUG: 也检查了禁用的补丁文件（.fain后缀）")
+                self.logger.debug(f"未找到补丁文件，检查了以下路径: {patch_files_to_check}")
+                self.logger.debug(f"也检查了禁用的补丁文件（.fain后缀）")
                 
             # 检查是否有额外的签名文件 (.sig)
             if game_version == "NEKOPARA After":
@@ -134,7 +137,7 @@ class PatchManager:
                         os.remove(sig_file_path)
                         files_removed += 1
                         if debug_mode:
-                            print(f"DEBUG: 已删除签名文件: {sig_file_path}")
+                            self.logger.debug(f"已删除签名文件: {sig_file_path}")
                     
                     # 检查被禁用补丁的签名文件
                     disabled_sig_path = f"{patch_path}.fain.sig"
@@ -142,7 +145,7 @@ class PatchManager:
                         os.remove(disabled_sig_path)
                         files_removed += 1
                         if debug_mode:
-                            print(f"DEBUG: 已删除被禁用补丁的签名文件: {disabled_sig_path}")
+                            self.logger.debug(f"已删除被禁用补丁的签名文件: {disabled_sig_path}")
             
             # 删除patch文件夹
             patch_folders_to_check = [
@@ -156,7 +159,7 @@ class PatchManager:
                     shutil.rmtree(patch_folder)
                     files_removed += 1
                     if debug_mode:
-                        print(f"DEBUG: 已删除补丁文件夹: {patch_folder}")
+                        self.logger.debug(f"已删除补丁文件夹: {patch_folder}")
             
             # 删除game/patch文件夹
             game_folders = ["game", "Game", "GAME"]
@@ -169,7 +172,7 @@ class PatchManager:
                         shutil.rmtree(game_patch_folder)
                         files_removed += 1
                         if debug_mode:
-                            print(f"DEBUG: 已删除game/patch文件夹: {game_patch_folder}")
+                            self.logger.debug(f"已删除game/patch文件夹: {game_patch_folder}")
             
             # 删除配置文件
             config_files = ["config.json", "Config.json", "CONFIG.JSON"]
@@ -185,7 +188,7 @@ class PatchManager:
                             os.remove(config_path)
                             files_removed += 1
                             if debug_mode:
-                                print(f"DEBUG: 已删除配置文件: {config_path}")
+                                self.logger.debug(f"已删除配置文件: {config_path}")
                     
                     # 删除脚本文件
                     for script_file in script_files:
@@ -194,7 +197,7 @@ class PatchManager:
                             os.remove(script_path)
                             files_removed += 1
                             if debug_mode:
-                                print(f"DEBUG: 已删除脚本文件: {script_path}")
+                                self.logger.debug(f"已删除脚本文件: {script_path}")
             
             # 更新安装状态
             self.installed_status[game_version] = False
@@ -228,9 +231,9 @@ class PatchManager:
                 # 显示卸载失败消息
                 error_message = f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n"
                 if debug_mode:
-                    print(f"DEBUG: 卸载错误 - {str(e)}")
+                    self.logger.debug(f"卸载错误 - {str(e)}")
                     import traceback
-                    print(f"DEBUG: 错误详情:\n{traceback.format_exc()}")
+                    self.logger.debug(f"错误详情:\n{traceback.format_exc()}")
                     
                 QMessageBox.critical(
                     None,
@@ -288,7 +291,7 @@ class PatchManager:
                     
             except Exception as e:
                 if debug_mode:
-                    print(f"DEBUG: 卸载 {version} 时出错: {str(e)}")
+                    self.logger.debug(f"卸载 {version} 时出错: {str(e)}")
                 fail_count += 1
                 results.append({
                     "version": version,
@@ -359,13 +362,13 @@ class PatchManager:
         for patch_path in patch_files_to_check:
             if os.path.exists(patch_path):
                 if debug_mode:
-                    print(f"DEBUG: 找到补丁文件: {patch_path}")
+                    self.logger.debug(f"找到补丁文件: {patch_path}")
                 return True
             # 检查是否存在被禁用的补丁文件（带.fain后缀）
             disabled_path = f"{patch_path}.fain"
             if os.path.exists(disabled_path):
                 if debug_mode:
-                    print(f"DEBUG: 找到被禁用的补丁文件: {disabled_path}")
+                    self.logger.debug(f"找到被禁用的补丁文件: {disabled_path}")
                 return True
                 
         # 检查是否有补丁文件夹
@@ -378,7 +381,7 @@ class PatchManager:
         for patch_folder in patch_folders_to_check:
             if os.path.exists(patch_folder):
                 if debug_mode:
-                    print(f"DEBUG: 找到补丁文件夹: {patch_folder}")
+                    self.logger.debug(f"找到补丁文件夹: {patch_folder}")
                 return True
                 
         # 检查game/patch文件夹
@@ -390,7 +393,7 @@ class PatchManager:
                 game_patch_folder = os.path.join(game_dir, game_folder, patch_folder)
                 if os.path.exists(game_patch_folder):
                     if debug_mode:
-                        print(f"DEBUG: 找到game/patch文件夹: {game_patch_folder}")
+                        self.logger.debug(f"找到game/patch文件夹: {game_patch_folder}")
                     return True
         
         # 检查配置文件
@@ -405,7 +408,7 @@ class PatchManager:
                     config_path = os.path.join(game_path, config_file)
                     if os.path.exists(config_path):
                         if debug_mode:
-                            print(f"DEBUG: 找到配置文件: {config_path}")
+                            self.logger.debug(f"找到配置文件: {config_path}")
                         return True
                 
                 # 检查脚本文件
@@ -413,12 +416,12 @@ class PatchManager:
                     script_path = os.path.join(game_path, script_file)
                     if os.path.exists(script_path):
                         if debug_mode:
-                            print(f"DEBUG: 找到脚本文件: {script_path}")
+                            self.logger.debug(f"找到脚本文件: {script_path}")
                         return True
         
         # 没有找到补丁文件或文件夹
         if debug_mode:
-            print(f"DEBUG: {game_version} 在 {game_dir} 中没有安装补丁")
+            self.logger.debug(f"{game_version} 在 {game_dir} 中没有安装补丁")
         return False 
         
     def check_patch_disabled(self, game_dir, game_version):
@@ -454,11 +457,11 @@ class PatchManager:
         for disabled_path in disabled_patch_files:
             if os.path.exists(disabled_path):
                 if debug_mode:
-                    print(f"DEBUG: 找到禁用的补丁文件: {disabled_path}")
+                    self.logger.debug(f"找到禁用的补丁文件: {disabled_path}")
                 return True, disabled_path
                 
         if debug_mode:
-            print(f"DEBUG: {game_version} 在 {game_dir} 的补丁未被禁用")
+            self.logger.debug(f"{game_version} 在 {game_dir} 的补丁未被禁用")
             
         return False, None
         
@@ -477,11 +480,11 @@ class PatchManager:
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            print(f"DEBUG: 开始切换补丁状态 - 游戏版本: {game_version}, 游戏目录: {game_dir}, 操作: {operation}")
+            self.logger.debug(f"开始切换补丁状态 - 游戏版本: {game_version}, 游戏目录: {game_dir}, 操作: {operation}")
         
         if game_version not in self.game_info:
             if debug_mode:
-                print(f"DEBUG: 无法识别游戏版本: {game_version}")
+                self.logger.debug(f"无法识别游戏版本: {game_version}")
             if not silent:
                 QMessageBox.critical(
                     None, 
@@ -494,11 +497,11 @@ class PatchManager:
         # 检查补丁是否已安装
         is_patch_installed = self.check_patch_installed(game_dir, game_version)
         if debug_mode:
-            print(f"DEBUG: 补丁安装状态检查结果: {is_patch_installed}")
+            self.logger.debug(f"补丁安装状态检查结果: {is_patch_installed}")
             
         if not is_patch_installed:
             if debug_mode:
-                print(f"DEBUG: {game_version} 未安装补丁，无法进行禁用/启用操作")
+                self.logger.debug(f"{game_version} 未安装补丁，无法进行禁用/启用操作")
             if not silent:
                 QMessageBox.warning(
                     None,
@@ -512,7 +515,7 @@ class PatchManager:
             # 检查当前状态
             is_disabled, disabled_path = self.check_patch_disabled(game_dir, game_version)
             if debug_mode:
-                print(f"DEBUG: 补丁禁用状态检查结果 - 是否禁用: {is_disabled}, 禁用路径: {disabled_path}")
+                self.logger.debug(f"补丁禁用状态检查结果 - 是否禁用: {is_disabled}, 禁用路径: {disabled_path}")
             
             # 获取可能的补丁文件路径
             install_path_base = os.path.basename(self.game_info[game_version]["install_path"])
@@ -528,7 +531,7 @@ class PatchManager:
             ]
             
             if debug_mode:
-                print(f"DEBUG: 将检查以下可能的补丁文件: {patch_files_to_check}")
+                self.logger.debug(f"将检查以下可能的补丁文件: {patch_files_to_check}")
             
             # 确定操作类型
             if operation:
@@ -542,7 +545,7 @@ class PatchManager:
                 action_needed = True  # 未指定操作类型，始终执行切换
             
             if debug_mode:
-                print(f"DEBUG: 操作决策 - 操作类型: {operation}, 是否需要执行操作: {action_needed}")
+                self.logger.debug(f"操作决策 - 操作类型: {operation}, 是否需要执行操作: {action_needed}")
             
             if not action_needed:
                 # 补丁已经是目标状态，无需操作
@@ -552,7 +555,7 @@ class PatchManager:
                     message = f"{game_version} 补丁已经是禁用状态"
                     
                 if debug_mode:
-                    print(f"DEBUG: {message}, 无需操作")
+                    self.logger.debug(f"{message}, 无需操作")
                     
                 if not silent:
                     QMessageBox.information(
@@ -569,17 +572,17 @@ class PatchManager:
                     # 从禁用文件名去掉.fain后缀
                     enabled_path = disabled_path[:-5]  # 去掉.fain
                     if debug_mode:
-                        print(f"DEBUG: 正在启用补丁 - 从 {disabled_path} 重命名为 {enabled_path}")
+                        self.logger.debug(f"正在启用补丁 - 从 {disabled_path} 重命名为 {enabled_path}")
                     os.rename(disabled_path, enabled_path)
                     if debug_mode:
-                        print(f"DEBUG: 已启用 {game_version} 的补丁，重命名文件成功")
+                        self.logger.debug(f"已启用 {game_version} 的补丁，重命名文件成功")
                     action = "enable"
                     message = f"{game_version} 补丁已启用"
                 else:
                     # 未找到禁用的补丁文件，但状态是禁用
                     message = f"未找到禁用的补丁文件: {disabled_path}"
                     if debug_mode:
-                        print(f"DEBUG: {message}")
+                        self.logger.debug(f"{message}")
                     return {"success": False, "message": message, "action": "none"}
             else:
                 # 当前是启用状态，需要禁用
@@ -589,24 +592,24 @@ class PatchManager:
                     if os.path.exists(patch_path):
                         active_patch_file = patch_path
                         if debug_mode:
-                            print(f"DEBUG: 找到活跃的补丁文件: {active_patch_file}")
+                            self.logger.debug(f"找到活跃的补丁文件: {active_patch_file}")
                         break
                 
                 if active_patch_file:
                     # 给补丁文件添加.fain后缀禁用它
                     disabled_path = f"{active_patch_file}.fain"
                     if debug_mode:
-                        print(f"DEBUG: 正在禁用补丁 - 从 {active_patch_file} 重命名为 {disabled_path}")
+                        self.logger.debug(f"正在禁用补丁 - 从 {active_patch_file} 重命名为 {disabled_path}")
                     os.rename(active_patch_file, disabled_path)
                     if debug_mode:
-                        print(f"DEBUG: 已禁用 {game_version} 的补丁，重命名文件成功")
+                        self.logger.debug(f"已禁用 {game_version} 的补丁，重命名文件成功")
                     action = "disable"
                     message = f"{game_version} 补丁已禁用"
                 else:
                     # 未找到活跃的补丁文件，但状态是启用
                     message = f"未找到启用的补丁文件，请检查游戏目录: {game_dir}"
                     if debug_mode:
-                        print(f"DEBUG: {message}")
+                        self.logger.debug(f"{message}")
                     return {"success": False, "message": message, "action": "none"}
             
             # 非静默模式下显示操作结果
@@ -619,7 +622,7 @@ class PatchManager:
                 )
             
             if debug_mode:
-                print(f"DEBUG: 切换补丁状态操作完成 - 结果: 成功, 操作: {action}, 消息: {message}")
+                self.logger.debug(f"切换补丁状态操作完成 - 结果: 成功, 操作: {action}, 消息: {message}")
             
             return {"success": True, "message": message, "action": action}
             
@@ -627,9 +630,9 @@ class PatchManager:
             error_message = f"切换 {game_version} 补丁状态时出错: {str(e)}"
             
             if debug_mode:
-                print(f"DEBUG: {error_message}")
+                self.logger.debug(f"{error_message}")
                 import traceback
-                print(f"DEBUG: 错误详情:\n{traceback.format_exc()}")
+                self.logger.debug(f"错误详情:\n{traceback.format_exc()}")
                 
             if not silent:
                 QMessageBox.critical(
@@ -657,28 +660,28 @@ class PatchManager:
         results = []
         
         if debug_mode:
-            print(f"DEBUG: 开始批量切换补丁状态 - 操作: {operation}, 游戏数量: {len(game_dirs)}")
-            print(f"DEBUG: 游戏列表: {list(game_dirs.keys())}")
+            self.logger.debug(f"开始批量切换补丁状态 - 操作: {operation}, 游戏数量: {len(game_dirs)}")
+            self.logger.debug(f"游戏列表: {list(game_dirs.keys())}")
         
         for version, path in game_dirs.items():
             try:
                 if debug_mode:
-                    print(f"DEBUG: 处理游戏 {version}, 目录: {path}")
+                    self.logger.debug(f"处理游戏 {version}, 目录: {path}")
                 
                 # 在批量模式下使用静默操作
                 result = self.toggle_patch(path, version, operation=operation, silent=True)
                 
                 if debug_mode:
-                    print(f"DEBUG: 游戏 {version} 操作结果: {result}")
+                    self.logger.debug(f"游戏 {version} 操作结果: {result}")
                 
                 if result["success"]:
                     success_count += 1
                     if debug_mode:
-                        print(f"DEBUG: 游戏 {version} 操作成功，操作类型: {result['action']}")
+                        self.logger.debug(f"游戏 {version} 操作成功，操作类型: {result['action']}")
                 else:
                     fail_count += 1
                     if debug_mode:
-                        print(f"DEBUG: 游戏 {version} 操作失败，原因: {result['message']}")
+                        self.logger.debug(f"游戏 {version} 操作失败，原因: {result['message']}")
                 
                 results.append({
                     "version": version,
@@ -689,9 +692,9 @@ class PatchManager:
                     
             except Exception as e:
                 if debug_mode:
-                    print(f"DEBUG: 切换 {version} 补丁状态时出错: {str(e)}")
+                    self.logger.debug(f"切换 {version} 补丁状态时出错: {str(e)}")
                     import traceback
-                    print(f"DEBUG: 错误详情:\n{traceback.format_exc()}")
+                    self.logger.debug(f"错误详情:\n{traceback.format_exc()}")
                     
                 fail_count += 1
                 results.append({
@@ -702,7 +705,7 @@ class PatchManager:
                 })
         
         if debug_mode:
-            print(f"DEBUG: 批量切换补丁状态完成 - 成功: {success_count}, 失败: {fail_count}")
+            self.logger.debug(f"批量切换补丁状态完成 - 成功: {success_count}, 失败: {fail_count}")
             
         return success_count, fail_count, results
     

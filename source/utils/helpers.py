@@ -175,6 +175,12 @@ class HashManager:
 
             try:
                 expected_hash = plugin_hash.get(game_version, "")
+                if not expected_hash:
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 哈希预检查 - {game_version} 没有预期哈希值，跳过哈希检查")
+                    # 当没有预期哈希值时，保持当前状态不变
+                    continue
+                    
                 file_hash = self.hash_calculate(install_path)
                 
                 if debug_mode:
@@ -186,8 +192,12 @@ class HashManager:
                 
                 if file_hash == expected_hash:
                     status_copy[game_version] = True
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 哈希预检查 - {game_version} 哈希匹配成功")
                 else:
                     status_copy[game_version] = False
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 哈希预检查 - {game_version} 哈希不匹配")
             except Exception as e:
                 status_copy[game_version] = False
                 if debug_mode:
@@ -270,65 +280,98 @@ class AdminPrivileges:
                 "\n需要管理员权限运行此程序\n",
                 QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
             )
-            reply = msg_box.exec()
-            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                try:
-                    ctypes.windll.shell32.ShellExecuteW(
-                        None, "runas", sys.executable, " ".join(sys.argv), None, 1
-                    )
-                except Exception as e:
+            try:
+                reply = msg_box.exec()
+                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                    try:
+                        ctypes.windll.shell32.ShellExecuteW(
+                            None, "runas", sys.executable, " ".join(sys.argv), None, 1
+                        )
+                    except Exception as e:
+                        msg_box = msgbox_frame(
+                            f"错误 - {APP_NAME}",
+                            f"\n请求管理员权限失败\n\n【错误信息】：{e}\n",
+                            QtWidgets.QMessageBox.StandardButton.Ok,
+                        )
+                        msg_box.exec()
+                    sys.exit(1)
+                else:
                     msg_box = msgbox_frame(
-                        f"错误 - {APP_NAME}",
-                        f"\n请求管理员权限失败\n\n【错误信息】：{e}\n",
+                        f"权限检测 - {APP_NAME}",
+                        "\n无法获取管理员权限，程序将退出\n",
                         QtWidgets.QMessageBox.StandardButton.Ok,
-                    )
+                        )
                     msg_box.exec()
-                sys.exit(1)
-            else:
+                    sys.exit(1)
+            except KeyboardInterrupt:
+                logger.warning("管理员权限请求被用户中断")
                 msg_box = msgbox_frame(
                     f"权限检测 - {APP_NAME}",
-                    "\n无法获取管理员权限，程序将退出\n",
+                    "\n操作被中断，程序将退出\n",
                     QtWidgets.QMessageBox.StandardButton.Ok,
-                    )
+                )
+                msg_box.exec()
+                sys.exit(1)
+            except Exception as e:
+                logger.error(f"管理员权限请求时发生错误: {e}")
+                msg_box = msgbox_frame(
+                    f"错误 - {APP_NAME}",
+                    f"\n请求管理员权限时发生未知错误\n\n【错误信息】：{e}\n",
+                    QtWidgets.QMessageBox.StandardButton.Ok,
+                )
                 msg_box.exec()
                 sys.exit(1)
 
     def check_and_terminate_processes(self):
-        for proc in psutil.process_iter(["pid", "name"]):
-            proc_name = proc.info["name"].lower() if proc.info["name"] else ""
-            
-            # 检查进程名是否匹配任何需要终止的游戏进程
-            for exe in self.required_exes:
-                if exe.lower() == proc_name:
-                    # 获取不带.nocrack的游戏名称用于显示
-                    display_name = exe.replace(".nocrack", "")
-                    
-                    msg_box = msgbox_frame(
-                        f"进程检测 - {APP_NAME}",
-                        f"\n检测到游戏正在运行： {display_name} \n\n是否终止？\n",
-                        QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-                    )
-                    reply = msg_box.exec()
-                    if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                        try:
-                            proc.terminate()
-                            proc.wait(timeout=3)
-                        except psutil.AccessDenied:
-                            msg_box = msgbox_frame(
-                                f"错误 - {APP_NAME}",
-                                f"\n无法关闭游戏： {display_name} \n\n请手动关闭后重启应用\n",
-                                QtWidgets.QMessageBox.StandardButton.Ok,
-                            )
-                            msg_box.exec()
-                            sys.exit(1)
-                    else:
+        try:
+            for proc in psutil.process_iter(["pid", "name"]):
+                proc_name = proc.info["name"].lower() if proc.info["name"] else ""
+                
+                # 检查进程名是否匹配任何需要终止的游戏进程
+                for exe in self.required_exes:
+                    if exe.lower() == proc_name:
+                        # 获取不带.nocrack的游戏名称用于显示
+                        display_name = exe.replace(".nocrack", "")
+                        
                         msg_box = msgbox_frame(
                             f"进程检测 - {APP_NAME}",
-                            f"\n未关闭的游戏： {display_name} \n\n请手动关闭后重启应用\n",
-                            QtWidgets.QMessageBox.StandardButton.Ok,
+                            f"\n检测到游戏正在运行： {display_name} \n\n是否终止？\n",
+                            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                         )
-                        msg_box.exec()
-                        sys.exit(1)
+                        try:
+                            reply = msg_box.exec()
+                            if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                                try:
+                                    proc.terminate()
+                                    proc.wait(timeout=3)
+                                except psutil.AccessDenied:
+                                    msg_box = msgbox_frame(
+                                        f"错误 - {APP_NAME}",
+                                        f"\n无法关闭游戏： {display_name} \n\n请手动关闭后重启应用\n",
+                                        QtWidgets.QMessageBox.StandardButton.Ok,
+                                    )
+                                    msg_box.exec()
+                                    sys.exit(1)
+                            else:
+                                msg_box = msgbox_frame(
+                                    f"进程检测 - {APP_NAME}",
+                                    f"\n未关闭的游戏： {display_name} \n\n请手动关闭后重启应用\n",
+                                    QtWidgets.QMessageBox.StandardButton.Ok,
+                                )
+                                msg_box.exec()
+                                sys.exit(1)
+                        except KeyboardInterrupt:
+                            logger.warning(f"进程 {display_name} 终止操作被用户中断")
+                            raise
+                        except Exception as e:
+                            logger.error(f"进程 {display_name} 终止操作时发生错误: {e}")
+                            raise
+        except KeyboardInterrupt:
+            logger.warning("进程检查被用户中断")
+            raise
+        except Exception as e:
+            logger.error(f"进程检查时发生错误: {e}")
+            raise
 
 class HostsManager:
     def __init__(self):

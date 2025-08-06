@@ -28,6 +28,16 @@ class IpOptimizer:
             最优的 IP 地址字符串，如果找不到则返回 None。
         """
         try:
+            # 解析URL，获取协议和主机名
+            parsed_url = urlparse(url)
+            protocol = parsed_url.scheme
+            hostname = parsed_url.netloc
+            
+            # 如果是HTTPS，可能需要特殊处理
+            is_https = protocol.lower() == 'https'
+            
+            logger.info(f"协议: {protocol}, 主机名: {hostname}, 是否HTTPS: {is_https}")
+            
             cst_path = resource_path("cfst.exe")
             if not os.path.exists(cst_path):
                 logger.error(f"错误: cfst.exe 未在资源路径中找到。")
@@ -107,7 +117,9 @@ class IpOptimizer:
                     timeout_counter = 0
                     
                     # 处理输出行，隐藏可能包含的URL
-                    cleaned_line = censor_url(line.strip())
+                    # 临时禁用URL隐藏
+                    # cleaned_line = censor_url(line.strip())
+                    cleaned_line = line.strip()  # 直接使用原始输出
                     if cleaned_line:
                         logger.debug(cleaned_line)
                         
@@ -163,6 +175,16 @@ class IpOptimizer:
             最优的 IPv6 地址字符串，如果找不到则返回 None。
         """
         try:
+            # 解析URL，获取协议和主机名
+            parsed_url = urlparse(url)
+            protocol = parsed_url.scheme
+            hostname = parsed_url.netloc
+            
+            # 如果是HTTPS，可能需要特殊处理
+            is_https = protocol.lower() == 'https'
+            
+            logger.info(f"IPv6优选 - 协议: {protocol}, 主机名: {hostname}, 是否HTTPS: {is_https}")
+            
             cst_path = resource_path("cfst.exe")
             if not os.path.exists(cst_path):
                 logger.error(f"错误: cfst.exe 未在资源路径中找到。")
@@ -245,7 +267,9 @@ class IpOptimizer:
                     timeout_counter = 0
                     
                     # 处理输出行，隐藏可能包含的URL
-                    cleaned_line = censor_url(line.strip())
+                    # 临时禁用URL隐藏
+                    # cleaned_line = censor_url(line.strip())
+                    cleaned_line = line.strip()  # 直接使用原始输出
                     if cleaned_line:
                         logger.debug(cleaned_line)
                         

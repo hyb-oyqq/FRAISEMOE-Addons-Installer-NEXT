@@ -1,5 +1,6 @@
 import os
 import re
+from utils.logger import setup_logger
 
 class GameDetector:
     """游戏检测器，用于识别游戏目录和版本"""
@@ -14,6 +15,7 @@ class GameDetector:
         self.game_info = game_info
         self.debug_manager = debug_manager
         self.directory_cache = {}  # 添加目录缓存
+        self.logger = setup_logger("game_detector")
         
     def _is_debug_mode(self):
         """检查是否处于调试模式
@@ -37,7 +39,7 @@ class GameDetector:
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            print(f"DEBUG: 尝试识别游戏版本: {game_dir}")
+            self.logger.debug(f"尝试识别游戏版本: {game_dir}")
             
         # 先通过目录名称进行初步推测（这将作为递归搜索的提示）
         dir_name = os.path.basename(game_dir).lower()
@@ -51,11 +53,11 @@ class GameDetector:
                 vol_num = vol_match.group(1)
                 potential_version = f"NEKOPARA Vol.{vol_num}"
                 if debug_mode:
-                    print(f"DEBUG: 从目录名推测游戏版本: {potential_version}, 卷号: {vol_num}")
+                    self.logger.debug(f"从目录名推测游戏版本: {potential_version}, 卷号: {vol_num}")
         elif "after" in dir_name:
             potential_version = "NEKOPARA After"
             if debug_mode:
-                print(f"DEBUG: 从目录名推测游戏版本: NEKOPARA After")
+                self.logger.debug(f"从目录名推测游戏版本: NEKOPARA After")
         
         # 检查是否为NEKOPARA游戏目录
         # 通过检查游戏可执行文件来识别游戏版本
@@ -88,7 +90,7 @@ class GameDetector:
                 exe_path = os.path.join(game_dir, exe_variant)
                 if os.path.exists(exe_path):
                     if debug_mode:
-                        print(f"DEBUG: 通过可执行文件确认游戏版本: {game_version}, 文件: {exe_variant}")
+                        self.logger.debug(f"通过可执行文件确认游戏版本: {game_version}, 文件: {exe_variant}")
                     return game_version
         
         # 如果没有直接匹配，尝试递归搜索
@@ -111,17 +113,17 @@ class GameDetector:
                                          f"vol {vol_num}" in file_lower)) or
                             (is_after and "after" in file_lower)):
                             if debug_mode:
-                                print(f"DEBUG: 通过递归搜索确认游戏版本: {potential_version}, 文件: {file}")
+                                self.logger.debug(f"通过递归搜索确认游戏版本: {potential_version}, 文件: {file}")
                             return potential_version
         
         # 如果仍然没有找到，基于目录名的推测返回结果
         if potential_version:
             if debug_mode:
-                print(f"DEBUG: 基于目录名返回推测的游戏版本: {potential_version}")
+                self.logger.debug(f"基于目录名返回推测的游戏版本: {potential_version}")
             return potential_version
             
         if debug_mode:
-            print(f"DEBUG: 无法识别游戏版本: {game_dir}")
+            self.logger.debug(f"无法识别游戏版本: {game_dir}")
             
         return None
     
@@ -139,11 +141,11 @@ class GameDetector:
         # 检查缓存中是否已有该目录的识别结果
         if selected_folder in self.directory_cache:
             if debug_mode:
-                print(f"DEBUG: 使用缓存的目录识别结果: {selected_folder}")
+                self.logger.debug(f"使用缓存的目录识别结果: {selected_folder}")
             return self.directory_cache[selected_folder]
         
         if debug_mode:
-            print(f"--- 开始识别目录: {selected_folder} ---")
+            self.logger.debug(f"--- 开始识别目录: {selected_folder} ---")
             
         game_paths = {}
         
@@ -151,10 +153,10 @@ class GameDetector:
         try:
             all_dirs = [d for d in os.listdir(selected_folder) if os.path.isdir(os.path.join(selected_folder, d))]
             if debug_mode:
-                print(f"DEBUG: 找到以下子目录: {all_dirs}")
+                self.logger.debug(f"找到以下子目录: {all_dirs}")
         except Exception as e:
             if debug_mode:
-                print(f"DEBUG: 无法读取目录 {selected_folder}: {str(e)}")
+                self.logger.debug(f"无法读取目录 {selected_folder}: {str(e)}")
             return {}
         
         for game, info in self.game_info.items():
@@ -162,7 +164,7 @@ class GameDetector:
             expected_exe = info["exe"]  # 标准可执行文件名
             
             if debug_mode:
-                print(f"DEBUG: 搜索游戏 {game}, 预期目录: {expected_dir}, 预期可执行文件: {expected_exe}")
+                self.logger.debug(f"搜索游戏 {game}, 预期目录: {expected_dir}, 预期可执行文件: {expected_exe}")
             
             # 尝试不同的匹配方法
             found_dir = None
@@ -171,7 +173,7 @@ class GameDetector:
             if expected_dir in all_dirs:
                 found_dir = expected_dir
                 if debug_mode:
-                    print(f"DEBUG: 精确匹配成功: {expected_dir}")
+                    self.logger.debug(f"精确匹配成功: {expected_dir}")
             
             # 2. 大小写不敏感匹配
             if not found_dir:
@@ -179,7 +181,7 @@ class GameDetector:
                     if expected_dir.lower() == dir_name.lower():
                         found_dir = dir_name
                         if debug_mode:
-                            print(f"DEBUG: 大小写不敏感匹配成功: {dir_name}")
+                            self.logger.debug(f"大小写不敏感匹配成功: {dir_name}")
                         break
             
             # 3. 更模糊的匹配（允许特殊字符差异）
@@ -193,7 +195,7 @@ class GameDetector:
                     if pattern.match(dir_name):
                         found_dir = dir_name
                         if debug_mode:
-                            print(f"DEBUG: 模糊匹配成功: {dir_name} 匹配模式 {pattern_text}")
+                            self.logger.debug(f"模糊匹配成功: {dir_name} 匹配模式 {pattern_text}")
                         break
             
             # 4. 如果还是没找到，尝试更宽松的匹配
@@ -203,7 +205,7 @@ class GameDetector:
                 if vol_match:
                     vol_num = vol_match.group(1)
                     if debug_mode:
-                        print(f"DEBUG: 提取卷号: {vol_num}")
+                        self.logger.debug(f"提取卷号: {vol_num}")
                 
                 is_after = "after" in expected_dir.lower()
                 
@@ -214,7 +216,7 @@ class GameDetector:
                     if is_after and "after" in dir_lower:
                         found_dir = dir_name
                         if debug_mode:
-                            print(f"DEBUG: After特殊匹配成功: {dir_name}")
+                            self.logger.debug(f"After特殊匹配成功: {dir_name}")
                         break
                         
                     # 对于Vol特殊处理
@@ -224,7 +226,7 @@ class GameDetector:
                         if dir_vol_match and dir_vol_match.group(1) == vol_num:
                             found_dir = dir_name
                             if debug_mode:
-                                print(f"DEBUG: 卷号匹配成功: {dir_name} 卷号 {vol_num}")
+                                self.logger.debug(f"卷号匹配成功: {dir_name} 卷号 {vol_num}")
                             break
             
             # 如果找到匹配的目录，验证exe文件是否存在
@@ -267,7 +269,7 @@ class GameDetector:
                         exe_exists = True
                         found_exe = exe_variant
                         if debug_mode:
-                            print(f"DEBUG: 验证成功，找到游戏可执行文件: {exe_variant}")
+                            self.logger.debug(f"验证成功，找到游戏可执行文件: {exe_variant}")
                         break
                 
                 # 如果没有直接找到，尝试递归搜索当前目录下的所有可执行文件
@@ -290,14 +292,14 @@ class GameDetector:
                                             exe_exists = True
                                             found_exe = os.path.relpath(exe_path, potential_path)
                                             if debug_mode:
-                                                print(f"DEBUG: 通过递归搜索找到游戏可执行文件: {found_exe}")
+                                                self.logger.debug(f"通过递归搜索找到游戏可执行文件: {found_exe}")
                                             break
                                 elif "After" in game and "after" in file_lower:
                                     exe_path = os.path.join(root, file)
                                     exe_exists = True
                                     found_exe = os.path.relpath(exe_path, potential_path)
                                     if debug_mode:
-                                        print(f"DEBUG: 通过递归搜索找到After游戏可执行文件: {found_exe}")
+                                        self.logger.debug(f"通过递归搜索找到After游戏可执行文件: {found_exe}")
                                     break
                         if exe_exists:
                             break
@@ -306,14 +308,14 @@ class GameDetector:
                 if exe_exists:
                     game_paths[game] = potential_path
                     if debug_mode:
-                        print(f"DEBUG: 验证成功，将 {potential_path} 添加为 {game} 的目录")
+                        self.logger.debug(f"验证成功，将 {potential_path} 添加为 {game} 的目录")
                 else:
                     if debug_mode:
-                        print(f"DEBUG: 未找到任何可执行文件变体，游戏 {game} 在 {potential_path} 未找到")
+                        self.logger.debug(f"未找到任何可执行文件变体，游戏 {game} 在 {potential_path} 未找到")
         
         if debug_mode:
-            print(f"DEBUG: 最终识别的游戏目录: {game_paths}")
-            print(f"--- 目录识别结束 ---")
+            self.logger.debug(f"最终识别的游戏目录: {game_paths}")
+            self.logger.debug(f"--- 目录识别结束 ---")
         
         # 将识别结果存入缓存
         self.directory_cache[selected_folder] = game_paths
@@ -324,4 +326,4 @@ class GameDetector:
         """清除目录缓存"""
         self.directory_cache = {}
         if self._is_debug_mode():
-            print("DEBUG: 已清除目录缓存") 
+            self.logger.debug("已清除目录缓存") 

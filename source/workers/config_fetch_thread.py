@@ -33,16 +33,10 @@ class ConfigFetchThread(QThread):
                 logger.debug(f"DEBUG: Response Status Code: {response.status_code}")
                 logger.debug(f"DEBUG: Response Headers: {response.headers}")
                 
-                # 解析并隐藏响应中的敏感URL
-                try:
-                    response_data = response.json()
-                    # 创建安全版本用于日志输出
-                    safe_response = self._create_safe_config_for_logging(response_data)
-                    logger.debug(f"DEBUG: Response Text: {json.dumps(safe_response, indent=2)}")
-                except:
-                    # 如果不是JSON，直接打印文本
-                    censored_text = censor_url(response.text)
-                    logger.debug(f"DEBUG: Response Text: {censored_text}")
+                # 记录实际响应内容，但隐藏URL等敏感信息（临时禁用）
+                # censored_text = censor_url(response.text)
+                censored_text = response.text  # 直接使用原始文本
+                logger.debug(f"DEBUG: Response Text: {censored_text}")
 
             response.raise_for_status()
             

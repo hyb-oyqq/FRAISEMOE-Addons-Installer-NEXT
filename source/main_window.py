@@ -114,13 +114,6 @@ class MainWindow(QMainWindow):
         if hasattr(self.ui, 'minimize_btn'):
             self.ui.minimize_btn.clicked.connect(self.showMinimized)
         
-        # 检查管理员权限和进程
-        self.admin_privileges.request_admin_privileges()
-        self.admin_privileges.check_and_terminate_processes()
-        
-        # 备份hosts文件
-        self.download_manager.hosts_manager.backup()
-        
         # 创建缓存目录
         if not os.path.exists(PLUGIN):
             try:
@@ -143,10 +136,44 @@ class MainWindow(QMainWindow):
         self.install_button_enabled = False
         self.last_error_message = ""
         
+        # 检查管理员权限和进程
+        try:
+            # 检查管理员权限
+            self.admin_privileges.request_admin_privileges()
+            # 检查并终止相关进程
+            self.admin_privileges.check_and_terminate_processes()
+        except KeyboardInterrupt:
+            logger.warning("权限检查或进程检查被用户中断")
+            QtWidgets.QMessageBox.warning(
+                self,
+                f"警告 - {APP_NAME}",
+                "\n操作被中断，请重新启动应用。\n"
+            )
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"权限检查或进程检查时发生错误: {e}")
+            QtWidgets.QMessageBox.critical(
+                self,
+                f"错误 - {APP_NAME}",
+                f"\n权限检查或进程检查时发生错误，请重新启动应用。\n\n【错误信息】：{e}\n"
+            )
+            sys.exit(1)
+        
+        # 备份hosts文件
+        self.download_manager.hosts_manager.backup()
+        
         # 根据初始配置决定是否开启Debug模式
+        if "debug_mode" in self.config and self.config["debug_mode"]:
+            # 先启用日志系统
+            self.debug_manager.start_logging()
+            logger.info("通过配置启动调试模式")
+        # 检查UI设置
         if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action:
             if self.ui_manager.debug_action.isChecked():
-                self.debug_manager.start_logging()
+                # 如果通过UI启用了调试模式，确保日志系统已启动
+                if not self.debug_manager.logger:
+                    self.debug_manager.start_logging()
+                    logger.info("通过UI启动调试模式")
         
         # 设置UI，包括窗口图标和菜单
         self.ui_manager.setup_ui()

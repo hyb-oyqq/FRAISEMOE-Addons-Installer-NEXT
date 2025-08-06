@@ -1,9 +1,10 @@
 import os
 import base64
+import datetime
 
 # 配置信息
 app_data = {
-    "APP_VERSION": "1.4.0",
+    "APP_VERSION": "1.3.2",
     "APP_NAME": "FRAISEMOE Addons Installer NEXT",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
@@ -55,7 +56,13 @@ APP_NAME = app_data["APP_NAME"]
 TEMP = os.getenv(app_data["TEMP"]) or app_data["TEMP"]
 CACHE = os.path.join(TEMP, app_data["CACHE"])
 CONFIG_FILE = os.path.join(CACHE, "config.json")
-LOG_FILE = "log.txt"
+
+# 将log文件放在程序根目录下的log文件夹中，使用日期+时间戳格式命名
+root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+log_dir = os.path.join(root_dir, "log")
+current_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+LOG_FILE = os.path.join(log_dir, f"log-{current_datetime}.txt")
+
 PLUGIN = os.path.join(CACHE, app_data["PLUGIN"])
 CONFIG_URL = decode_base64(app_data["CONFIG_URL"])
 UA = app_data["UA_TEMPLATE"].format(APP_VERSION)
@@ -63,11 +70,11 @@ GAME_INFO = app_data["game_info"]
 BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
 PLUGIN_HASH = {
-    "vol1": GAME_INFO["NEKOPARA Vol.1"]["hash"],
-    "vol2": GAME_INFO["NEKOPARA Vol.2"]["hash"],
-    "vol3": GAME_INFO["NEKOPARA Vol.3"]["hash"],
-    "vol4": GAME_INFO["NEKOPARA Vol.4"]["hash"],
-    "after": GAME_INFO["NEKOPARA After"]["hash"]
+    "NEKOPARA Vol.1": GAME_INFO["NEKOPARA Vol.1"]["hash"],
+    "NEKOPARA Vol.2": GAME_INFO["NEKOPARA Vol.2"]["hash"],
+    "NEKOPARA Vol.3": GAME_INFO["NEKOPARA Vol.3"]["hash"],
+    "NEKOPARA Vol.4": GAME_INFO["NEKOPARA Vol.4"]["hash"],
+    "NEKOPARA After": GAME_INFO["NEKOPARA After"]["hash"]
 }
 PROCESS_INFO = {info["exe"]: game for game, info in GAME_INFO.items()}
 

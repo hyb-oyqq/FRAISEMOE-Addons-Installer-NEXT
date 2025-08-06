@@ -260,11 +260,19 @@ class DownloadManager:
         disabled_patch_games = []  # 存储检测到禁用补丁的游戏
         
         for game_version, game_dir in game_dirs.items():
-            # 检查游戏是否已安装补丁
-            if self.main_window.installed_status.get(game_version, False):
+            # 首先通过文件检查确认补丁是否已安装
+            is_patch_installed = self.main_window.patch_manager.check_patch_installed(game_dir, game_version)
+            # 同时考虑哈希检查结果
+            hash_check_passed = self.main_window.installed_status.get(game_version, False)
+            
+            # 如果补丁文件存在或哈希检查通过，认为已安装
+            if is_patch_installed or hash_check_passed:
                 if debug_mode:
                     logger.info(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
+                    logger.info(f"DEBUG: 文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
                 already_installed_games.append(game_version)
+                # 更新安装状态
+                self.main_window.installed_status[game_version] = True
             else:
                 # 检查是否存在被禁用的补丁
                 is_disabled, disabled_path = self.main_window.patch_manager.check_patch_disabled(game_dir, game_version)
@@ -275,6 +283,7 @@ class DownloadManager:
                 else:
                     if debug_mode:
                         logger.info(f"DEBUG: {game_version} 未安装补丁，可以安装")
+                        logger.info(f"DEBUG: 文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
                     installable_games.append(game_version)
         
         status_message = ""
@@ -748,9 +757,35 @@ class DownloadManager:
             
             self.main_window.setEnabled(True)
             
+            # 分析错误类型
+            error_type = "未知错误"
+            suggestion = ""
+            
+            if "SSL/TLS handshake failure" in error:
+                error_type = "SSL/TLS连接失败"
+                suggestion = "可能是由于网络连接不稳定或证书问题，建议：\n1. 检查网络连接\n2. 尝试使用其他网络\n3. 确保系统时间和日期正确\n4. 可能需要使用代理或VPN"
+            elif "Connection timed out" in error or "read timed out" in error:
+                error_type = "连接超时"
+                suggestion = "下载服务器响应时间过长，建议：\n1. 检查网络连接\n2. 稍后重试\n3. 使用优化网络选项"
+            elif "404" in error:
+                error_type = "文件不存在"
+                suggestion = "请求的文件不存在或已移除，请联系开发者"
+            elif "403" in error:
+                error_type = "访问被拒绝"
+                suggestion = "服务器拒绝请求，可能需要使用优化网络选项"
+            elif "No space left on device" in error or "空间不足" in error:
+                error_type = "存储空间不足"
+                suggestion = "请确保有足够的磁盘空间用于下载和解压文件"
+            
             msg_box = QtWidgets.QMessageBox(self.main_window)
             msg_box.setWindowTitle(f"下载失败 - {APP_NAME}")
-            msg_box.setText(f"\n文件获取失败: {game_version}\n错误: {error}\n\n是否重试？")
+            error_message = f"\n文件获取失败: {game_version}\n错误类型: {error_type}"
+            
+            if suggestion:
+                error_message += f"\n\n可能的解决方案:\n{suggestion}"
+            
+            error_message += "\n\n是否重试？"
+            msg_box.setText(error_message)
             
             retry_button = msg_box.addButton("重试", QtWidgets.QMessageBox.ButtonRole.YesRole)
             next_button = msg_box.addButton("下一个", QtWidgets.QMessageBox.ButtonRole.NoRole)
