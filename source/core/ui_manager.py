@@ -280,14 +280,19 @@ class UIManager:
         self.work_mode_menu.setFont(menu_font)
         self.work_mode_menu.setStyleSheet(self._get_menu_style(font_family))
         
+        # 获取当前离线模式状态
+        is_offline_mode = False
+        if hasattr(self.main_window, 'offline_mode_manager'):
+            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
+        
         # 创建在线模式和离线模式选项
         self.online_mode_action = QAction("在线模式", self.main_window, checkable=True)
         self.online_mode_action.setFont(menu_font)
-        self.online_mode_action.setChecked(True)  # 默认选中在线模式
+        self.online_mode_action.setChecked(not is_offline_mode)  # 根据当前状态设置
         
         self.offline_mode_action = QAction("离线模式", self.main_window, checkable=True)
         self.offline_mode_action.setFont(menu_font)
-        self.offline_mode_action.setChecked(False)
+        self.offline_mode_action.setChecked(is_offline_mode)  # 根据当前状态设置
         
         # 将两个模式选项添加到同一个互斥组
         mode_group = QActionGroup(self.main_window)

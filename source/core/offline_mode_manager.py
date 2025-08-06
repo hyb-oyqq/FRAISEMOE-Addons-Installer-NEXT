@@ -128,6 +128,13 @@ class OfflineModeManager:
             # 同时更新UI中的标题标签
             if hasattr(self.main_window, 'ui') and hasattr(self.main_window.ui, 'title_label'):
                 self.main_window.ui.title_label.setText(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
+                
+        # 同步更新UI菜单中的模式选择状态
+        if hasattr(self.main_window, 'ui_manager'):
+            ui_manager = self.main_window.ui_manager
+            if hasattr(ui_manager, 'online_mode_action') and hasattr(ui_manager, 'offline_mode_action'):
+                ui_manager.online_mode_action.setChecked(not enabled)
+                ui_manager.offline_mode_action.setChecked(enabled)
         
         if debug_mode:
             logger.debug(f"DEBUG: 离线模式已{'启用' if enabled else '禁用'}")

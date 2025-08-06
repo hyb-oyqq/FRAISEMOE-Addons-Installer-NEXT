@@ -629,118 +629,43 @@ class MainWindow(QMainWindow):
                 dialog.setWindowTitle("选择要安装的游戏")
                 dialog.resize(400, 300)
                 
-                # 设置对话框样式
-                dialog.setStyleSheet("""
-                    QDialog {
-                        background-color: #2D2D30;
-                        color: #FFFFFF;
-                    }
-                    QCheckBox {
-                        color: #FFFFFF;
-                        font-size: 14px;
-                        padding: 5px;
-                        margin: 5px;
-                    }
-                    QCheckBox:hover {
-                        background-color: #3E3E42;
-                        border-radius: 4px;
-                    }
-                    QCheckBox:checked {
-                        color: #F47A5B;
-                    }
-                    QPushButton {
-                        background-color: #3E3E42;
-                        color: #FFFFFF;
-                        border: none;
-                        border-radius: 4px;
-                        padding: 8px 16px;
-                        font-size: 14px;
-                        min-width: 100px;
-                    }
-                    QPushButton:hover {
-                        background-color: #F47A5B;
-                    }
-                    QPushButton:pressed {
-                        background-color: #E06A4B;
-                    }
-                """)
-                
                 layout = QtWidgets.QVBoxLayout(dialog)
-                layout.setContentsMargins(20, 20, 20, 20)
-                layout.setSpacing(10)
                 
-                # 添加标题标签
+                # 添加"选择要安装的游戏"标签
                 title_label = QtWidgets.QLabel("选择要安装的游戏", dialog)
-                title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #F47A5B; margin-bottom: 10px;")
+                title_label.setFont(QFont(title_label.font().family(), title_label.font().pointSize(), QFont.Bold))
                 layout.addWidget(title_label)
                 
-                # 添加分隔线
-                line = QtWidgets.QFrame(dialog)
-                line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-                line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-                line.setStyleSheet("background-color: #3E3E42; margin: 10px 0px;")
-                layout.addWidget(line)
-                
-                # 添加游戏选择框
-                game_checkboxes = {}
-                scroll_area = QtWidgets.QScrollArea(dialog)
-                scroll_area.setWidgetResizable(True)
-                scroll_area.setStyleSheet("border: none; background-color: transparent;")
-                
-                scroll_content = QtWidgets.QWidget(scroll_area)
-                scroll_layout = QtWidgets.QVBoxLayout(scroll_content)
-                scroll_layout.setContentsMargins(5, 5, 5, 5)
-                scroll_layout.setSpacing(8)
-                scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-                
+                # 添加游戏列表控件
+                list_widget = QtWidgets.QListWidget(dialog)
+                list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)  # 允许多选
                 for game_version in game_dirs.keys():
-                    checkbox = QtWidgets.QCheckBox(game_version, scroll_content)
-                    checkbox.setChecked(True)  # 默认选中
-                    scroll_layout.addWidget(checkbox)
-                    game_checkboxes[game_version] = checkbox
+                    list_widget.addItem(game_version)
+                    # 默认选中所有项目
+                    list_widget.item(list_widget.count() - 1).setSelected(True)
+                layout.addWidget(list_widget)
                 
-                scroll_content.setLayout(scroll_layout)
-                scroll_area.setWidget(scroll_content)
-                layout.addWidget(scroll_area)
-                
-                # 添加按钮
-                button_layout = QtWidgets.QHBoxLayout()
-                button_layout.setSpacing(15)
-                
-                # 全选按钮
+                # 添加全选按钮
                 select_all_btn = QtWidgets.QPushButton("全选", dialog)
-                select_all_btn.clicked.connect(lambda: self.select_all_games(game_checkboxes, True))
+                select_all_btn.clicked.connect(lambda: list_widget.selectAll())
+                layout.addWidget(select_all_btn)
                 
-                # 全不选按钮
-                deselect_all_btn = QtWidgets.QPushButton("全不选", dialog)
-                deselect_all_btn.clicked.connect(lambda: self.select_all_games(game_checkboxes, False))
-                
-                # 确定和取消按钮
+                # 添加确定和取消按钮
+                buttons_layout = QtWidgets.QHBoxLayout()
                 ok_button = QtWidgets.QPushButton("确定", dialog)
-                ok_button.setStyleSheet(ok_button.styleSheet() + "background-color: #007ACC;")
-                
                 cancel_button = QtWidgets.QPushButton("取消", dialog)
+                buttons_layout.addWidget(ok_button)
+                buttons_layout.addWidget(cancel_button)
+                layout.addLayout(buttons_layout)
                 
-                # 添加按钮到布局
-                button_layout.addWidget(select_all_btn)
-                button_layout.addWidget(deselect_all_btn)
-                button_layout.addStretch()
-                button_layout.addWidget(ok_button)
-                button_layout.addWidget(cancel_button)
-                
-                layout.addLayout(button_layout)
-                
-                # 连接信号
+                # 连接按钮事件
                 ok_button.clicked.connect(dialog.accept)
                 cancel_button.clicked.connect(dialog.reject)
                 
                 # 显示对话框
                 if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
                     # 获取选择的游戏
-                    selected_games = []
-                    for game_version, checkbox in game_checkboxes.items():
-                        if checkbox.isChecked():
-                            selected_games.append(game_version)
+                    selected_games = [item.text() for item in list_widget.selectedItems()]
                     
                     if selected_games:
                         # 使用离线模式管理器进行安装
@@ -818,16 +743,6 @@ class MainWindow(QMainWindow):
                 
             logger.error(f"错误: 检查离线模式时发生异常: {e}")
             return False
-
-    def select_all_games(self, game_checkboxes, checked):
-        """选择或取消选择所有游戏
-        
-        Args:
-            game_checkboxes: 游戏复选框字典
-            checked: 是否选中
-        """
-        for checkbox in game_checkboxes.values():
-            checkbox.setChecked(checked)
 
 
 
