@@ -291,28 +291,6 @@ class IPv6Manager:
         """
         print(f"Toggle IPv6 support: {enabled}")
         
-        # 如果用户尝试启用IPv6，检查系统是否支持IPv6并发出警告
-        if enabled:
-            # 先显示警告提示
-            warning_msg_box = self._create_message_box(
-                "警告", 
-                "\n目前IPv6支持功能仍在测试阶段，可能会发生意料之外的bug！\n\n您确定需要启用吗？\n",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            response = warning_msg_box.exec()
-            
-            # 如果用户选择不启用，直接返回
-            if response != QMessageBox.StandardButton.Yes:
-                return False
-            
-            # 用户确认启用后，继续检查IPv6可用性
-            ipv6_available = self.check_ipv6_availability()
-                
-            if not ipv6_available:
-                msg_box = self._create_message_box("错误", "\n未检测到可用的IPv6连接，无法启用IPv6支持。\n\n请确保您的网络环境支持IPv6且已正确配置。\n")
-                msg_box.exec()
-                return False
-                
         # 保存设置到配置
         if self.config is not None:
             self.config["ipv6_enabled"] = enabled

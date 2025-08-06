@@ -13,6 +13,7 @@ class GameDetector:
         """
         self.game_info = game_info
         self.debug_manager = debug_manager
+        self.directory_cache = {}  # 添加目录缓存
         
     def _is_debug_mode(self):
         """检查是否处于调试模式
@@ -134,6 +135,12 @@ class GameDetector:
             dict: 游戏版本到游戏目录的映射
         """
         debug_mode = self._is_debug_mode()
+        
+        # 检查缓存中是否已有该目录的识别结果
+        if selected_folder in self.directory_cache:
+            if debug_mode:
+                print(f"DEBUG: 使用缓存的目录识别结果: {selected_folder}")
+            return self.directory_cache[selected_folder]
         
         if debug_mode:
             print(f"--- 开始识别目录: {selected_folder} ---")
@@ -307,5 +314,14 @@ class GameDetector:
         if debug_mode:
             print(f"DEBUG: 最终识别的游戏目录: {game_paths}")
             print(f"--- 目录识别结束 ---")
+        
+        # 将识别结果存入缓存
+        self.directory_cache[selected_folder] = game_paths
             
         return game_paths 
+
+    def clear_directory_cache(self):
+        """清除目录缓存"""
+        self.directory_cache = {}
+        if self._is_debug_mode():
+            print("DEBUG: 已清除目录缓存") 

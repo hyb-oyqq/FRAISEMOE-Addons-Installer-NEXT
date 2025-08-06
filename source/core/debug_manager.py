@@ -31,9 +31,20 @@ class DebugManager:
         Returns:
             bool: 是否处于调试模式
         """
-        if hasattr(self, 'ui_manager') and hasattr(self.ui_manager, 'debug_action'):
-            return self.ui_manager.debug_action.isChecked()
-        return False
+        try:
+            # 首先尝试从UI管理器获取状态
+            if hasattr(self, 'ui_manager') and self.ui_manager and hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action:
+                return self.ui_manager.debug_action.isChecked()
+            
+            # 如果UI管理器还没准备好，尝试从配置中获取
+            if hasattr(self.main_window, 'config') and isinstance(self.main_window.config, dict):
+                return self.main_window.config.get('debug_mode', False)
+                
+            # 如果以上都不可行，返回False
+            return False
+        except Exception:
+            # 捕获任何异常，默认返回False
+            return False
     
     def toggle_debug_mode(self, checked):
         """切换调试模式
@@ -51,6 +62,21 @@ class DebugManager:
             
         if checked:
             self.start_logging()
+            
+            # 如果启用了调试模式，检查是否需要强制启用离线模式
+            if hasattr(self.main_window, 'offline_mode_manager'):
+                # 检查配置中是否已设置离线模式
+                offline_mode_enabled = self.main_window.config.get("offline_mode", False)
+                
+                # 如果配置中已设置离线模式，则在调试模式下强制启用
+                if offline_mode_enabled:
+                    print("DEBUG: 调试模式下强制启用离线模式")
+                    self.main_window.offline_mode_manager.set_offline_mode(True)
+                    
+                    # 更新UI中的离线模式选项
+                    if hasattr(self.ui_manager, 'offline_mode_action') and self.ui_manager.offline_mode_action:
+                        self.ui_manager.offline_mode_action.setChecked(True)
+                        self.ui_manager.online_mode_action.setChecked(False)
         else:
             self.stop_logging()
     

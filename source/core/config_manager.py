@@ -85,16 +85,34 @@ class ConfigManager:
             # 记录错误信息，用于按钮点击时显示
             if error_message == "update_required":
                 self.last_error_message = "update_required"
-                msg_box = msgbox_frame(
-                    f"更新提示 - {self.app_name}",
-                    "\n当前版本过低，请及时更新。\n",
-                    QMessageBox.StandardButton.Ok,
-                )
-                msg_box.exec()
-                # 在浏览器中打开项目主页
-                webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/")
-                # 版本过低，应当显示"无法安装"
-                return {"action": "disable_button", "then": "exit"}
+                
+                # 检查是否处于离线模式
+                is_offline_mode = False
+                if hasattr(self.debug_manager, 'main_window') and hasattr(self.debug_manager.main_window, 'offline_mode_manager'):
+                    is_offline_mode = self.debug_manager.main_window.offline_mode_manager.is_in_offline_mode()
+                
+                if is_offline_mode:
+                    # 离线模式下只显示提示，不禁用开始安装按钮
+                    msg_box = msgbox_frame(
+                        f"更新提示 - {self.app_name}",
+                        "\n当前版本过低，请及时更新。\n在离线模式下，您仍可使用禁用/启用补丁、卸载补丁和离线安装功能。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                    msg_box.exec()
+                    # 移除在浏览器中打开项目主页的代码
+                    # 离线模式下版本过低，仍然允许使用安装按钮
+                    return {"action": "enable_button"}
+                else:
+                    # 在线模式下显示强制更新提示
+                    msg_box = msgbox_frame(
+                        f"更新提示 - {self.app_name}",
+                        "\n当前版本过低，请及时更新。\n如需联网下载补丁，请更新到最新版，否则无法下载。\n",
+                        QMessageBox.StandardButton.Ok,
+                    )
+                    msg_box.exec()
+                    # 移除在浏览器中打开项目主页的代码
+                    # 在线模式下版本过低，但不直接禁用按钮，而是在点击时提示
+                    return {"action": "enable_button", "version_warning": True}
                 
             elif "missing_keys" in error_message:
                 self.last_error_message = "missing_keys"
@@ -128,8 +146,8 @@ class ConfigManager:
                     )
                 msg_box.exec()
                 
-                # 网络错误时应当显示"无法安装"
-                return {"action": "disable_button"}
+                # 网络错误时仍然允许使用按钮，用户可以尝试离线模式
+                return {"action": "enable_button"}
         else:
             self.cloud_config = data
             # 标记配置有效
@@ -139,10 +157,36 @@ class ConfigManager:
             
             if debug_mode:
                 print("--- Cloud config fetched successfully ---")
-                print(json.dumps(data, indent=2))
+                # 创建一个数据副本，隐藏敏感URL
+                safe_data = self._create_safe_config_for_logging(data)
+                print(json.dumps(safe_data, indent=2))
                 
             # 获取配置成功，允许安装
             return {"action": "enable_button"}
+            
+    def _create_safe_config_for_logging(self, config_data):
+        """创建用于日志记录的安全配置副本，隐藏敏感URL
+        
+        Args:
+            config_data: 原始配置数据
+            
+        Returns:
+            dict: 安全的配置数据副本
+        """
+        if not config_data or not isinstance(config_data, dict):
+            return config_data
+            
+        # 创建深拷贝，避免修改原始数据
+        import copy
+        safe_config = copy.deepcopy(config_data)
+        
+        # 隐藏敏感URL
+        for key in safe_config:
+            if isinstance(safe_config[key], dict) and "url" in safe_config[key]:
+                # 完全隐藏URL
+                safe_config[key]["url"] = "***URL protection***"
+        
+        return safe_config
     
     def is_config_valid(self):
         """检查配置是否有效

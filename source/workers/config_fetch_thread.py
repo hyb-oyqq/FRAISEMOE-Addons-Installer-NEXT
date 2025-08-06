@@ -18,7 +18,8 @@ class ConfigFetchThread(QThread):
         try:
             if self.debug_mode:
                 print("--- Starting to fetch cloud config ---")
-                print(f"DEBUG: Requesting URL: {self.url}")
+                # 完全隐藏URL
+                print(f"DEBUG: Requesting URL: ***URL protection***")
                 print(f"DEBUG: Using Headers: {self.headers}")
 
             response = requests.get(self.url, headers=self.headers, timeout=10)
@@ -26,7 +27,18 @@ class ConfigFetchThread(QThread):
             if self.debug_mode:
                 print(f"DEBUG: Response Status Code: {response.status_code}")
                 print(f"DEBUG: Response Headers: {response.headers}")
-                print(f"DEBUG: Response Text: {response.text}")
+                
+                # 解析并隐藏响应中的敏感URL
+                try:
+                    response_data = response.json()
+                    # 创建安全版本用于日志输出
+                    safe_response = self._create_safe_config_for_logging(response_data)
+                    print(f"DEBUG: Response Text: {json.dumps(safe_response, indent=2)}")
+                except:
+                    # 如果不是JSON，直接打印文本
+                    from utils.helpers import censor_url
+                    censored_text = censor_url(response.text)
+                    print(f"DEBUG: Response Text: {censored_text}")
 
             response.raise_for_status()
             
@@ -62,4 +74,28 @@ class ConfigFetchThread(QThread):
             self.finished.emit(None, error_msg)
         finally:
             if self.debug_mode:
-                print("--- Finished fetching cloud config ---") 
+                print("--- Finished fetching cloud config ---")
+                
+    def _create_safe_config_for_logging(self, config_data):
+        """创建用于日志记录的安全配置副本，隐藏敏感URL
+        
+        Args:
+            config_data: 原始配置数据
+            
+        Returns:
+            dict: 安全的配置数据副本
+        """
+        if not config_data or not isinstance(config_data, dict):
+            return config_data
+            
+        # 创建深拷贝，避免修改原始数据
+        import copy
+        safe_config = copy.deepcopy(config_data)
+        
+        # 隐藏敏感URL
+        for key in safe_config:
+            if isinstance(safe_config[key], dict) and "url" in safe_config[key]:
+                # 完全隐藏URL
+                safe_config[key]["url"] = "***URL protection***"
+        
+        return safe_config 

@@ -1,4 +1,4 @@
-from PySide6.QtGui import QIcon, QAction, QFont, QCursor
+from PySide6.QtGui import QIcon, QAction, QFont, QCursor, QActionGroup
 from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QPushButton
 from PySide6.QtCore import Qt, QRect
 import webbrowser
@@ -37,8 +37,18 @@ class UIManager:
         if os.path.exists(icon_path):
             self.main_window.setWindowIcon(QIcon(icon_path))
 
-        # 设置窗口标题
-        self.main_window.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
+        # 获取当前离线模式状态
+        is_offline_mode = False
+        if hasattr(self.main_window, 'offline_mode_manager'):
+            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
+            
+        # 设置窗口标题和UI标题标签
+        mode_indicator = "[离线模式]" if is_offline_mode else "[在线模式]"
+        self.main_window.setWindowTitle(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
+        
+        # 更新UI中的标题标签
+        if hasattr(self.main_window, 'ui') and hasattr(self.main_window.ui, 'title_label'):
+            self.main_window.ui.title_label.setText(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
         
         # 创建关于按钮
         self._create_about_button()
@@ -265,6 +275,34 @@ class UIManager:
         menu_font = self._get_menu_font()
         font_family = menu_font.family()
 
+        # 创建工作模式子菜单
+        self.work_mode_menu = QMenu("工作模式", self.main_window)
+        self.work_mode_menu.setFont(menu_font)
+        self.work_mode_menu.setStyleSheet(self._get_menu_style(font_family))
+        
+        # 创建在线模式和离线模式选项
+        self.online_mode_action = QAction("在线模式", self.main_window, checkable=True)
+        self.online_mode_action.setFont(menu_font)
+        self.online_mode_action.setChecked(True)  # 默认选中在线模式
+        
+        self.offline_mode_action = QAction("离线模式", self.main_window, checkable=True)
+        self.offline_mode_action.setFont(menu_font)
+        self.offline_mode_action.setChecked(False)
+        
+        # 将两个模式选项添加到同一个互斥组
+        mode_group = QActionGroup(self.main_window)
+        mode_group.addAction(self.online_mode_action)
+        mode_group.addAction(self.offline_mode_action)
+        mode_group.setExclusive(True)  # 确保只能选择一个模式
+        
+        # 连接切换事件
+        self.online_mode_action.triggered.connect(lambda: self.switch_work_mode("online"))
+        self.offline_mode_action.triggered.connect(lambda: self.switch_work_mode("offline"))
+        
+        # 添加到工作模式子菜单
+        self.work_mode_menu.addAction(self.online_mode_action)
+        self.work_mode_menu.addAction(self.offline_mode_action)
+
         # 创建开发者选项子菜单
         self.dev_menu = QMenu("开发者选项", self.main_window)
         self.dev_menu.setFont(menu_font)  # 设置与UI_install.py中相同的字体
@@ -300,28 +338,11 @@ class UIManager:
         self.ipv6_submenu.setFont(menu_font)
         self.ipv6_submenu.setStyleSheet(menu_style)
         
-        # 检查IPv6是否可用
-        ipv6_available = False
-        if self.ipv6_manager:
-            ipv6_available = self.ipv6_manager.check_ipv6_availability()
-        
-        if not ipv6_available:
-            self.ipv6_action.setText("启用IPv6支持 (不可用)")
-            self.ipv6_action.setEnabled(False)
-            self.ipv6_action.setToolTip("未检测到可用的IPv6连接")
-        
         # 检查配置中是否已启用IPv6
         config = getattr(self.main_window, 'config', {})
         ipv6_enabled = False
         if isinstance(config, dict):
             ipv6_enabled = config.get("ipv6_enabled", False)
-            # 如果配置中启用了IPv6但实际不可用，则强制禁用
-            if ipv6_enabled and not ipv6_available:
-                config["ipv6_enabled"] = False
-                ipv6_enabled = False
-                # 使用utils.save_config直接保存配置
-                from utils import save_config
-                save_config(config)
         
         self.ipv6_action.setChecked(ipv6_enabled)
         
@@ -416,6 +437,7 @@ class UIManager:
         self.download_settings_menu.addAction(self.thread_settings_action)
         
         # 添加到主菜单
+        self.ui.menu.addMenu(self.work_mode_menu)  # 添加工作模式子菜单
         self.ui.menu.addMenu(self.download_settings_menu)  # 添加下载设置子菜单
         self.ui.menu.addSeparator()
         self.ui.menu.addMenu(self.dev_menu)  # 添加开发者选项子菜单
@@ -438,7 +460,47 @@ class UIManager:
             # 恢复复选框状态
             self.ipv6_action.setChecked(not enabled)
             return
+        
+        if enabled:
+            # 先显示警告提示
+            warning_msg_box = self._create_message_box(
+                "警告", 
+                "\n目前IPv6支持功能仍在测试阶段，可能会发生意料之外的bug！\n\n您确定需要启用吗？\n",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            response = warning_msg_box.exec()
             
+            # 如果用户选择不启用，直接返回
+            if response != QMessageBox.StandardButton.Yes:
+                # 恢复复选框状态
+                self.ipv6_action.setChecked(False)
+                return
+                
+            # 显示正在校验IPv6的提示
+            msg_box = self._create_message_box("IPv6检测", "\n正在校验是否支持IPv6，请稍候...\n")
+            msg_box.open()  # 使用open而不是exec，这样不会阻塞UI
+            
+            # 处理消息队列，确保对话框显示
+            from PySide6.QtCore import QCoreApplication
+            QCoreApplication.processEvents()
+            
+            # 检查IPv6是否可用
+            ipv6_available = self.ipv6_manager.check_ipv6_availability()
+            
+            # 关闭提示对话框
+            msg_box.accept()
+            
+            if not ipv6_available:
+                # 显示IPv6不可用的提示
+                error_msg_box = self._create_message_box(
+                    "IPv6不可用", 
+                    "\n未检测到可用的IPv6连接，无法启用IPv6支持。\n\n请确保您的网络环境支持IPv6且已正确配置。\n"
+                )
+                error_msg_box.exec()
+                # 恢复复选框状态
+                self.ipv6_action.setChecked(False)
+                return False
+        
         # 使用IPv6Manager处理切换
         success = self.ipv6_manager.toggle_ipv6_support(enabled)
         # 如果切换失败，恢复复选框状态
@@ -733,3 +795,71 @@ class UIManager:
         """显示IPv6管理器未准备好的提示"""
         msg_box = self._create_message_box("错误", "\nIPv6管理器尚未初始化，请稍后再试。\n")
         msg_box.exec() 
+
+    def switch_work_mode(self, mode):
+        """切换工作模式
+        
+        Args:
+            mode: 要切换的模式，"online"或"offline"
+        """
+        # 检查主窗口是否有离线模式管理器
+        if not hasattr(self.main_window, 'offline_mode_manager'):
+            # 如果没有离线模式管理器，创建提示
+            msg_box = self._create_message_box(
+                "错误",
+                "\n离线模式管理器未初始化，无法切换工作模式。\n"
+            )
+            msg_box.exec()
+            
+            # 恢复选择状态
+            self.online_mode_action.setChecked(True)
+            self.offline_mode_action.setChecked(False)
+            return
+            
+        if mode == "offline":
+            # 尝试切换到离线模式
+            success = self.main_window.offline_mode_manager.set_offline_mode(True)
+            if not success:
+                # 如果切换失败，恢复选择状态
+                self.online_mode_action.setChecked(True)
+                self.offline_mode_action.setChecked(False)
+                return
+                
+            # 更新配置
+            self.main_window.config["offline_mode"] = True
+            self.main_window.save_config(self.main_window.config)
+            
+            # 在离线模式下始终启用开始安装按钮
+            if hasattr(self.main_window, 'set_start_button_enabled'):
+                self.main_window.set_start_button_enabled(True)
+            
+            # 清除版本警告标志
+            if hasattr(self.main_window, 'version_warning'):
+                self.main_window.version_warning = False
+            
+            # 显示提示
+            msg_box = self._create_message_box(
+                "模式已切换",
+                "\n已切换到离线模式。\n\n将使用本地补丁文件进行安装，不会从网络下载补丁。\n"
+            )
+            msg_box.exec()
+        else:
+            # 切换到在线模式
+            self.main_window.offline_mode_manager.set_offline_mode(False)
+            
+            # 更新配置
+            self.main_window.config["offline_mode"] = False
+            self.main_window.save_config(self.main_window.config)
+            
+            # 如果当前版本过低，设置版本警告标志
+            if hasattr(self.main_window, 'last_error_message') and self.main_window.last_error_message == "update_required":
+                # 设置版本警告标志
+                if hasattr(self.main_window, 'version_warning'):
+                    self.main_window.version_warning = True
+            
+            # 显示提示
+            msg_box = self._create_message_box(
+                "模式已切换",
+                "\n已切换到在线模式。\n\n将从网络下载补丁进行安装。\n"
+            )
+            msg_box.exec() 

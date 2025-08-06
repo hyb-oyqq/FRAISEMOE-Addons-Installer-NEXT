@@ -30,6 +30,9 @@ class IpOptimizer:
 
             ip_txt_path = resource_path("ip.txt")
             
+            # 隐藏敏感URL
+            safe_url = "***URL protection***"
+            
             command = [
                 cst_path,
                 "-n", "1000",     # 延迟测速线程数
@@ -39,10 +42,17 @@ class IpOptimizer:
                 "-dd",           # 禁用下载测速
                 "-o"," "         # 不写入结果文件
             ]
+            
+            # 创建用于显示的安全命令副本
+            safe_command = command.copy()
+            for i, arg in enumerate(safe_command):
+                if arg == url:
+                    safe_command[i] = safe_url
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             
             print("--- CloudflareSpeedTest 开始执行 ---")
+            print(f"执行命令: {' '.join(safe_command)}")
             
             self.process = subprocess.Popen(
                 command,
@@ -91,7 +101,9 @@ class IpOptimizer:
                     
                     timeout_counter = 0
                     
-                    cleaned_line = line.strip()
+                    # 处理输出行，隐藏可能包含的URL
+                    from utils.helpers import censor_url
+                    cleaned_line = censor_url(line.strip())
                     if cleaned_line:
                         print(cleaned_line)
                         
@@ -157,6 +169,9 @@ class IpOptimizer:
                 print(f"错误: ipv6.txt 未在资源路径中找到。")
                 return None
             
+            # 隐藏敏感URL
+            safe_url = "***URL protection***"
+            
             command = [
                 cst_path,
                 "-n", "1000",     # 延迟测速线程数
@@ -166,10 +181,17 @@ class IpOptimizer:
                 "-dd",           # 禁用下载测速
                 "-o", " "        # 不写入结果文件
             ]
+            
+            # 创建用于显示的安全命令副本
+            safe_command = command.copy()
+            for i, arg in enumerate(safe_command):
+                if arg == url:
+                    safe_command[i] = safe_url
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             
             print("--- CloudflareSpeedTest IPv6 开始执行 ---")
+            print(f"执行命令: {' '.join(safe_command)}")
             
             self.process = subprocess.Popen(
                 command,
@@ -218,7 +240,9 @@ class IpOptimizer:
                     
                     timeout_counter = 0
                     
-                    cleaned_line = line.strip()
+                    # 处理输出行，隐藏可能包含的URL
+                    from utils.helpers import censor_url
+                    cleaned_line = censor_url(line.strip())
                     if cleaned_line:
                         print(cleaned_line)
                         

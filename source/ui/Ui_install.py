@@ -542,7 +542,6 @@ class Ui_MainWindows(object):
     # setupUi
 
     def retranslateUi(self, MainWindows):
-        MainWindows.setWindowTitle(QCoreApplication.translate("MainWindows", f"{APP_NAME} v{APP_VERSION}", None))
         self.loadbg.setText("")
         self.vol1bg.setText("")
         self.vol2bg.setText("")

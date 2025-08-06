@@ -200,7 +200,15 @@ class DownloadThread(QThread):
             
             command.append(self.url)
             
-            print(f"即将执行的 Aria2c 命令: {' '.join(command)}")
+            # 创建一个安全的命令副本，隐藏URL
+            safe_command = command.copy()
+            if len(safe_command) > 0:
+                # 替换最后一个参数（URL）为安全版本
+                url = safe_command[-1]
+                if isinstance(url, str) and url.startswith("http"):
+                    safe_command[-1] = "***URL protection***"
+            
+            print(f"即将执行的 Aria2c 命令: {' '.join(safe_command)}")
 
             creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creation_flags)
@@ -220,8 +228,11 @@ class DownloadThread(QThread):
                 else:
                     break
                 
-                full_output.append(line)
-                print(line.strip())
+                # 处理输出行，隐藏可能包含的URL
+                from utils.helpers import censor_url
+                censored_line = censor_url(line)
+                full_output.append(censored_line)
+                print(censored_line.strip())
 
                 match = progress_pattern.search(line)
                 if match:

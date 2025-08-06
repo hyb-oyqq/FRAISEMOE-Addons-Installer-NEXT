@@ -15,7 +15,7 @@ from ui.Ui_install import Ui_MainWindows
 from data.config import (
     APP_NAME, PLUGIN, GAME_INFO, BLOCK_SIZE,
     PLUGIN_HASH, UA, CONFIG_URL, LOG_FILE,
-    DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL # 添加下载线程常量
+    DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL, APP_VERSION # 添加APP_VERSION导入
 )
 from utils import (
     load_config, save_config, HashManager, AdminPrivileges, msgbox_frame, load_image_from_file
@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         self.hash_manager = HashManager(BLOCK_SIZE)
         self.admin_privileges = AdminPrivileges()
         
-        # 初始化各种管理器
+        # 初始化各种管理器 - 调整初始化顺序，避免循环依赖
         # 1. 首先创建必要的基础管理器
         self.animator = MultiStageAnimations(self.ui, self)
         self.window_manager = WindowManager(self)
@@ -72,18 +72,19 @@ class MainWindow(QMainWindow):
         # 4. 为debug_manager设置ui_manager引用
         self.debug_manager.set_ui_manager(self.ui_manager)
         
-        # 设置UI - 确保debug_action已初始化
-        self.ui_manager.setup_ui()
-        
         # 5. 初始化其他管理器
         self.config_manager = ConfigManager(APP_NAME, CONFIG_URL, UA, self.debug_manager)
         self.game_detector = GameDetector(GAME_INFO, self.debug_manager)
         self.patch_manager = PatchManager(APP_NAME, GAME_INFO, self.debug_manager)
         
-        # 6. 初始化下载管理器 - 放在最后，因为它可能依赖于其他管理器
+        # 6. 初始化离线模式管理器
+        from core.offline_mode_manager import OfflineModeManager
+        self.offline_mode_manager = OfflineModeManager(self)
+        
+        # 7. 初始化下载管理器 - 放在最后，因为它可能依赖于其他管理器
         self.download_manager = DownloadManager(self)
         
-        # 7. 初始化功能处理程序
+        # 8. 初始化功能处理程序
         self.uninstall_handler = UninstallHandler(self)
         self.patch_toggle_handler = PatchToggleHandler(self)
         
@@ -97,6 +98,9 @@ class MainWindow(QMainWindow):
         self.patch_manager.initialize_status()
         self.installed_status = self.patch_manager.get_status()  # 获取初始化后的状态
         self.hash_msg_box = None
+        self.last_error_message = ""  # 添加错误信息记录
+        self.version_warning = False  # 添加版本警告标志
+        self.install_button_enabled = True  # 默认启用安装按钮
         self.progress_window = None
         
         # 设置关闭按钮事件连接
@@ -140,11 +144,17 @@ class MainWindow(QMainWindow):
             if self.ui_manager.debug_action.isChecked():
                 self.debug_manager.start_logging()
         
-        # 在窗口显示前设置初始状态
-        self.animator.initialize()
+        # 设置UI，包括窗口图标和菜单
+        self.ui_manager.setup_ui()
         
-        # 窗口显示后延迟100ms启动动画
-        QTimer.singleShot(100, self.start_animations)
+        # 检查是否有离线补丁文件，如果有则自动切换到离线模式
+        self.check_and_set_offline_mode()
+        
+        # 获取云端配置
+        self.fetch_cloud_config()
+        
+        # 启动动画
+        self.start_animations()
     
     # 窗口事件处理 - 委托给WindowManager
     def mousePressEvent(self, event):
@@ -170,10 +180,14 @@ class MainWindow(QMainWindow):
         # 但确保开始安装按钮仍然处于禁用状态
         self.set_start_button_enabled(False)
         
+        # 在动画开始前初始化
+        self.animator.initialize()
+        
+        # 连接动画完成信号
         self.animator.animation_finished.connect(self.on_animations_finished)
+        
+        # 启动动画
         self.animator.start_animations()
-        # 在动画开始时获取云端配置
-        self.fetch_cloud_config()
 
     def on_animations_finished(self):
         """动画完成后启用按钮"""
@@ -185,8 +199,16 @@ class MainWindow(QMainWindow):
         self.ui.toggle_patch_btn.setEnabled(True)  # 启用禁/启用补丁按钮
         self.ui.exit_btn.setEnabled(True)
         
-        # 只有在配置有效时才启用开始安装按钮
-        if self.config_valid:
+        # 检查是否处于离线模式
+        is_offline_mode = False
+        if hasattr(self, 'offline_mode_manager'):
+            is_offline_mode = self.offline_mode_manager.is_in_offline_mode()
+            
+        # 如果是离线模式，始终启用开始安装按钮
+        if is_offline_mode:
+            self.set_start_button_enabled(True)
+        # 否则，只有在配置有效时才启用开始安装按钮
+        elif self.config_valid:
             self.set_start_button_enabled(True)
         else:
             self.set_start_button_enabled(False)
@@ -237,14 +259,14 @@ class MainWindow(QMainWindow):
             elif result["action"] == "disable_button":
                 # 禁用开始安装按钮
                 self.set_start_button_enabled(False)
-                
-                # 检查是否有后续操作
-                if "then" in result and result["then"] == "exit":
-                    # 强制关闭程序
-                    self.shutdown_app(force_exit=True)
             elif result["action"] == "enable_button":
                 # 启用开始安装按钮
                 self.set_start_button_enabled(True)
+                # 检查是否需要记录版本警告
+                if "version_warning" in result and result["version_warning"]:
+                    self.version_warning = True
+                else:
+                    self.version_warning = False
         
         # 同步状态
         self.cloud_config = self.config_manager.get_cloud_config()
@@ -318,7 +340,12 @@ class MainWindow(QMainWindow):
         """进行安装后哈希比较"""
         # 禁用窗口已在安装流程开始时完成
         
-        self.hash_msg_box = self.hash_manager.hash_pop_window(check_type="after")
+        # 检查是否处于离线模式
+        is_offline = False
+        if hasattr(self, 'offline_mode_manager'):
+            is_offline = self.offline_mode_manager.is_in_offline_mode()
+        
+        self.hash_msg_box = self.hash_manager.hash_pop_window(check_type="after", is_offline=is_offline)
 
         install_paths = self.download_manager.get_install_paths()
         
@@ -495,16 +522,28 @@ class MainWindow(QMainWindow):
         """处理安装按钮点击事件
         根据按钮当前状态决定是显示错误还是执行安装
         """
+        # 检查是否处于离线模式
+        is_offline_mode = False
+        if hasattr(self, 'offline_mode_manager'):
+            is_offline_mode = self.offline_mode_manager.is_in_offline_mode()
+        
+        # 如果版本过低且在在线模式下，提示用户更新
+        if self.last_error_message == "update_required" and not is_offline_mode:
+            # 在线模式下提示用户更新软件
+            msg_box = msgbox_frame(
+                f"更新提示 - {APP_NAME}",
+                "\n当前版本过低，请及时更新。\n如需联网下载补丁，请更新到最新版，否则无法下载。\n\n是否切换到离线模式继续使用？\n",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if msg_box.exec() == QMessageBox.StandardButton.Yes:
+                # 切换到离线模式
+                if self.ui_manager and hasattr(self.ui_manager, 'switch_work_mode'):
+                    self.ui_manager.switch_work_mode("offline")
+            return
+            
         if not self.install_button_enabled:
             # 按钮处于"无法安装"状态
-            if self.last_error_message == "update_required":
-                msg_box = msgbox_frame(
-                    f"更新提示 - {APP_NAME}",
-                    "\n当前版本过低，请及时更新。\n",
-                    QMessageBox.StandardButton.Ok,
-                )
-                msg_box.exec()
-            elif self.last_error_message == "directory_not_found":
+            if self.last_error_message == "directory_not_found":
                 # 目录识别失败的特定错误信息
                 reply = msgbox_frame(
                     f"目录错误 - {APP_NAME}",
@@ -517,18 +556,299 @@ class MainWindow(QMainWindow):
                     # 直接调用文件对话框
                     self.download_manager.file_dialog()
             else:
-                # 网络错误或其他错误
-                reply = msgbox_frame(
-                    f"错误 - {APP_NAME}",
-                    "\n访问云端配置失败，请检查网络状况或稍后再试。\n\n是否重新尝试连接？\n",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                )
-                if reply.exec() == QMessageBox.StandardButton.Yes:
-                    # 重试获取配置
-                    self.fetch_cloud_config()
+                # 检查是否处于离线模式
+                if is_offline_mode and self.last_error_message == "network_error":
+                    # 如果是离线模式且错误是网络相关的，提示切换到在线模式
+                    reply = msgbox_frame(
+                        f"离线模式提示 - {APP_NAME}",
+                        "\n当前处于离线模式，但本地补丁文件不完整。\n\n是否切换到在线模式尝试下载？\n",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    )
+                    if reply.exec() == QMessageBox.StandardButton.Yes:
+                        # 切换到在线模式
+                        if self.ui_manager and hasattr(self.ui_manager, 'switch_work_mode'):
+                            self.ui_manager.switch_work_mode("online")
+                            # 重试获取配置
+                            self.fetch_cloud_config()
+                else:
+                    # 网络错误或其他错误
+                    reply = msgbox_frame(
+                        f"错误 - {APP_NAME}",
+                        "\n访问云端配置失败，请检查网络状况或稍后再试。\n\n是否重新尝试连接？\n",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    )
+                    if reply.exec() == QMessageBox.StandardButton.Yes:
+                        # 重试获取配置
+                        self.fetch_cloud_config()
         else:
             # 按钮处于"开始安装"状态，正常执行安装流程
-            self.download_manager.file_dialog()
+            # 检查是否处于离线模式
+            if is_offline_mode:
+                # 如果是离线模式，使用离线安装流程
+                # 先选择游戏目录
+                self.selected_folder = QtWidgets.QFileDialog.getExistingDirectory(
+                    self, f"选择游戏所在【上级目录】 {APP_NAME}"
+                )
+                if not self.selected_folder:
+                    QtWidgets.QMessageBox.warning(
+                        self, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
+                    )
+                    return
+                
+                # 保存选择的目录到下载管理器
+                self.download_manager.selected_folder = self.selected_folder
+                
+                # 设置按钮状态
+                self.ui.start_install_text.setText("正在安装")
+                self.setEnabled(False)
+                
+                # 清除游戏检测器的目录缓存
+                if hasattr(self, 'game_detector') and hasattr(self.game_detector, 'clear_directory_cache'):
+                    self.game_detector.clear_directory_cache()
+                
+                # 识别游戏目录
+                game_dirs = self.game_detector.identify_game_directories_improved(self.selected_folder)
+                
+                if not game_dirs:
+                    self.last_error_message = "directory_not_found"
+                    QtWidgets.QMessageBox.warning(
+                        self, 
+                        f"目录错误 - {APP_NAME}", 
+                        "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
+                    )
+                    self.setEnabled(True)
+                    self.ui.start_install_text.setText("开始安装")
+                    return
+                
+                # 显示游戏选择对话框
+                dialog = QtWidgets.QDialog(self)
+                dialog.setWindowTitle("选择要安装的游戏")
+                dialog.resize(400, 300)
+                
+                # 设置对话框样式
+                dialog.setStyleSheet("""
+                    QDialog {
+                        background-color: #2D2D30;
+                        color: #FFFFFF;
+                    }
+                    QCheckBox {
+                        color: #FFFFFF;
+                        font-size: 14px;
+                        padding: 5px;
+                        margin: 5px;
+                    }
+                    QCheckBox:hover {
+                        background-color: #3E3E42;
+                        border-radius: 4px;
+                    }
+                    QCheckBox:checked {
+                        color: #F47A5B;
+                    }
+                    QPushButton {
+                        background-color: #3E3E42;
+                        color: #FFFFFF;
+                        border: none;
+                        border-radius: 4px;
+                        padding: 8px 16px;
+                        font-size: 14px;
+                        min-width: 100px;
+                    }
+                    QPushButton:hover {
+                        background-color: #F47A5B;
+                    }
+                    QPushButton:pressed {
+                        background-color: #E06A4B;
+                    }
+                """)
+                
+                layout = QtWidgets.QVBoxLayout(dialog)
+                layout.setContentsMargins(20, 20, 20, 20)
+                layout.setSpacing(10)
+                
+                # 添加标题标签
+                title_label = QtWidgets.QLabel("选择要安装的游戏", dialog)
+                title_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #F47A5B; margin-bottom: 10px;")
+                layout.addWidget(title_label)
+                
+                # 添加分隔线
+                line = QtWidgets.QFrame(dialog)
+                line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+                line.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+                line.setStyleSheet("background-color: #3E3E42; margin: 10px 0px;")
+                layout.addWidget(line)
+                
+                # 添加游戏选择框
+                game_checkboxes = {}
+                scroll_area = QtWidgets.QScrollArea(dialog)
+                scroll_area.setWidgetResizable(True)
+                scroll_area.setStyleSheet("border: none; background-color: transparent;")
+                
+                scroll_content = QtWidgets.QWidget(scroll_area)
+                scroll_layout = QtWidgets.QVBoxLayout(scroll_content)
+                scroll_layout.setContentsMargins(5, 5, 5, 5)
+                scroll_layout.setSpacing(8)
+                scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+                
+                for game_version in game_dirs.keys():
+                    checkbox = QtWidgets.QCheckBox(game_version, scroll_content)
+                    checkbox.setChecked(True)  # 默认选中
+                    scroll_layout.addWidget(checkbox)
+                    game_checkboxes[game_version] = checkbox
+                
+                scroll_content.setLayout(scroll_layout)
+                scroll_area.setWidget(scroll_content)
+                layout.addWidget(scroll_area)
+                
+                # 添加按钮
+                button_layout = QtWidgets.QHBoxLayout()
+                button_layout.setSpacing(15)
+                
+                # 全选按钮
+                select_all_btn = QtWidgets.QPushButton("全选", dialog)
+                select_all_btn.clicked.connect(lambda: self.select_all_games(game_checkboxes, True))
+                
+                # 全不选按钮
+                deselect_all_btn = QtWidgets.QPushButton("全不选", dialog)
+                deselect_all_btn.clicked.connect(lambda: self.select_all_games(game_checkboxes, False))
+                
+                # 确定和取消按钮
+                ok_button = QtWidgets.QPushButton("确定", dialog)
+                ok_button.setStyleSheet(ok_button.styleSheet() + "background-color: #007ACC;")
+                
+                cancel_button = QtWidgets.QPushButton("取消", dialog)
+                
+                # 添加按钮到布局
+                button_layout.addWidget(select_all_btn)
+                button_layout.addWidget(deselect_all_btn)
+                button_layout.addStretch()
+                button_layout.addWidget(ok_button)
+                button_layout.addWidget(cancel_button)
+                
+                layout.addLayout(button_layout)
+                
+                # 连接信号
+                ok_button.clicked.connect(dialog.accept)
+                cancel_button.clicked.connect(dialog.reject)
+                
+                # 显示对话框
+                if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+                    # 获取选择的游戏
+                    selected_games = []
+                    for game_version, checkbox in game_checkboxes.items():
+                        if checkbox.isChecked():
+                            selected_games.append(game_version)
+                    
+                    if selected_games:
+                        # 使用离线模式管理器进行安装
+                        self.offline_mode_manager.install_offline_patches(selected_games)
+                    else:
+                        QtWidgets.QMessageBox.information(
+                            self, 
+                            f"通知 - {APP_NAME}", 
+                            "\n未选择任何游戏，安装已取消。\n"
+                        )
+                        self.setEnabled(True)
+                        self.ui.start_install_text.setText("开始安装")
+                else:
+                    # 用户取消了选择
+                    self.setEnabled(True)
+                    self.ui.start_install_text.setText("开始安装")
+            else:
+                # 在线模式下，检查版本是否过低
+                if hasattr(self, 'version_warning') and self.version_warning:
+                    # 版本过低，提示用户更新
+                    msg_box = msgbox_frame(
+                        f"版本过低 - {APP_NAME}",
+                        "\n当前版本过低，无法使用在线下载功能。\n\n请更新到最新版本或切换到离线模式。\n",
+                        QMessageBox.StandardButton.Ok
+                    )
+                    msg_box.exec()
+                else:
+                    # 版本正常，使用原有的下载流程
+                    self.download_manager.file_dialog()
+
+    def check_and_set_offline_mode(self):
+        """检查是否有离线补丁文件，如果有则自动切换到离线模式"""
+        try:
+            # 检查是否有离线补丁文件
+            has_offline_patches = self.offline_mode_manager.has_offline_patches()
+            
+            # 获取调试模式状态
+            debug_mode = False
+            if hasattr(self.debug_manager, '_is_debug_mode'):
+                debug_mode = self.debug_manager._is_debug_mode()
+            
+            # 检查配置中是否已设置离线模式
+            offline_mode_enabled = False
+            if isinstance(self.config, dict):
+                offline_mode_enabled = self.config.get("offline_mode", False)
+            
+            # 如果有离线补丁文件或者调试模式下强制启用离线模式
+            if has_offline_patches or (debug_mode and offline_mode_enabled):
+                # 设置离线模式
+                self.offline_mode_manager.set_offline_mode(True)
+                
+                # 更新UI中的离线模式选项
+                if hasattr(self.ui_manager, 'offline_mode_action') and self.ui_manager.offline_mode_action:
+                    self.ui_manager.offline_mode_action.setChecked(True)
+                    self.ui_manager.online_mode_action.setChecked(False)
+                    
+                # 更新配置
+                self.config["offline_mode"] = True
+                self.save_config(self.config)
+                
+                # 在离线模式下始终启用开始安装按钮
+                self.set_start_button_enabled(True)
+                
+                # 清除版本警告标志
+                self.version_warning = False
+                
+                if debug_mode:
+                    print(f"DEBUG: 已自动切换到离线模式，找到离线补丁文件: {list(self.offline_mode_manager.offline_patches.keys())}")
+                    print(f"DEBUG: 离线模式下启用开始安装按钮")
+            else:
+                # 如果没有离线补丁文件，确保使用在线模式
+                self.offline_mode_manager.set_offline_mode(False)
+                
+                # 更新UI中的在线模式选项
+                if hasattr(self.ui_manager, 'online_mode_action') and self.ui_manager.online_mode_action:
+                    self.ui_manager.online_mode_action.setChecked(True)
+                    self.ui_manager.offline_mode_action.setChecked(False)
+                    
+                # 更新配置
+                self.config["offline_mode"] = False
+                self.save_config(self.config)
+                
+                # 如果当前版本过低，设置版本警告标志
+                if hasattr(self, 'last_error_message') and self.last_error_message == "update_required":
+                    # 设置版本警告标志
+                    self.version_warning = True
+                
+                if debug_mode:
+                    print("DEBUG: 未找到离线补丁文件，使用在线模式")
+                    
+            # 确保标题标签显示正确的模式
+            if hasattr(self, 'ui') and hasattr(self.ui, 'title_label'):
+                from data.config import APP_NAME, APP_VERSION
+                mode_indicator = "[离线模式]" if self.offline_mode_manager.is_in_offline_mode() else "[在线模式]"
+                self.ui.title_label.setText(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
+                
+        except Exception as e:
+            # 捕获任何异常，确保程序不会崩溃
+            print(f"错误: 检查离线模式时发生异常: {e}")
+            # 默认使用在线模式
+            if hasattr(self, 'offline_mode_manager'):
+                self.offline_mode_manager.is_offline_mode = False
+
+    def select_all_games(self, game_checkboxes, checked):
+        """选择或取消选择所有游戏
+        
+        Args:
+            game_checkboxes: 游戏复选框字典
+            checked: 是否选中
+        """
+        for checkbox in game_checkboxes.values():
+            checkbox.setChecked(checked)
 
 
 

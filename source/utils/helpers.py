@@ -112,23 +112,38 @@ class HashManager:
                     print(f"Error calculating hash for {file_path}: {e}")
         return results
 
-    def hash_pop_window(self, check_type="default"):
+    def hash_pop_window(self, check_type="default", is_offline=False):
         """显示文件检验窗口
         
         Args:
-            check_type: 检查类型，可以是 'pre'(预检查), 'after'(后检查), 'extraction'(解压后检查)
-        
+            check_type: 检查类型，可以是 'pre'(预检查), 'after'(后检查), 'extraction'(解压后检查), 'offline_extraction'(离线解压), 'offline_verify'(离线验证)
+            is_offline: 是否处于离线模式
+            
         Returns:
             QMessageBox: 消息框实例
         """
         message = "\n正在检验文件状态...\n"
         
-        if check_type == "pre":
-            message = "\n正在检查游戏文件以确定需要安装的补丁...\n"
-        elif check_type == "after":
-            message = "\n正在检验本地文件完整性...\n"
-        elif check_type == "extraction":
-            message = "\n正在验证下载的解压文件完整性...\n"
+        if is_offline:
+            # 离线模式的消息
+            if check_type == "pre":
+                message = "\n正在检查游戏文件以确定需要安装的补丁...\n"
+            elif check_type == "after":
+                message = "\n正在检验本地文件完整性...\n"
+            elif check_type == "offline_verify":
+                message = "\n正在验证本地补丁压缩文件完整性...\n"
+            elif check_type == "offline_extraction":
+                message = "\n正在解压安装补丁文件...\n"
+            else:
+                message = "\n正在处理离线补丁文件...\n"
+        else:
+            # 在线模式的消息
+            if check_type == "pre":
+                message = "\n正在检查游戏文件以确定需要安装的补丁...\n"
+            elif check_type == "after":
+                message = "\n正在检验本地文件完整性...\n"
+            elif check_type == "extraction":
+                message = "\n正在验证下载的解压文件完整性...\n"
         
         msg_box = msgbox_frame(f"通知 - {APP_NAME}", message)
         msg_box.open()
@@ -137,49 +152,94 @@ class HashManager:
 
     def cfg_pre_hash_compare(self, install_paths, plugin_hash, installed_status):
         status_copy = installed_status.copy()
+        debug_mode = False
+        
+        # 尝试检测是否处于调试模式
+        try:
+            from data.config import CACHE
+            debug_file = os.path.join(os.path.dirname(CACHE), "debug_mode.txt")
+            debug_mode = os.path.exists(debug_file)
+        except:
+            pass
         
         for game_version, install_path in install_paths.items():
             if not os.path.exists(install_path):
                 status_copy[game_version] = False
+                if debug_mode:
+                    print(f"DEBUG: 哈希预检查 - {game_version} 补丁文件不存在: {install_path}")
                 continue
 
             try:
+                expected_hash = plugin_hash.get(game_version, "")
                 file_hash = self.hash_calculate(install_path)
-                if file_hash == plugin_hash.get(game_version):
+                
+                if debug_mode:
+                    print(f"DEBUG: 哈希预检查 - {game_version}")
+                    print(f"DEBUG: 文件路径: {install_path}")
+                    print(f"DEBUG: 预期哈希值: {expected_hash}")
+                    print(f"DEBUG: 实际哈希值: {file_hash}")
+                    print(f"DEBUG: 哈希匹配: {file_hash == expected_hash}")
+                
+                if file_hash == expected_hash:
                     status_copy[game_version] = True
                 else:
                     status_copy[game_version] = False
-            except Exception:
+            except Exception as e:
                 status_copy[game_version] = False
+                if debug_mode:
+                    print(f"DEBUG: 哈希预检查异常 - {game_version}: {str(e)}")
         
         return status_copy
 
     def cfg_after_hash_compare(self, install_paths, plugin_hash, installed_status):
+        debug_mode = False
+        
+        # 尝试检测是否处于调试模式
+        try:
+            from data.config import CACHE
+            debug_file = os.path.join(os.path.dirname(CACHE), "debug_mode.txt")
+            debug_mode = os.path.exists(debug_file)
+        except:
+            pass
+            
         file_paths = [
             install_paths[game] for game in plugin_hash if installed_status.get(game)
         ]
         hash_results = self.calculate_hashes_in_parallel(file_paths)
 
-        for game, hash_value in plugin_hash.items():
+        for game, expected_hash in plugin_hash.items():
             if installed_status.get(game):
                 file_path = install_paths[game]
                 file_hash = hash_results.get(file_path)
                 
+                if debug_mode:
+                    print(f"DEBUG: 哈希后检查 - {game}")
+                    print(f"DEBUG: 文件路径: {file_path}")
+                    print(f"DEBUG: 预期哈希值: {expected_hash}")
+                    print(f"DEBUG: 实际哈希值: {file_hash if file_hash else '计算失败'}")
+                
                 if file_hash is None:
                     installed_status[game] = False
+                    if debug_mode:
+                        print(f"DEBUG: 哈希后检查失败 - 无法计算文件哈希值: {game}")
                     return {
                         "passed": False,
                         "game": game,
                         "message": f"\n无法计算 {game} 的文件哈希值，文件可能已损坏或被占用。\n"
                     }
 
-                if file_hash != hash_value:
+                if file_hash != expected_hash:
                     installed_status[game] = False
+                    if debug_mode:
+                        print(f"DEBUG: 哈希后检查失败 - 哈希值不匹配: {game}")
                     return {
                         "passed": False,
                         "game": game,
                         "message": f"\n检测到 {game} 的文件哈希值不匹配。\n"
                     }
+        
+        if debug_mode:
+            print(f"DEBUG: 哈希后检查通过 - 所有文件哈希值匹配")
         return {"passed": True}
 
 class AdminPrivileges:
@@ -580,8 +640,17 @@ class HostsManager:
             return False
 
 def censor_url(text):
-    """Censors URLs in a given text string."""
+    """Censors URLs in a given text string, replacing them with a protection message.
+    
+    Args:
+        text: 要处理的文本
+        
+    Returns:
+        str: 处理后的文本，URL被完全隐藏
+    """
     if not isinstance(text, str):
         text = str(text)
+    
+    # 匹配URL并替换为固定文本
     url_pattern = re.compile(r'https?://[^\s/$.?#].[^\s]*')
-    return url_pattern.sub('***URL HIDDEN***', text)
+    return url_pattern.sub('***URL protection***', text)

@@ -24,8 +24,16 @@ class ExtractionHandler:
             plugin_path: 插件路径
             game_version: 游戏版本名称
         """
+        # 检查是否处于离线模式
+        is_offline = False
+        if hasattr(self.main_window, 'offline_mode_manager'):
+            is_offline = self.main_window.offline_mode_manager.is_in_offline_mode()
+        
         # 显示解压中的消息窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="extraction")
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(
+            check_type="offline_extraction" if is_offline else "extraction", 
+            is_offline=is_offline
+        )
         
         # 创建并启动解压线程
         self.main_window.extraction_thread = self.main_window.create_extraction_thread(

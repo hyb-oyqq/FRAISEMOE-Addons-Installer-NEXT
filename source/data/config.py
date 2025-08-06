@@ -3,7 +3,7 @@ import base64
 
 # 配置信息
 app_data = {
-    "APP_VERSION": "1.3.2",
+    "APP_VERSION": "1.4.0",
     "APP_NAME": "FRAISEMOE Addons Installer NEXT",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
@@ -62,7 +62,13 @@ UA = app_data["UA_TEMPLATE"].format(APP_VERSION)
 GAME_INFO = app_data["game_info"]
 BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
-PLUGIN_HASH = {game: info["hash"] for game, info in GAME_INFO.items()}
+PLUGIN_HASH = {
+    "vol1": GAME_INFO["NEKOPARA Vol.1"]["hash"],
+    "vol2": GAME_INFO["NEKOPARA Vol.2"]["hash"],
+    "vol3": GAME_INFO["NEKOPARA Vol.3"]["hash"],
+    "vol4": GAME_INFO["NEKOPARA Vol.4"]["hash"],
+    "after": GAME_INFO["NEKOPARA After"]["hash"]
+}
 PROCESS_INFO = {info["exe"]: game for game, info in GAME_INFO.items()}
 
 # 下载线程档位设置
