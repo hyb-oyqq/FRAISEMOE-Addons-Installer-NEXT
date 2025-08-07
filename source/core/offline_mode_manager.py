@@ -5,6 +5,7 @@ import tempfile
 import py7zr
 import traceback
 from PySide6.QtWidgets import QMessageBox
+from PySide6.QtCore import QTimer
 
 from data.config import PLUGIN, PLUGIN_HASH, GAME_INFO
 from utils import msgbox_frame
@@ -231,8 +232,74 @@ class OfflineModeManager:
         Returns:
             bool: 哈希值是否匹配
         """
-        # 使用patch_detector模块验证哈希值
-        return self.main_window.patch_detector.verify_patch_hash(game_version, file_path)
+        debug_mode = self._is_debug_mode()
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 开始验证补丁文件哈希: {file_path}")
+            
+        # 创建进度对话框
+        from utils.helpers import ProgressHashVerifyDialog
+        from data.config import PLUGIN_HASH
+        from workers.hash_thread import OfflineHashVerifyThread
+        
+        # 创建并显示进度对话框
+        progress_dialog = ProgressHashVerifyDialog(
+            f"验证补丁文件 - {self.app_name}",
+            f"正在验证 {game_version} 的补丁文件完整性...",
+            self.main_window
+        )
+        
+        # 创建哈希验证线程
+        hash_thread = OfflineHashVerifyThread(game_version, file_path, PLUGIN_HASH, self.main_window)
+        
+        # 连接信号
+        hash_thread.progress.connect(progress_dialog.update_progress)
+        hash_thread.finished.connect(lambda result, error: self._on_hash_verify_finished(result, error, progress_dialog))
+        
+        # 启动线程
+        hash_thread.start()
+        
+        # 显示对话框，阻塞直到对话框关闭
+        result = progress_dialog.exec()
+        
+        # 如果用户取消了验证，停止线程
+        if result == ProgressHashVerifyDialog.Rejected and hash_thread.isRunning():
+            if debug_mode:
+                logger.debug(f"DEBUG: 用户取消了哈希验证")
+            hash_thread.terminate()
+            hash_thread.wait()
+            return False
+            
+        # 返回对话框中存储的验证结果
+        return hasattr(progress_dialog, 'hash_result') and progress_dialog.hash_result
+        
+    def _on_hash_verify_finished(self, result, error, dialog):
+        """哈希验证线程完成后的回调
+        
+        Args:
+            result: 验证结果
+            error: 错误信息
+            dialog: 进度对话框
+        """
+        debug_mode = self._is_debug_mode()
+        
+        # 存储结果到对话框，以便在exec()返回后获取
+        dialog.hash_result = result
+        
+        if result:
+            if debug_mode:
+                logger.debug(f"DEBUG: 哈希验证成功")
+            dialog.set_status("验证成功")
+            # 短暂延时后关闭对话框
+            QTimer.singleShot(500, dialog.accept)
+        else:
+            if debug_mode:
+                logger.debug(f"DEBUG: 哈希验证失败: {error}")
+            dialog.set_status(f"验证失败: {error}")
+            dialog.set_message("补丁文件验证失败，可能已损坏或被篡改。")
+            # 将取消按钮改为关闭按钮
+            dialog.cancel_button.setText("关闭")
+            # 不自动关闭，让用户查看错误信息
             
     def install_offline_patches(self, selected_games):
         """直接安装离线补丁，完全绕过下载模块
@@ -284,6 +351,9 @@ class OfflineModeManager:
         
         # 设置到主窗口，供结果显示使用
         self.main_window.download_queue_history = selected_games
+        
+        # 记录未找到离线补丁文件的游戏
+        self.missing_offline_patches = []
             
         # 创建安装任务列表
         install_tasks = []
@@ -293,6 +363,8 @@ class OfflineModeManager:
             if not patch_file:
                 if debug_mode:
                     logger.warning(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
+                # 记录未找到离线补丁文件的游戏
+                self.missing_offline_patches.append(game_version)
                 continue
                 
             # 获取游戏目录
@@ -359,6 +431,43 @@ class OfflineModeManager:
                 
             # 使用patch_detector进行安装后哈希比较
             self.main_window.patch_detector.after_hash_compare()
+            
+            # 检查是否有未找到离线补丁文件的游戏
+            if hasattr(self, 'missing_offline_patches') and self.missing_offline_patches:
+                if debug_mode:
+                    logger.debug(f"DEBUG: 有未找到离线补丁文件的游戏: {self.missing_offline_patches}")
+                
+                # 在安装完成后询问用户是否切换到在线模式
+                msg_box = msgbox_frame(
+                    f"离线安装完成 - {self.app_name}",
+                    f"\n以下游戏未找到对应的离线补丁文件：\n\n{chr(10).join(self.missing_offline_patches)}\n\n是否切换到在线模式继续安装？\n",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                result = msg_box.exec()
+                
+                if result == QMessageBox.StandardButton.Yes:
+                    if debug_mode:
+                        logger.debug("DEBUG: 用户选择切换到在线模式")
+                    
+                    # 切换到在线模式
+                    if hasattr(self.main_window, 'ui_manager'):
+                        self.main_window.ui_manager.switch_work_mode("online")
+                        
+                    # 重置UI状态
+                    self.main_window.setEnabled(True)
+                    self.main_window.ui.start_install_text.setText("开始安装")
+                else:
+                    if debug_mode:
+                        logger.debug("DEBUG: 用户选择不切换到在线模式")
+                    
+                    # 恢复UI状态
+                    self.main_window.setEnabled(True)
+                    self.main_window.ui.start_install_text.setText("开始安装")
+            else:
+                # 恢复UI状态
+                self.main_window.setEnabled(True)
+                self.main_window.ui.start_install_text.setText("开始安装")
+                
             return
             
         # 获取下一个任务

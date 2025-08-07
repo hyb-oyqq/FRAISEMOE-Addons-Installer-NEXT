@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 import re
 
 from PySide6 import QtWidgets, QtCore
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon, QPixmap, QFont
 from PySide6.QtWidgets import QPushButton, QDialog, QHBoxLayout
 
@@ -660,7 +660,7 @@ class DownloadManager:
                     if debug_mode:
                         logger.info(f"DEBUG: 成功复制并验证补丁文件 {_7z_path}")
                     # 直接进入解压阶段
-                    self.main_window.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
+                    self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
                     self.main_window.extraction_handler.extraction_finished.connect(self.on_extraction_finished)
                 else:
                     if debug_mode:
@@ -762,8 +762,92 @@ class DownloadManager:
             else:
                 self.on_download_stopped()
             return
-
-        self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
+        
+        # 下载成功后，使用与离线模式相同的哈希校验机制
+        debug_mode = self.is_debug_mode()
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 下载完成，开始验证补丁文件哈希: {_7z_path}")
+        
+        # 关闭进度窗口
+        if hasattr(self.main_window, 'progress_window') and self.main_window.progress_window:
+            if self.main_window.progress_window.isVisible():
+                self.main_window.progress_window.accept()
+            self.main_window.progress_window = None
+        
+        # 使用与离线模式相同的哈希校验机制
+        from utils.helpers import ProgressHashVerifyDialog
+        from data.config import PLUGIN_HASH
+        from workers.hash_thread import OfflineHashVerifyThread
+        
+        # 创建并显示进度对话框
+        progress_dialog = ProgressHashVerifyDialog(
+            f"验证补丁文件 - {APP_NAME}",
+            f"正在验证 {game_version} 的补丁文件完整性...",
+            self.main_window
+        )
+        
+        # 创建哈希验证线程
+        hash_thread = OfflineHashVerifyThread(game_version, _7z_path, PLUGIN_HASH, self.main_window)
+        
+        # 连接信号
+        hash_thread.progress.connect(progress_dialog.update_progress)
+        hash_thread.finished.connect(lambda result, error: self._on_hash_verify_finished(
+            result, error, progress_dialog, _7z_path, game_folder, plugin_path, game_version
+        ))
+        
+        # 启动线程
+        hash_thread.start()
+        
+        # 显示对话框，阻塞直到对话框关闭
+        result = progress_dialog.exec()
+        
+        # 如果用户取消了验证，停止线程
+        if result == ProgressHashVerifyDialog.Rejected and hash_thread.isRunning():
+            if debug_mode:
+                logger.debug(f"DEBUG: 用户取消了哈希验证")
+            hash_thread.terminate()
+            hash_thread.wait()
+            # 取消后继续下一个任务
+            self.next_download_task()
+    
+    def _on_hash_verify_finished(self, result, error, dialog, _7z_path, game_folder, plugin_path, game_version):
+        """哈希验证线程完成后的回调
+        
+        Args:
+            result: 验证结果
+            error: 错误信息
+            dialog: 进度对话框
+            _7z_path: 7z文件保存路径
+            game_folder: 游戏文件夹路径
+            plugin_path: 插件路径
+            game_version: 游戏版本
+        """
+        debug_mode = self.is_debug_mode()
+        
+        # 存储结果到对话框，以便在exec()返回后获取
+        dialog.hash_result = result
+        
+        if result:
+            if debug_mode:
+                logger.debug(f"DEBUG: 哈希验证成功")
+            dialog.set_status("验证成功")
+            # 短暂延时后关闭对话框
+            QTimer.singleShot(500, dialog.accept)
+            
+            # 验证成功，进入解压阶段
+            self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
+        else:
+            if debug_mode:
+                logger.debug(f"DEBUG: 哈希验证失败: {error}")
+            dialog.set_status(f"验证失败: {error}")
+            dialog.set_message("补丁文件验证失败，可能已损坏或被篡改。")
+            # 将取消按钮改为关闭按钮
+            dialog.cancel_button.setText("关闭")
+            # 不自动关闭，让用户查看错误信息
+            
+            # 在用户关闭对话框后，继续下一个任务
+            dialog.rejected.connect(lambda: self.next_download_task())
 
     def on_extraction_finished(self, continue_download):
         """解压完成后的回调，决定是否继续下载队列

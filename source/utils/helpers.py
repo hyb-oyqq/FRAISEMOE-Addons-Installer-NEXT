@@ -11,9 +11,92 @@ import re
 from PySide6.QtGui import QIcon, QPixmap
 from data.config import APP_NAME, CONFIG_FILE
 from utils.logger import setup_logger
+import datetime
+import traceback
+import subprocess
+from pathlib import Path
 
 # 初始化logger
 logger = setup_logger("helpers")
+
+class ProgressHashVerifyDialog(QDialog):
+    """带进度条的哈希验证对话框"""
+    
+    def __init__(self, title, message, parent=None):
+        """初始化对话框
+        
+        Args:
+            title: 对话框标题
+            message: 对话框消息
+            parent: 父窗口
+        """
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setMinimumWidth(400)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
+        # 创建布局
+        layout = QVBoxLayout(self)
+        
+        # 添加消息标签
+        self.message_label = QLabel(message)
+        self.message_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.message_label)
+        
+        # 添加进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+        
+        # 添加状态标签
+        self.status_label = QLabel("正在准备...")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.status_label)
+        
+        # 添加取消按钮
+        button_layout = QHBoxLayout()
+        self.cancel_button = QPushButton("取消")
+        self.cancel_button.clicked.connect(self.reject)
+        button_layout.addStretch()
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+        
+    def update_progress(self, value):
+        """更新进度条
+        
+        Args:
+            value: 进度值 (0-100)
+        """
+        self.progress_bar.setValue(value)
+        
+        # 更新状态文本
+        if value < 10:
+            self.status_label.setText("正在准备...")
+        elif value < 50:
+            self.status_label.setText("正在解压文件...")
+        elif value < 70:
+            self.status_label.setText("正在查找补丁文件...")
+        elif value < 95:
+            self.status_label.setText("正在计算哈希值...")
+        else:
+            self.status_label.setText("正在验证哈希值...")
+            
+    def set_message(self, message):
+        """设置消息文本
+        
+        Args:
+            message: 消息文本
+        """
+        self.message_label.setText(message)
+        
+    def set_status(self, status):
+        """设置状态文本
+        
+        Args:
+            status: 状态文本
+        """
+        self.status_label.setText(status)
 
 def resource_path(relative_path):
     """获取资源的绝对路径，适用于开发环境和Nuitka打包环境"""
