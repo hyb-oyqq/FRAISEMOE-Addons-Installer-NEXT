@@ -9,6 +9,8 @@ import psutil
 from PySide6 import QtCore, QtWidgets
 import re
 from PySide6.QtGui import QIcon, QPixmap
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar
 from data.config import APP_NAME, CONFIG_FILE
 from utils.logger import setup_logger
 import datetime
