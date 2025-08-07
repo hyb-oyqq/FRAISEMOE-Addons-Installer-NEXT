@@ -75,35 +75,25 @@ class CloudflareOptimizer:
         # 解析域名
         hostname = urlparse(url).hostname
         
-        # 检查hosts文件中是否已有该域名的IP记录
-        existing_ips = self.hosts_manager.get_hostname_entries(hostname) if hostname else []
-        
         # 判断是否继续优选的逻辑
-        if existing_ips and self.has_optimized_in_session:
-            # 如果本次会话中已执行过优选且hosts中存在记录，则跳过优选过程
-            logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录且本次会话已优选过，跳过优选过程")
+        if self.has_optimized_in_session:
+            # 如果本次会话中已执行过优选，则跳过优选过程
+            logger.info("本次会话已执行过优选，跳过优选过程")
             
             # 设置标记为已优选完成
             self.optimization_done = True
             self.countdown_finished = True
             
-            # 尝试获取现有的IPv4和IPv6地址
-            ipv4_entries = [ip for ip in existing_ips if ':' not in ip]  # IPv4地址不含冒号
-            ipv6_entries = [ip for ip in existing_ips if ':' in ip]      # IPv6地址包含冒号
-            
-            if ipv4_entries:
-                self.optimized_ip = ipv4_entries[0]
-            if ipv6_entries:
-                self.optimized_ipv6 = ipv6_entries[0]
-                
-            logger.info(f"使用已存在的优选IP - IPv4: {self.optimized_ip}, IPv6: {self.optimized_ipv6}")
             return True
         else:
-            # 如果本次会话尚未优选过，或hosts中没有记录，则显示优选窗口
-            if existing_ips:
-                logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，但本次会话尚未优选过")
-                # 清理已有的hosts记录，准备重新优选
-                self.hosts_manager.clean_hostname_entries(hostname)
+            # 如果本次会话尚未优选过，则清理可能存在的旧记录
+            if hostname:
+                # 检查hosts文件中是否已有该域名的IP记录
+                existing_ips = self.hosts_manager.get_hostname_entries(hostname)
+                if existing_ips:
+                    logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，但本次会话尚未优选过")
+                    # 清理已有的hosts记录，准备重新优选
+                    self.hosts_manager.clean_hostname_entries(hostname)
             
         # 创建取消状态标记
         self.optimization_cancelled = False
@@ -282,6 +272,9 @@ class CloudflareOptimizer:
     
     def _process_optimization_results(self):
         """处理优选的IP结果，显示相应提示"""
+        # 无论优选结果如何，都标记本次会话已执行过优选
+        self.has_optimized_in_session = True
+        
         use_ipv6 = False
         if hasattr(self.main_window, 'config'):
             use_ipv6 = self.main_window.config.get("ipv6_enabled", False)
@@ -375,9 +368,6 @@ class CloudflareOptimizer:
                     self.main_window.config['last_hosts_optimized_hostname'] = hostname
                     from utils import save_config
                     save_config(self.main_window.config)
-                
-                # 记录本次会话已执行过优选
-                self.has_optimized_in_session = True
                 
                 if success:
                     msg_box = QtWidgets.QMessageBox(self.main_window)

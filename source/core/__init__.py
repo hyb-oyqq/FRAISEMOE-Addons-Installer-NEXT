@@ -10,6 +10,7 @@ from .privacy_manager import PrivacyManager
 from .cloudflare_optimizer import CloudflareOptimizer
 from .download_task_manager import DownloadTaskManager
 from .extraction_handler import ExtractionHandler
+from .patch_detector import PatchDetector
 
 __all__ = [
     'MultiStageAnimations',
@@ -23,5 +24,6 @@ __all__ = [
     'PrivacyManager',
     'CloudflareOptimizer',
     'DownloadTaskManager',
-    'ExtractionHandler'
+    'ExtractionHandler',
+    'PatchDetector'
 ] 

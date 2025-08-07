@@ -720,7 +720,7 @@ class UIManager:
                         log_datetime = "-".join(os.path.basename(latest_log)[4:-4].split("-")[:2])
                         log_date = log_datetime.split("-")[0]
                         log_time = log_datetime.split("-")[1] if "-" in log_datetime else "未知时间"
-                        date_info = f"日期: {log_date[:4]}-{log_date[4:6]}-{log_date[6:]} "
+                        date_info = f"日期: {log_date[:4]}-{log_date[4:6]}-{log_date[6:]}"
                         time_info = f"时间: {log_time[:2]}:{log_time[2:4]}:{log_time[4:]}"
                     except:
                         date_info = "日期未知 "
@@ -780,8 +780,8 @@ class UIManager:
         """手动删除软件添加的hosts条目"""
         if hasattr(self.main_window, 'download_manager') and hasattr(self.main_window.download_manager, 'hosts_manager'):
             try:
-                # 调用清理hosts条目的方法
-                result = self.main_window.download_manager.hosts_manager.check_and_clean_all_entries()
+                # 调用清理hosts条目的方法，强制清理即使禁用了自动还原
+                result = self.main_window.download_manager.hosts_manager.check_and_clean_all_entries(force_clean=True)
                 
                 if result:
                     msg_box = self._create_message_box("成功", "\n已成功清理软件添加的hosts条目。\n")

@@ -3,23 +3,36 @@ import shutil
 import traceback
 from PySide6.QtWidgets import QMessageBox
 from utils.logger import setup_logger
+from data.config import APP_NAME
+from utils import msgbox_frame
 
 class PatchManager:
     """补丁管理器，用于处理补丁的安装和卸载"""
     
-    def __init__(self, app_name, game_info, debug_manager=None):
+    def __init__(self, app_name, game_info, debug_manager=None, main_window=None):
         """初始化补丁管理器
         
         Args:
             app_name: 应用程序名称，用于显示消息框标题
             game_info: 游戏信息字典，包含各版本的安装路径和可执行文件名
             debug_manager: 调试管理器实例，用于输出调试信息
+            main_window: 主窗口实例，用于访问UI和状态
         """
         self.app_name = app_name
         self.game_info = game_info
         self.debug_manager = debug_manager
+        self.main_window = main_window  # 添加main_window属性
         self.installed_status = {}  # 游戏版本的安装状态
         self.logger = setup_logger("patch_manager")
+        self.patch_detector = None  # 将在main_window初始化后设置
+        
+    def set_patch_detector(self, patch_detector):
+        """设置补丁检测器实例
+        
+        Args:
+            patch_detector: 补丁检测器实例
+        """
+        self.patch_detector = patch_detector
         
     def _is_debug_mode(self):
         """检查是否处于调试模式
@@ -331,7 +344,7 @@ class PatchManager:
         ) 
 
     def check_patch_installed(self, game_dir, game_version):
-        """检查游戏是否已安装补丁
+        """检查游戏是否已安装补丁（调用patch_detector）
         
         Args:
             game_dir: 游戏目录路径
@@ -340,6 +353,10 @@ class PatchManager:
         Returns:
             bool: 如果已安装补丁或有被禁用的补丁文件返回True，否则返回False
         """
+        if self.patch_detector:
+            return self.patch_detector.check_patch_installed(game_dir, game_version)
+            
+        # 如果patch_detector未设置，使用原始逻辑（应该不会执行到这里）
         debug_mode = self._is_debug_mode()
         
         if game_version not in self.game_info:
@@ -425,7 +442,7 @@ class PatchManager:
         return False 
         
     def check_patch_disabled(self, game_dir, game_version):
-        """检查游戏的补丁是否已被禁用
+        """检查游戏的补丁是否已被禁用（调用patch_detector）
         
         Args:
             game_dir: 游戏目录路径
@@ -435,6 +452,10 @@ class PatchManager:
             bool: 如果补丁被禁用返回True，否则返回False
             str: 禁用的补丁文件路径，如果没有禁用返回None
         """
+        if self.patch_detector:
+            return self.patch_detector.check_patch_disabled(game_dir, game_version)
+            
+        # 如果patch_detector未设置，使用原始逻辑（应该不会执行到这里）
         debug_mode = self._is_debug_mode()
         
         if game_version not in self.game_info:
@@ -743,4 +764,86 @@ class PatchManager:
             f"批量操作完成 - {self.app_name}",
             result_text,
             QMessageBox.StandardButton.Ok,
+        ) 
+
+    def show_result(self):
+        """显示安装结果，区分不同情况"""
+        # 获取当前安装状态
+        installed_versions = []  # 成功安装的版本
+        skipped_versions = []    # 已有补丁跳过的版本
+        failed_versions = []     # 安装失败的版本
+        not_found_versions = []  # 未找到的版本
+        
+        # 获取所有游戏版本路径
+        install_paths = self.main_window.download_manager.get_install_paths() if hasattr(self.main_window.download_manager, "get_install_paths") else {}
+        
+        # 检查是否处于离线模式
+        is_offline_mode = False
+        if hasattr(self.main_window, 'offline_mode_manager'):
+            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
+        
+        # 获取本次实际安装的游戏列表
+        installed_games = []
+        
+        # 在线模式下使用download_queue_history
+        if hasattr(self.main_window, 'download_queue_history') and self.main_window.download_queue_history:
+            installed_games = self.main_window.download_queue_history
+        
+        # 离线模式下使用offline_mode_manager.installed_games
+        if is_offline_mode and hasattr(self.main_window.offline_mode_manager, 'installed_games'):
+            installed_games = self.main_window.offline_mode_manager.installed_games
+        
+        debug_mode = self._is_debug_mode()
+            
+        if debug_mode:
+            self.logger.debug(f"DEBUG: 显示安装结果，离线模式: {is_offline_mode}")
+            self.logger.debug(f"DEBUG: 本次安装的游戏: {installed_games}")
+        
+        for game_version, is_installed in self.main_window.installed_status.items():
+            # 只处理install_paths中存在的游戏版本
+            if game_version in install_paths:
+                path = install_paths[game_version]
+                
+                # 检查游戏是否存在但未通过本次安装补丁
+                if is_installed:
+                    # 游戏已安装补丁
+                    if game_version in installed_games:
+                        # 本次成功安装
+                        installed_versions.append(game_version)
+                    else:
+                        # 已有补丁，被跳过下载
+                        skipped_versions.append(game_version)
+                else:
+                    # 游戏未安装补丁
+                    if os.path.exists(path):
+                        # 游戏文件夹存在，但安装失败
+                        failed_versions.append(game_version)
+                    else:
+                        # 游戏文件夹不存在
+                        not_found_versions.append(game_version)
+        
+        # 构建结果信息
+        result_text = f"\n安装结果：\n"
+        
+        # 总数统计 - 只显示本次实际安装的数量
+        total_installed = len(installed_versions)
+        total_failed = len(failed_versions)
+        
+        result_text += f"安装成功：{total_installed} 个  安装失败：{total_failed} 个\n\n"
+        
+        # 详细列表
+        if installed_versions:
+            result_text += f"【成功安装】:\n{chr(10).join(installed_versions)}\n\n"
+            
+        if failed_versions:
+            result_text += f"【安装失败】:\n{chr(10).join(failed_versions)}\n\n"
+            
+        if not_found_versions:
+            # 只有在真正检测到了游戏但未安装补丁时才显示
+            result_text += f"【尚未安装补丁的游戏】:\n{chr(10).join(not_found_versions)}\n"
+        
+        QMessageBox.information(
+            self.main_window,
+            f"安装完成 - {APP_NAME}",
+            result_text
         ) 

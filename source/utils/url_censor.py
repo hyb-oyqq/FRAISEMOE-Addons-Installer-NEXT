@@ -16,7 +16,7 @@ def censor_url(text):
     return text  # 直接返回原始文本，不做任何隐藏
     
     # 以下是原始代码，现在被注释掉
-    '''
+    r'''
     # 匹配URL并替换为固定文本
     url_pattern = re.compile(r'https?://[^\s/$.?#].[^\s]*')
     censored = url_pattern.sub('***URL protection***', text)

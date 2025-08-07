@@ -201,44 +201,37 @@ class DownloadManager:
         return safe_config
 
     def download_action(self):
-        """开始下载流程"""
-        self.main_window.download_queue_history = []
-        
-        # 清除游戏检测器的目录缓存，确保获取最新的目录状态
-        if hasattr(self.main_window, 'game_detector') and hasattr(self.main_window.game_detector, 'clear_directory_cache'):
-            self.main_window.game_detector.clear_directory_cache()
-            if self.is_debug_mode():
-                logger.debug("DEBUG: 已清除游戏目录缓存，确保获取最新状态")
-        
+        """下载操作的主入口点"""
+        if not self.selected_folder:
+            QtWidgets.QMessageBox.warning(
+                self.main_window, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
+            )
+            return
+            
+        # 识别游戏目录
         game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
         
-        debug_mode = self.is_debug_mode()
-        if debug_mode:
-            logger.debug(f"DEBUG: 开始下载流程, 识别到 {len(game_dirs)} 个游戏目录")
-        
         if not game_dirs:
-            if debug_mode:
-                logger.warning("DEBUG: 未识别到任何游戏目录，设置目录未找到错误")
-            self.main_window.last_error_message = "directory_not_found"
             QtWidgets.QMessageBox.warning(
-                self.main_window, 
-                f"目录错误 - {APP_NAME}", 
-                "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
+                self.main_window, f"通知 - {APP_NAME}", "\n未在选择的目录中找到支持的游戏\n"
             )
             self.main_window.setEnabled(True)
             self.main_window.ui.start_install_text.setText("开始安装")
             return
             
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre", is_offline=False)
-
+        # 显示文件检验窗口
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre")
+        
+        # 获取安装路径
         install_paths = self.get_install_paths()
         
+        # 创建并启动哈希线程进行预检查
         self.main_window.hash_thread = self.main_window.create_hash_thread("pre", install_paths)
         self.main_window.hash_thread.pre_finished.connect(
             lambda updated_status: self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
         )
         self.main_window.hash_thread.start()
-        
+
     def on_pre_hash_finished_with_dirs(self, updated_status, game_dirs):
         """优化的哈希预检查完成处理，带有游戏目录信息
         
@@ -255,36 +248,8 @@ class DownloadManager:
         
         self.main_window.setEnabled(True)
         
-        installable_games = []
-        already_installed_games = []
-        disabled_patch_games = []  # 存储检测到禁用补丁的游戏
-        
-        for game_version, game_dir in game_dirs.items():
-            # 首先通过文件检查确认补丁是否已安装
-            is_patch_installed = self.main_window.patch_manager.check_patch_installed(game_dir, game_version)
-            # 同时考虑哈希检查结果
-            hash_check_passed = self.main_window.installed_status.get(game_version, False)
-            
-            # 如果补丁文件存在或哈希检查通过，认为已安装
-            if is_patch_installed or hash_check_passed:
-                if debug_mode:
-                    logger.info(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
-                    logger.info(f"DEBUG: 文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
-                already_installed_games.append(game_version)
-                # 更新安装状态
-                self.main_window.installed_status[game_version] = True
-            else:
-                # 检查是否存在被禁用的补丁
-                is_disabled, disabled_path = self.main_window.patch_manager.check_patch_disabled(game_dir, game_version)
-                if is_disabled:
-                    if debug_mode:
-                        logger.info(f"DEBUG: {game_version} 存在被禁用的补丁: {disabled_path}")
-                    disabled_patch_games.append(game_version)
-                else:
-                    if debug_mode:
-                        logger.info(f"DEBUG: {game_version} 未安装补丁，可以安装")
-                        logger.info(f"DEBUG: 文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
-                    installable_games.append(game_version)
+        # 使用patch_detector检测可安装的游戏
+        already_installed_games, installable_games, disabled_patch_games = self.main_window.patch_detector.detect_installable_games(game_dirs)
         
         status_message = ""
         if already_installed_games:
@@ -423,7 +388,11 @@ class DownloadManager:
             self._fill_download_queue(config, selected_game_dirs)
 
         if not self.download_queue:
-            self.main_window.after_hash_compare()
+            # 所有下载任务都已完成，进行后检查
+            if debug_mode:
+                logger.debug("DEBUG: 所有下载任务完成，进行后检查")
+            # 使用patch_detector进行安装后哈希比较
+            self.main_window.patch_detector.after_hash_compare()
             return
         
         # 如果是离线模式，直接开始下一个下载任务
@@ -544,30 +513,18 @@ class DownloadManager:
         """显示Cloudflare加速选择对话框"""
         if self.download_queue:
             first_url = self.download_queue[0][0]
-            hostname = urlparse(first_url).hostname
             
-            if hostname:
-                existing_ips = self.cloudflare_optimizer.hosts_manager.get_hostname_entries(hostname)
+            # 直接检查是否本次会话已执行过优选
+            if self.cloudflare_optimizer.has_optimized_in_session:
+                logger.info("本次会话已执行过优选，跳过询问直接使用")
                 
-                if existing_ips:
-                    logger.info(f"发现hosts文件中已有域名 {hostname} 的优选IP记录，跳过询问直接使用")
-                    
-                    self.cloudflare_optimizer.optimization_done = True
-                    self.cloudflare_optimizer.countdown_finished = True
-                    
-                    ipv4_entries = [ip for ip in existing_ips if ':' not in ip]
-                    ipv6_entries = [ip for ip in existing_ips if ':' in ip]
-                    
-                    if ipv4_entries:
-                        self.cloudflare_optimizer.optimized_ip = ipv4_entries[0]
-                    if ipv6_entries:
-                        self.cloudflare_optimizer.optimized_ipv6 = ipv6_entries[0]
-                    
-                    self.main_window.current_url = first_url
-                    
-                    self.next_download_task()
-                    return
-                    
+                self.cloudflare_optimizer.optimization_done = True
+                self.cloudflare_optimizer.countdown_finished = True
+                
+                self.main_window.current_url = first_url
+                self.next_download_task()
+                return
+                
         self.main_window.setEnabled(True)
         
         msg_box = QtWidgets.QMessageBox(self.main_window)
@@ -619,7 +576,11 @@ class DownloadManager:
     def next_download_task(self):
         """处理下载队列中的下一个任务"""
         if not self.download_queue:
-            self.main_window.after_hash_compare()
+            # 所有下载任务都已完成，进行后检查
+            if debug_mode:
+                logger.debug("DEBUG: 所有下载任务完成，进行后检查")
+            # 使用patch_detector进行安装后哈希比较
+            self.main_window.patch_detector.after_hash_compare()
             return
             
         if self.download_task_manager.current_download_thread and self.download_task_manager.current_download_thread.isRunning():
@@ -735,21 +696,18 @@ class DownloadManager:
             self.download_task_manager.start_download(url, _7z_path, game_version, game_folder, plugin_path)
 
     def on_download_finished(self, success, error, url, game_folder, game_version, _7z_path, plugin_path):
-        """下载完成后的处理
+        """下载完成后的回调函数
         
         Args:
             success: 是否下载成功
             error: 错误信息
             url: 下载URL
             game_folder: 游戏文件夹路径
-            game_version: 游戏版本名称
+            game_version: 游戏版本
             _7z_path: 7z文件保存路径
-            plugin_path: 插件路径
+            plugin_path: 插件保存路径
         """
-        if self.main_window.progress_window and self.main_window.progress_window.isVisible():
-            self.main_window.progress_window.reject()
-            self.main_window.progress_window = None
-
+        # 如果下载失败，显示错误并询问是否重试
         if not success:
             logger.error(f"--- Download Failed: {game_version} ---")
             logger.error(error)
@@ -805,7 +763,6 @@ class DownloadManager:
             return
 
         self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
-        self.extraction_handler.extraction_finished.connect(self.on_extraction_finished)
 
     def on_extraction_finished(self, continue_download):
         """解压完成后的回调，决定是否继续下载队列

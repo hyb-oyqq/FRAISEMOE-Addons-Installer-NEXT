@@ -567,14 +567,17 @@ class HostsManager:
         self.auto_restore_disabled = auto_restore_disabled
         return auto_restore_disabled
 
-    def check_and_clean_all_entries(self):
+    def check_and_clean_all_entries(self, force_clean=False):
         """检查并清理所有由本应用程序添加的hosts记录
         
+        Args:
+            force_clean: 是否强制清理，即使禁用了自动还原
+            
         Returns:
             bool: 清理是否成功
         """
-        # 如果禁用了自动还原，则不执行清理操作
-        if self.is_auto_restore_disabled():
+        # 如果禁用了自动还原，且不是强制清理，则不执行清理操作
+        if self.is_auto_restore_disabled() and not force_clean:
             logger.info("已禁用自动还原hosts，跳过清理操作")
             return True
             

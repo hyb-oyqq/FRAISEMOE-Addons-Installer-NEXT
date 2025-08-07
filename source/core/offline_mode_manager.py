@@ -26,6 +26,7 @@ class OfflineModeManager:
         self.app_name = main_window.APP_NAME if hasattr(main_window, 'APP_NAME') else ""
         self.offline_patches = {}  # 存储离线补丁信息 {补丁名称: 文件路径}
         self.is_offline_mode = False
+        self.installed_games = []  # 跟踪本次实际安装的游戏
         
     def _is_debug_mode(self):
         """检查是否处于调试模式
@@ -208,7 +209,7 @@ class OfflineModeManager:
             return False
             
     def verify_patch_hash(self, game_version, file_path):
-        """验证补丁文件的哈希值
+        """验证补丁文件的哈希值，使用patch_detector模块
         
         Args:
             game_version: 游戏版本名称
@@ -217,165 +218,9 @@ class OfflineModeManager:
         Returns:
             bool: 哈希值是否匹配
         """
-        # 获取预期的哈希值
-        expected_hash = None
-        
-        if "Vol.1" in game_version:
-            expected_hash = PLUGIN_HASH.get("vol1", "")
-        elif "Vol.2" in game_version:
-            expected_hash = PLUGIN_HASH.get("vol2", "")
-        elif "Vol.3" in game_version:
-            expected_hash = PLUGIN_HASH.get("vol3", "")
-        elif "Vol.4" in game_version:
-            expected_hash = PLUGIN_HASH.get("vol4", "")
-        elif "After" in game_version:
-            expected_hash = PLUGIN_HASH.get("after", "")
+        # 使用patch_detector模块验证哈希值
+        return self.main_window.patch_detector.verify_patch_hash(game_version, file_path)
             
-        if not expected_hash:
-            logger.warning(f"DEBUG: 未找到 {game_version} 的预期哈希值")
-            return False
-            
-        debug_mode = self._is_debug_mode()
-        
-        if debug_mode:
-            logger.debug(f"DEBUG: 开始验证离线补丁文件: {file_path}")
-            logger.debug(f"DEBUG: 游戏版本: {game_version}")
-            logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
-            
-        try:
-            # 检查文件是否存在
-            if not os.path.exists(file_path):
-                if debug_mode:
-                    logger.warning(f"DEBUG: 补丁文件不存在: {file_path}")
-                return False
-                
-            # 检查文件大小
-            file_size = os.path.getsize(file_path)
-            if debug_mode:
-                logger.debug(f"DEBUG: 补丁文件大小: {file_size} 字节")
-                
-            if file_size == 0:
-                if debug_mode:
-                    logger.warning(f"DEBUG: 补丁文件大小为0，无效文件")
-                return False
-                
-            # 创建临时目录用于解压文件
-            with tempfile.TemporaryDirectory() as temp_dir:
-                if debug_mode:
-                    logger.debug(f"DEBUG: 创建临时目录: {temp_dir}")
-                    
-                # 解压补丁文件
-                try:
-                    if debug_mode:
-                        logger.debug(f"DEBUG: 开始解压文件: {file_path}")
-                        
-                    with py7zr.SevenZipFile(file_path, mode="r") as archive:
-                        # 获取压缩包内文件列表
-                        file_list = archive.getnames()
-                        if debug_mode:
-                            logger.debug(f"DEBUG: 压缩包内文件列表: {file_list}")
-                            
-                        # 解压所有文件
-                        archive.extractall(path=temp_dir)
-                        
-                        if debug_mode:
-                            logger.debug(f"DEBUG: 解压完成")
-                            # 列出解压后的文件
-                            extracted_files = []
-                            for root, dirs, files in os.walk(temp_dir):
-                                for file in files:
-                                    extracted_files.append(os.path.join(root, file))
-                            logger.debug(f"DEBUG: 解压后的文件列表: {extracted_files}")
-                except Exception as e:
-                    if debug_mode:
-                        logger.error(f"DEBUG: 解压补丁文件失败: {e}")
-                        logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                        logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
-                    return False
-                
-                # 获取补丁文件路径
-                patch_file = None
-                if "Vol.1" in game_version:
-                    patch_file = os.path.join(temp_dir, "vol.1", "adultsonly.xp3")
-                elif "Vol.2" in game_version:
-                    patch_file = os.path.join(temp_dir, "vol.2", "adultsonly.xp3")
-                elif "Vol.3" in game_version:
-                    patch_file = os.path.join(temp_dir, "vol.3", "update00.int")
-                elif "Vol.4" in game_version:
-                    patch_file = os.path.join(temp_dir, "vol.4", "vol4adult.xp3")
-                elif "After" in game_version:
-                    patch_file = os.path.join(temp_dir, "after", "afteradult.xp3")
-                
-                if not patch_file or not os.path.exists(patch_file):
-                    if debug_mode:
-                        logger.warning(f"DEBUG: 未找到解压后的补丁文件: {patch_file}")
-                        # 尝试查找可能的替代文件
-                        alternative_files = []
-                        for root, dirs, files in os.walk(temp_dir):
-                            for file in files:
-                                if file.endswith('.xp3') or file.endswith('.int'):
-                                    alternative_files.append(os.path.join(root, file))
-                        if alternative_files:
-                            logger.debug(f"DEBUG: 找到可能的替代文件: {alternative_files}")
-                        
-                        # 检查解压目录结构
-                        logger.debug(f"DEBUG: 检查解压目录结构:")
-                        for root, dirs, files in os.walk(temp_dir):
-                            logger.debug(f"DEBUG: 目录: {root}")
-                            logger.debug(f"DEBUG: 子目录: {dirs}")
-                            logger.debug(f"DEBUG: 文件: {files}")
-                    return False
-                
-                if debug_mode:
-                    logger.debug(f"DEBUG: 找到解压后的补丁文件: {patch_file}")
-                    
-                # 计算补丁文件哈希值
-                try:
-                    with open(patch_file, "rb") as f:
-                        file_hash = hashlib.sha256(f.read()).hexdigest()
-                    
-                    # 比较哈希值
-                    result = file_hash.lower() == expected_hash.lower()
-                    
-                    if debug_mode:
-                        logger.debug(f"DEBUG: 补丁文件 {patch_file} 哈希值验证: {'成功' if result else '失败'}")
-                        logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
-                        logger.debug(f"DEBUG: 实际哈希值: {file_hash}")
-                        
-                    return result
-                except Exception as e:
-                    if debug_mode:
-                        logger.error(f"DEBUG: 计算补丁文件哈希值失败: {e}")
-                        logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                    return False
-        except Exception as e:
-            if debug_mode:
-                logger.error(f"DEBUG: 验证补丁哈希值失败: {e}")
-                logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
-            return False
-            
-    def is_offline_mode_available(self):
-        """检查是否可以使用离线模式
-        
-        Returns:
-            bool: 是否可以使用离线模式
-        """
-        # 在调试模式下始终允许离线模式
-        if self._is_debug_mode():
-            return True
-            
-        # 检查是否有离线补丁文件
-        return self.has_offline_patches()
-        
-    def is_in_offline_mode(self):
-        """检查当前是否处于离线模式
-        
-        Returns:
-            bool: 是否处于离线模式
-        """
-        return self.is_offline_mode
-
     def install_offline_patches(self, selected_games):
         """直接安装离线补丁，完全绕过下载模块
         
@@ -419,78 +264,29 @@ class OfflineModeManager:
                 logger.warning("DEBUG: 未识别到任何游戏目录")
             return False
             
-        # 显示文件检验窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre", is_offline=True)
+        self.main_window.setEnabled(False)
         
-        # 获取安装路径
-        install_paths = self.main_window.download_manager.get_install_paths()
+        # 重置已安装游戏列表
+        self.installed_games = []
         
-        # 创建并启动哈希线程进行预检查
-        self.main_window.hash_thread = self.main_window.create_hash_thread("pre", install_paths)
-        self.main_window.hash_thread.pre_finished.connect(
-            lambda updated_status: self.on_offline_pre_hash_finished(updated_status, game_dirs, selected_games)
-        )
-        self.main_window.hash_thread.start()
-        
-        return True
-        
-    def on_offline_pre_hash_finished(self, updated_status, game_dirs, selected_games):
-        """离线模式下的哈希预检查完成处理
-        
-        Args:
-            updated_status: 更新后的安装状态
-            game_dirs: 识别到的游戏目录
-            selected_games: 用户选择安装的游戏列表
-        """
-        debug_mode = self._is_debug_mode()
-        
-        # 更新安装状态
-        self.main_window.installed_status = updated_status
-        
-        # 关闭哈希检查窗口
-        if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-            self.main_window.hash_msg_box.accept()
-            self.main_window.hash_msg_box = None
-            
-        # 重新启用主窗口
-        self.main_window.setEnabled(True)
-        
-        # 过滤出需要安装的游戏
-        installable_games = []
-        for game_version in selected_games:
-            if game_version in game_dirs and not self.main_window.installed_status.get(game_version, False):
-                # 检查是否有对应的离线补丁
-                if self.get_offline_patch_path(game_version):
-                    installable_games.append(game_version)
-                elif debug_mode:
-                    logger.warning(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
-                    
-        if not installable_games:
-            if debug_mode:
-                logger.info("DEBUG: 没有需要安装的游戏或未找到对应的离线补丁")
-            msgbox_frame(
-                f"离线安装信息 - {self.app_name}",
-                "\n没有需要安装的游戏或未找到对应的离线补丁文件。\n",
-                QMessageBox.StandardButton.Ok
-            ).exec()
-            self.main_window.ui.start_install_text.setText("开始安装")
-            return
-            
-        # 开始安装流程
-        if debug_mode:
-            logger.info(f"DEBUG: 开始离线安装流程，安装游戏: {installable_games}")
+        # 设置到主窗口，供结果显示使用
+        self.main_window.download_queue_history = selected_games
             
         # 创建安装任务列表
         install_tasks = []
-        for game_version in installable_games:
+        for game_version in selected_games:
             # 获取离线补丁文件路径
             patch_file = self.get_offline_patch_path(game_version)
             if not patch_file:
+                if debug_mode:
+                    logger.warning(f"DEBUG: 未找到 {game_version} 的离线补丁文件，跳过")
                 continue
                 
             # 获取游戏目录
             game_folder = game_dirs.get(game_version)
             if not game_folder:
+                if debug_mode:
+                    logger.warning(f"DEBUG: 未找到 {game_version} 的游戏目录，跳过")
                 continue
                 
             # 获取目标路径
@@ -510,6 +306,8 @@ class OfflineModeManager:
                 _7z_path = os.path.join(PLUGIN, "after.7z")
                 plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
             else:
+                if debug_mode:
+                    logger.warning(f"DEBUG: {game_version} 不是支持的游戏版本，跳过")
                 continue
                 
             # 添加到安装任务列表
@@ -517,10 +315,22 @@ class OfflineModeManager:
             
         # 开始执行第一个安装任务
         if install_tasks:
+            if debug_mode:
+                logger.info(f"DEBUG: 开始离线安装流程，安装游戏数量: {len(install_tasks)}")
             self.process_next_offline_install_task(install_tasks)
         else:
+            if debug_mode:
+                logger.warning("DEBUG: 没有可安装的游戏，安装流程结束")
+            msgbox_frame(
+                f"离线安装信息 - {self.app_name}",
+                "\n没有可安装的游戏或未找到对应的离线补丁文件。\n",
+                QMessageBox.StandardButton.Ok
+            ).exec()
+            self.main_window.setEnabled(True)
             self.main_window.ui.start_install_text.setText("开始安装")
             
+        return True
+        
     def process_next_offline_install_task(self, install_tasks):
         """处理下一个离线安装任务
         
@@ -533,7 +343,9 @@ class OfflineModeManager:
             # 所有任务完成，进行后检查
             if debug_mode:
                 logger.info("DEBUG: 所有离线安装任务完成，进行后检查")
-            self.main_window.after_hash_compare()
+                
+            # 使用patch_detector进行安装后哈希比较
+            self.main_window.patch_detector.after_hash_compare()
             return
             
         # 获取下一个任务
@@ -555,22 +367,6 @@ class OfflineModeManager:
                 logger.debug(f"DEBUG: 已复制补丁文件到缓存目录: {_7z_path}")
                 logger.debug(f"DEBUG: 开始验证补丁文件哈希值")
                 
-            # 获取预期的哈希值
-            expected_hash = None
-            if "Vol.1" in game_version:
-                expected_hash = PLUGIN_HASH.get("vol1", "")
-            elif "Vol.2" in game_version:
-                expected_hash = PLUGIN_HASH.get("vol2", "")
-            elif "Vol.3" in game_version:
-                expected_hash = PLUGIN_HASH.get("vol3", "")
-            elif "Vol.4" in game_version:
-                expected_hash = PLUGIN_HASH.get("vol4", "")
-            elif "After" in game_version:
-                expected_hash = PLUGIN_HASH.get("after", "")
-                
-            if debug_mode and expected_hash:
-                logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
-            
             # 显示哈希验证窗口 - 使用离线特定消息
             self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="offline_verify", is_offline=True)
             
@@ -683,20 +479,31 @@ class OfflineModeManager:
         else:
             # 更新安装状态
             self.main_window.installed_status[game_version] = True
+            
+            # 添加到已安装游戏列表
+            if game_version not in self.installed_games:
+                self.installed_games.append(game_version)
         
         # 处理下一个任务
         self.process_next_offline_install_task(remaining_tasks)
             
-    def on_offline_extraction_finished(self, remaining_tasks):
-        """离线模式下的解压完成处理（旧方法，保留兼容性）
+    def is_offline_mode_available(self):
+        """检查是否可以使用离线模式
         
-        Args:
-            remaining_tasks: 剩余的安装任务列表
+        Returns:
+            bool: 是否可以使用离线模式
         """
-        debug_mode = self._is_debug_mode()
-        
-        if debug_mode:
-            logger.debug("DEBUG: 离线解压完成，继续处理下一个任务")
+        # 在调试模式下始终允许离线模式
+        if self._is_debug_mode():
+            return True
             
-        # 处理下一个任务
-        self.process_next_offline_install_task(remaining_tasks) 
+        # 检查是否有离线补丁文件
+        return self.has_offline_patches()
+        
+    def is_in_offline_mode(self):
+        """检查当前是否处于离线模式
+        
+        Returns:
+            bool: 是否处于离线模式
+        """
+        return self.is_offline_mode 
