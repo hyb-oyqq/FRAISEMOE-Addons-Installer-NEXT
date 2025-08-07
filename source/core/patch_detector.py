@@ -70,12 +70,20 @@ class PatchDetector:
         """
         debug_mode = self._is_debug_mode()
         
+        if debug_mode:
+            logger.debug(f"DEBUG: 检查 {game_version} 是否已安装补丁，目录: {game_dir}")
+        
         if game_version not in self.game_info:
+            if debug_mode:
+                logger.debug(f"DEBUG: {game_version} 不在支持的游戏列表中，跳过检查")
             return False
             
         # 获取可能的补丁文件路径
         install_path_base = os.path.basename(self.game_info[game_version]["install_path"])
         patch_file_path = os.path.join(game_dir, install_path_base)
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 基础补丁文件路径: {patch_file_path}")
         
         # 尝试查找补丁文件，支持不同大小写
         patch_files_to_check = [
@@ -86,18 +94,27 @@ class PatchDetector:
             patch_file_path.replace("_", "-"),
         ]
         
+        if debug_mode:
+            logger.debug(f"DEBUG: 将检查以下补丁文件路径: {patch_files_to_check}")
+        
         # 查找补丁文件
         for patch_path in patch_files_to_check:
             if os.path.exists(patch_path):
                 if debug_mode:
-                    logger.debug(f"找到补丁文件: {patch_path}")
+                    logger.debug(f"DEBUG: 找到补丁文件: {patch_path}")
+                    logger.debug(f"DEBUG: {game_version} 已安装补丁")
                 return True
+                
             # 检查是否存在被禁用的补丁文件（带.fain后缀）
             disabled_path = f"{patch_path}.fain"
             if os.path.exists(disabled_path):
                 if debug_mode:
-                    logger.debug(f"找到被禁用的补丁文件: {disabled_path}")
+                    logger.debug(f"DEBUG: 找到被禁用的补丁文件: {disabled_path}")
+                    logger.debug(f"DEBUG: {game_version} 已安装补丁（但被禁用）")
                 return True
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 未找到补丁文件，继续检查补丁文件夹")
                 
         # 检查是否有补丁文件夹
         patch_folders_to_check = [
@@ -106,27 +123,45 @@ class PatchDetector:
             os.path.join(game_dir, "PATCH"),
         ]
         
+        if debug_mode:
+            logger.debug(f"DEBUG: 将检查以下补丁文件夹: {patch_folders_to_check}")
+        
         for patch_folder in patch_folders_to_check:
             if os.path.exists(patch_folder):
                 if debug_mode:
-                    logger.debug(f"找到补丁文件夹: {patch_folder}")
+                    logger.debug(f"DEBUG: 找到补丁文件夹: {patch_folder}")
+                    logger.debug(f"DEBUG: {game_version} 已安装补丁")
                 return True
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 未找到补丁文件夹，继续检查game/patch文件夹")
                 
         # 检查game/patch文件夹
         game_folders = ["game", "Game", "GAME"]
         patch_folders = ["patch", "Patch", "PATCH"]
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 将检查以下game/patch组合: {[(g, p) for g in game_folders for p in patch_folders]}")
         
         for game_folder in game_folders:
             for patch_folder in patch_folders:
                 game_patch_folder = os.path.join(game_dir, game_folder, patch_folder)
                 if os.path.exists(game_patch_folder):
                     if debug_mode:
-                        logger.debug(f"找到game/patch文件夹: {game_patch_folder}")
+                        logger.debug(f"DEBUG: 找到game/patch文件夹: {game_patch_folder}")
+                        logger.debug(f"DEBUG: {game_version} 已安装补丁")
                     return True
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 未找到game/patch文件夹，继续检查配置文件和脚本文件")
         
         # 检查配置文件
         config_files = ["config.json", "Config.json", "CONFIG.JSON"]
         script_files = ["scripts.json", "Scripts.json", "SCRIPTS.JSON"]
+        
+        if debug_mode:
+            logger.debug(f"DEBUG: 将在game文件夹中检查以下配置文件: {config_files}")
+            logger.debug(f"DEBUG: 将在game文件夹中检查以下脚本文件: {script_files}")
         
         for game_folder in game_folders:
             game_path = os.path.join(game_dir, game_folder)
@@ -136,7 +171,8 @@ class PatchDetector:
                     config_path = os.path.join(game_path, config_file)
                     if os.path.exists(config_path):
                         if debug_mode:
-                            logger.debug(f"找到配置文件: {config_path}")
+                            logger.debug(f"DEBUG: 找到配置文件: {config_path}")
+                            logger.debug(f"DEBUG: {game_version} 已安装补丁")
                         return True
                 
                 # 检查脚本文件
@@ -144,12 +180,13 @@ class PatchDetector:
                     script_path = os.path.join(game_path, script_file)
                     if os.path.exists(script_path):
                         if debug_mode:
-                            logger.debug(f"找到脚本文件: {script_path}")
+                            logger.debug(f"DEBUG: 找到脚本文件: {script_path}")
+                            logger.debug(f"DEBUG: {game_version} 已安装补丁")
                         return True
         
         # 没有找到补丁文件或文件夹
         if debug_mode:
-            logger.debug(f"{game_version} 在 {game_dir} 中没有安装补丁")
+            logger.debug(f"DEBUG: {game_version} 在 {game_dir} 中没有安装补丁")
         return False
         
     def check_patch_disabled(self, game_dir, game_version):

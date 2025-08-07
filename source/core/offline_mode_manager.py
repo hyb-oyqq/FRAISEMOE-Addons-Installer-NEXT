@@ -62,8 +62,9 @@ class OfflineModeManager:
             directory = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             
         debug_mode = self._is_debug_mode()
-        if debug_mode:
-            logger.debug(f"DEBUG: 扫描离线补丁文件，目录: {directory}")
+        
+        # 无论是否为调试模式，都记录扫描操作
+        logger.info(f"扫描离线补丁文件，目录: {directory}")
             
         # 要查找的补丁文件名
         patch_files = ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]
@@ -77,10 +78,19 @@ class OfflineModeManager:
                 if os.path.isfile(file_path):
                     patch_name = file.lower()
                     found_patches[patch_name] = file_path
+                    # 无论是否为调试模式，都记录找到的补丁文件
+                    logger.info(f"找到离线补丁文件: {patch_name} 路径: {file_path}")
                     if debug_mode:
                         logger.debug(f"DEBUG: 找到离线补丁文件: {patch_name} 路径: {file_path}")
                         
         self.offline_patches = found_patches
+        
+        # 记录扫描结果
+        if found_patches:
+            logger.info(f"共找到 {len(found_patches)} 个离线补丁文件: {list(found_patches.keys())}")
+        else:
+            logger.info("未找到任何离线补丁文件")
+            
         return found_patches
         
     def has_offline_patches(self):
@@ -113,6 +123,7 @@ class OfflineModeManager:
                     "\n未找到任何离线补丁文件，无法启用离线模式。\n\n请将补丁文件放置在软件所在目录后再尝试。\n",
                     QMessageBox.StandardButton.Ok
                 ).exec()
+                logger.warning("尝试启用离线模式失败：未找到任何离线补丁文件")
                 return False
                 
             if debug_mode:
@@ -137,6 +148,8 @@ class OfflineModeManager:
                 ui_manager.online_mode_action.setChecked(not enabled)
                 ui_manager.offline_mode_action.setChecked(enabled)
         
+        # 无论是否为调试模式，都记录离线模式状态变化
+        logger.info(f"离线模式已{'启用' if enabled else '禁用'}")
         if debug_mode:
             logger.debug(f"DEBUG: 离线模式已{'启用' if enabled else '禁用'}")
             

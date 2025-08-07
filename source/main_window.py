@@ -604,8 +604,20 @@ class MainWindow(QMainWindow):
                 # 启用开始安装按钮
                 self.set_start_button_enabled(True)
                 
-                logger.debug(f"DEBUG: 已自动切换到离线模式，找到离线补丁文件: {list(self.offline_mode_manager.offline_patches.keys())}")
+                # 记录日志
+                found_patches = list(self.offline_mode_manager.offline_patches.keys())
+                logger.debug(f"DEBUG: 已自动切换到离线模式，找到离线补丁文件: {found_patches}")
+                logger.info(f"发现离线补丁文件: {found_patches}，将自动切换到离线模式")
                 logger.debug(f"DEBUG: 离线模式下启用开始安装按钮")
+                
+                # 显示提示弹窗
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    f"离线模式提示 - {APP_NAME}",
+                    f"已找到本地补丁，将主动转为离线模式。\n\n检测到的补丁文件: {', '.join(found_patches)}"
+                )
+                
                 return True
             else:
                 # 如果没有找到离线补丁文件，禁用离线模式

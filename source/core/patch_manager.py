@@ -86,17 +86,24 @@ class PatchManager:
         debug_mode = self._is_debug_mode()
         
         if debug_mode:
-            self.logger.debug(f"开始卸载 {game_version} 补丁，目录: {game_dir}")
+            self.logger.debug(f"DEBUG: 开始卸载 {game_version} 补丁，目录: {game_dir}")
+        
+        self.logger.info(f"开始卸载 {game_version} 补丁，目录: {game_dir}")
         
         if game_version not in self.game_info:
+            error_msg = f"无法识别游戏版本: {game_version}"
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 卸载失败 - {error_msg}")
+            self.logger.error(f"卸载失败 - {error_msg}")
+            
             if not silent:
                 QMessageBox.critical(
                     None,
                     f"错误 - {self.app_name}",
-                    f"\n无法识别游戏版本: {game_version}\n",
+                    f"\n{error_msg}\n",
                     QMessageBox.StandardButton.Ok,
                 )
-            return False if not silent else {"success": False, "message": f"无法识别游戏版本: {game_version}", "files_removed": 0}
+            return False if not silent else {"success": False, "message": error_msg, "files_removed": 0}
         
         try:
             files_removed = 0
@@ -104,6 +111,9 @@ class PatchManager:
             # 获取可能的补丁文件路径
             install_path_base = os.path.basename(self.game_info[game_version]["install_path"])
             patch_file_path = os.path.join(game_dir, install_path_base)
+            
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 基础补丁文件路径: {patch_file_path}")
             
             # 尝试查找补丁文件，支持不同大小写
             patch_files_to_check = [
@@ -115,7 +125,7 @@ class PatchManager:
             ]
             
             if debug_mode:
-                self.logger.debug(f"查找以下可能的补丁文件路径: {patch_files_to_check}")
+                self.logger.debug(f"DEBUG: 查找以下可能的补丁文件路径: {patch_files_to_check}")
             
             # 查找并删除补丁文件，包括启用和禁用的
             patch_file_found = False
@@ -123,44 +133,68 @@ class PatchManager:
                 # 检查常规补丁文件
                 if os.path.exists(patch_path):
                     patch_file_found = True
+                    if debug_mode:
+                        self.logger.debug(f"DEBUG: 找到补丁文件: {patch_path}，准备删除")
+                    self.logger.info(f"删除补丁文件: {patch_path}")
+                    
                     os.remove(patch_path)
                     files_removed += 1
                     if debug_mode:
-                        self.logger.debug(f"已删除补丁文件: {patch_path}")
+                        self.logger.debug(f"DEBUG: 已删除补丁文件: {patch_path}")
                 
                 # 检查被禁用的补丁文件（带.fain后缀）
                 disabled_path = f"{patch_path}.fain"
                 if os.path.exists(disabled_path):
                     patch_file_found = True
+                    if debug_mode:
+                        self.logger.debug(f"DEBUG: 找到被禁用的补丁文件: {disabled_path}，准备删除")
+                    self.logger.info(f"删除被禁用的补丁文件: {disabled_path}")
+                    
                     os.remove(disabled_path)
                     files_removed += 1
                     if debug_mode:
-                        self.logger.debug(f"已删除被禁用的补丁文件: {disabled_path}")
+                        self.logger.debug(f"DEBUG: 已删除被禁用的补丁文件: {disabled_path}")
             
-            if not patch_file_found and debug_mode:
-                self.logger.debug(f"未找到补丁文件，检查了以下路径: {patch_files_to_check}")
-                self.logger.debug(f"也检查了禁用的补丁文件（.fain后缀）")
+            if not patch_file_found:
+                if debug_mode:
+                    self.logger.debug(f"DEBUG: 未找到补丁文件，检查了以下路径: {patch_files_to_check}")
+                    self.logger.debug(f"DEBUG: 也检查了禁用的补丁文件（.fain后缀）")
+                self.logger.warning(f"未找到 {game_version} 的补丁文件")
                 
             # 检查是否有额外的签名文件 (.sig)
             if game_version == "NEKOPARA After":
+                if debug_mode:
+                    self.logger.debug(f"DEBUG: {game_version} 需要检查额外的签名文件")
+                
                 for patch_path in patch_files_to_check:
                     # 检查常规签名文件
                     sig_file_path = f"{patch_path}.sig"
                     if os.path.exists(sig_file_path):
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: 找到签名文件: {sig_file_path}，准备删除")
+                        self.logger.info(f"删除签名文件: {sig_file_path}")
+                        
                         os.remove(sig_file_path)
                         files_removed += 1
                         if debug_mode:
-                            self.logger.debug(f"已删除签名文件: {sig_file_path}")
+                            self.logger.debug(f"DEBUG: 已删除签名文件: {sig_file_path}")
                     
                     # 检查被禁用补丁的签名文件
                     disabled_sig_path = f"{patch_path}.fain.sig"
                     if os.path.exists(disabled_sig_path):
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: 找到被禁用补丁的签名文件: {disabled_sig_path}，准备删除")
+                        self.logger.info(f"删除被禁用补丁的签名文件: {disabled_sig_path}")
+                        
                         os.remove(disabled_sig_path)
                         files_removed += 1
                         if debug_mode:
-                            self.logger.debug(f"已删除被禁用补丁的签名文件: {disabled_sig_path}")
+                            self.logger.debug(f"DEBUG: 已删除被禁用补丁的签名文件: {disabled_sig_path}")
             
             # 删除patch文件夹
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 检查并删除patch文件夹")
+                
             patch_folders_to_check = [
                 os.path.join(game_dir, "patch"),
                 os.path.join(game_dir, "Patch"),
@@ -169,12 +203,20 @@ class PatchManager:
             
             for patch_folder in patch_folders_to_check:
                 if os.path.exists(patch_folder):
+                    if debug_mode:
+                        self.logger.debug(f"DEBUG: 找到补丁文件夹: {patch_folder}，准备删除")
+                    self.logger.info(f"删除补丁文件夹: {patch_folder}")
+                    
+                    import shutil
                     shutil.rmtree(patch_folder)
                     files_removed += 1
                     if debug_mode:
-                        self.logger.debug(f"已删除补丁文件夹: {patch_folder}")
+                        self.logger.debug(f"DEBUG: 已删除补丁文件夹: {patch_folder}")
             
             # 删除game/patch文件夹
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 检查并删除game/patch文件夹")
+                
             game_folders = ["game", "Game", "GAME"]
             patch_folders = ["patch", "Patch", "PATCH"]
             
@@ -182,12 +224,20 @@ class PatchManager:
                 for patch_folder in patch_folders:
                     game_patch_folder = os.path.join(game_dir, game_folder, patch_folder)
                     if os.path.exists(game_patch_folder):
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: 找到game/patch文件夹: {game_patch_folder}，准备删除")
+                        self.logger.info(f"删除game/patch文件夹: {game_patch_folder}")
+                        
+                        import shutil
                         shutil.rmtree(game_patch_folder)
                         files_removed += 1
                         if debug_mode:
-                            self.logger.debug(f"已删除game/patch文件夹: {game_patch_folder}")
+                            self.logger.debug(f"DEBUG: 已删除game/patch文件夹: {game_patch_folder}")
             
             # 删除配置文件
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 检查并删除配置文件和脚本文件")
+                
             config_files = ["config.json", "Config.json", "CONFIG.JSON"]
             script_files = ["scripts.json", "Scripts.json", "SCRIPTS.JSON"]
             
@@ -198,55 +248,82 @@ class PatchManager:
                     for config_file in config_files:
                         config_path = os.path.join(game_path, config_file)
                         if os.path.exists(config_path):
+                            if debug_mode:
+                                self.logger.debug(f"DEBUG: 找到配置文件: {config_path}，准备删除")
+                            self.logger.info(f"删除配置文件: {config_path}")
+                            
                             os.remove(config_path)
                             files_removed += 1
                             if debug_mode:
-                                self.logger.debug(f"已删除配置文件: {config_path}")
+                                self.logger.debug(f"DEBUG: 已删除配置文件: {config_path}")
                     
                     # 删除脚本文件
                     for script_file in script_files:
                         script_path = os.path.join(game_path, script_file)
                         if os.path.exists(script_path):
+                            if debug_mode:
+                                self.logger.debug(f"DEBUG: 找到脚本文件: {script_path}，准备删除")
+                            self.logger.info(f"删除脚本文件: {script_path}")
+                            
                             os.remove(script_path)
                             files_removed += 1
                             if debug_mode:
-                                self.logger.debug(f"已删除脚本文件: {script_path}")
+                                self.logger.debug(f"DEBUG: 已删除脚本文件: {script_path}")
             
             # 更新安装状态
             self.installed_status[game_version] = False
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 已更新 {game_version} 的安装状态为未安装")
             
             # 在非静默模式且非批量卸载模式下显示卸载成功消息
             if not silent and game_version != "all":
                 # 显示卸载成功消息
                 if files_removed > 0:
+                    success_msg = f"\n{game_version} 补丁卸载成功！\n共删除 {files_removed} 个文件/文件夹。\n"
+                    if debug_mode:
+                        self.logger.debug(f"DEBUG: 显示卸载成功消息: {success_msg}")
+                    
                     QMessageBox.information(
                         None,
                         f"卸载完成 - {self.app_name}",
-                        f"\n{game_version} 补丁卸载成功！\n共删除 {files_removed} 个文件/文件夹。\n",
+                        success_msg,
                         QMessageBox.StandardButton.Ok,
                     )
                 else:
+                    warning_msg = f"\n未找到 {game_version} 的补丁文件，可能未安装补丁或已被移除。\n"
+                    if debug_mode:
+                        self.logger.debug(f"DEBUG: 显示警告消息: {warning_msg}")
+                    
                     QMessageBox.warning(
                         None,
                         f"警告 - {self.app_name}",
-                        f"\n未找到 {game_version} 的补丁文件，可能未安装补丁或已被移除。\n",
+                        warning_msg,
                         QMessageBox.StandardButton.Ok,
                     )
             
             # 卸载成功
+            if debug_mode:
+                self.logger.debug(f"DEBUG: {game_version} 卸载完成，共删除 {files_removed} 个文件/文件夹")
+            self.logger.info(f"{game_version} 卸载完成，共删除 {files_removed} 个文件/文件夹")
+            
             if silent:
                 return {"success": True, "message": f"{game_version} 补丁卸载成功", "files_removed": files_removed}
             return True
             
         except Exception as e:
+            error_message = f"卸载 {game_version} 补丁时出错：{str(e)}"
+            if debug_mode:
+                self.logger.debug(f"DEBUG: {error_message}")
+                import traceback
+                self.logger.debug(f"DEBUG: 错误详情:\n{traceback.format_exc()}")
+            self.logger.error(error_message)
+            
             # 在非静默模式且非批量卸载模式下显示卸载失败消息
             if not silent and game_version != "all":
                 # 显示卸载失败消息
                 error_message = f"\n卸载 {game_version} 补丁时出错：\n\n{str(e)}\n"
                 if debug_mode:
-                    self.logger.debug(f"卸载错误 - {str(e)}")
-                    import traceback
-                    self.logger.debug(f"错误详情:\n{traceback.format_exc()}")
+                    self.logger.debug(f"DEBUG: 显示卸载失败消息")
                     
                 QMessageBox.critical(
                     None,
@@ -274,16 +351,38 @@ class PatchManager:
         debug_mode = self._is_debug_mode()
         results = []
         
+        if debug_mode:
+            self.logger.debug(f"DEBUG: 开始批量卸载补丁，游戏数量: {len(game_dirs)}")
+            self.logger.debug(f"DEBUG: 要卸载的游戏: {list(game_dirs.keys())}")
+        
+        self.logger.info(f"开始批量卸载补丁，游戏数量: {len(game_dirs)}")
+        self.logger.info(f"要卸载的游戏: {list(game_dirs.keys())}")
+        
         for version, path in game_dirs.items():
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 处理游戏 {version}，路径: {path}")
+            
+            self.logger.info(f"开始卸载 {version} 的补丁")
+            
             try:
                 # 在批量模式下使用静默卸载
+                if debug_mode:
+                    self.logger.debug(f"DEBUG: 使用静默模式卸载 {version}")
+                
                 result = self.uninstall_patch(path, version, silent=True)
                 
                 if isinstance(result, dict):  # 使用了静默模式
                     if result["success"]:
                         success_count += 1
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: {version} 卸载成功，删除了 {result['files_removed']} 个文件/文件夹")
+                        self.logger.info(f"{version} 卸载成功，删除了 {result['files_removed']} 个文件/文件夹")
                     else:
                         fail_count += 1
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: {version} 卸载失败，原因: {result['message']}")
+                        self.logger.warning(f"{version} 卸载失败，原因: {result['message']}")
+                    
                     results.append({
                         "version": version,
                         "success": result["success"],
@@ -293,8 +392,15 @@ class PatchManager:
                 else:  # 兼容旧代码，不应该执行到这里
                     if result:
                         success_count += 1
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: {version} 卸载成功（旧格式）")
+                        self.logger.info(f"{version} 卸载成功（旧格式）")
                     else:
                         fail_count += 1
+                        if debug_mode:
+                            self.logger.debug(f"DEBUG: {version} 卸载失败（旧格式）")
+                        self.logger.warning(f"{version} 卸载失败（旧格式）")
+                    
                     results.append({
                         "version": version,
                         "success": result,
@@ -304,7 +410,12 @@ class PatchManager:
                     
             except Exception as e:
                 if debug_mode:
-                    self.logger.debug(f"卸载 {version} 时出错: {str(e)}")
+                    self.logger.debug(f"DEBUG: 卸载 {version} 时出错: {str(e)}")
+                    import traceback
+                    self.logger.debug(f"DEBUG: 错误详情:\n{traceback.format_exc()}")
+                
+                self.logger.error(f"卸载 {version} 时出错: {str(e)}")
+                
                 fail_count += 1
                 results.append({
                     "version": version,
@@ -312,7 +423,12 @@ class PatchManager:
                     "message": f"卸载出错: {str(e)}",
                     "files_removed": 0
                 })
-                
+        
+        if debug_mode:
+            self.logger.debug(f"DEBUG: 批量卸载完成，成功: {success_count}，失败: {fail_count}")
+        
+        self.logger.info(f"批量卸载完成，成功: {success_count}，失败: {fail_count}")
+        
         return success_count, fail_count, results
     
     def show_uninstall_result(self, success_count, fail_count, results=None):
@@ -323,6 +439,11 @@ class PatchManager:
             fail_count: 卸载失败的数量
             results: 详细结果列表，如果提供，会显示更详细的信息
         """
+        debug_mode = self._is_debug_mode()
+        
+        if debug_mode:
+            self.logger.debug(f"DEBUG: 显示卸载结果，成功: {success_count}，失败: {fail_count}")
+        
         result_text = f"\n批量卸载完成！\n成功: {success_count} 个\n失败: {fail_count} 个\n"
         
         # 如果有详细结果，添加到消息中
@@ -330,11 +451,24 @@ class PatchManager:
             success_list = [r["version"] for r in results if r["success"]]
             fail_list = [r["version"] for r in results if not r["success"]]
             
+            if debug_mode:
+                self.logger.debug(f"DEBUG: 成功卸载的游戏: {success_list}")
+                self.logger.debug(f"DEBUG: 卸载失败的游戏: {fail_list}")
+            
             if success_list:
                 result_text += f"\n【成功卸载】：\n{chr(10).join(success_list)}\n"
             
             if fail_list:
                 result_text += f"\n【卸载失败】：\n{chr(10).join(fail_list)}\n"
+                
+                # 记录更详细的失败原因
+                if debug_mode:
+                    for r in results:
+                        if not r["success"]:
+                            self.logger.debug(f"DEBUG: {r['version']} 卸载失败原因: {r['message']}")
+        
+        if debug_mode:
+            self.logger.debug(f"DEBUG: 显示卸载结果对话框")
         
         QMessageBox.information(
             None,

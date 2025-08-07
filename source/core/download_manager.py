@@ -577,6 +577,7 @@ class DownloadManager:
         """处理下载队列中的下一个任务"""
         if not self.download_queue:
             # 所有下载任务都已完成，进行后检查
+            debug_mode = self.is_debug_mode()
             if debug_mode:
                 logger.debug("DEBUG: 所有下载任务完成，进行后检查")
             # 使用patch_detector进行安装后哈希比较
