@@ -367,7 +367,7 @@ class MainWindow(QMainWindow):
         
         return progress_window
         
-    def create_extraction_thread(self, _7z_path, game_folder, plugin_path, game_version):
+    def create_extraction_thread(self, _7z_path, game_folder, plugin_path, game_version, extracted_path=None):
         """创建解压线程
         
         Args:
@@ -375,11 +375,12 @@ class MainWindow(QMainWindow):
             game_folder: 游戏文件夹路径
             plugin_path: 插件路径
             game_version: 游戏版本
+            extracted_path: 已解压的补丁文件路径，如果提供则直接使用它而不进行解压
             
         Returns:
             ExtractionThread: 解压线程实例
         """
-        return ExtractionThread(_7z_path, game_folder, plugin_path, game_version, self)
+        return ExtractionThread(_7z_path, game_folder, plugin_path, game_version, self, extracted_path)
         
     def show_result(self):
         """显示安装结果，调用patch_manager的show_result方法"""

@@ -763,11 +763,8 @@ class DownloadManager:
                 self.on_download_stopped()
             return
         
-        # 下载成功后，使用与离线模式相同的哈希校验机制
+        # 下载成功后，直接进入解压阶段
         debug_mode = self.is_debug_mode()
-        
-        if debug_mode:
-            logger.debug(f"DEBUG: 下载完成，开始验证补丁文件哈希: {_7z_path}")
         
         # 关闭进度窗口
         if hasattr(self.main_window, 'progress_window') and self.main_window.progress_window:
@@ -775,79 +772,12 @@ class DownloadManager:
                 self.main_window.progress_window.accept()
             self.main_window.progress_window = None
         
-        # 使用与离线模式相同的哈希校验机制
-        from utils.helpers import ProgressHashVerifyDialog
-        from data.config import PLUGIN_HASH
-        from workers.hash_thread import OfflineHashVerifyThread
-        
-        # 创建并显示进度对话框
-        progress_dialog = ProgressHashVerifyDialog(
-            f"验证补丁文件 - {APP_NAME}",
-            f"正在验证 {game_version} 的补丁文件完整性...",
-            self.main_window
-        )
-        
-        # 创建哈希验证线程
-        hash_thread = OfflineHashVerifyThread(game_version, _7z_path, PLUGIN_HASH, self.main_window)
-        
-        # 连接信号
-        hash_thread.progress.connect(progress_dialog.update_progress)
-        hash_thread.finished.connect(lambda result, error: self._on_hash_verify_finished(
-            result, error, progress_dialog, _7z_path, game_folder, plugin_path, game_version
-        ))
-        
-        # 启动线程
-        hash_thread.start()
-        
-        # 显示对话框，阻塞直到对话框关闭
-        result = progress_dialog.exec()
-        
-        # 如果用户取消了验证，停止线程
-        if result == ProgressHashVerifyDialog.Rejected and hash_thread.isRunning():
-            if debug_mode:
-                logger.debug(f"DEBUG: 用户取消了哈希验证")
-            hash_thread.terminate()
-            hash_thread.wait()
-            # 取消后继续下一个任务
-            self.next_download_task()
-    
-    def _on_hash_verify_finished(self, result, error, dialog, _7z_path, game_folder, plugin_path, game_version):
-        """哈希验证线程完成后的回调
-        
-        Args:
-            result: 验证结果
-            error: 错误信息
-            dialog: 进度对话框
-            _7z_path: 7z文件保存路径
-            game_folder: 游戏文件夹路径
-            plugin_path: 插件路径
-            game_version: 游戏版本
-        """
-        debug_mode = self.is_debug_mode()
-        
-        # 存储结果到对话框，以便在exec()返回后获取
-        dialog.hash_result = result
-        
-        if result:
-            if debug_mode:
-                logger.debug(f"DEBUG: 哈希验证成功")
-            dialog.set_status("验证成功")
-            # 短暂延时后关闭对话框
-            QTimer.singleShot(500, dialog.accept)
+        if debug_mode:
+            logger.debug(f"DEBUG: 下载完成，直接进入解压阶段")
             
-            # 验证成功，进入解压阶段
-            self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
-        else:
-            if debug_mode:
-                logger.debug(f"DEBUG: 哈希验证失败: {error}")
-            dialog.set_status(f"验证失败: {error}")
-            dialog.set_message("补丁文件验证失败，可能已损坏或被篡改。")
-            # 将取消按钮改为关闭按钮
-            dialog.cancel_button.setText("关闭")
-            # 不自动关闭，让用户查看错误信息
-            
-            # 在用户关闭对话框后，继续下一个任务
-            dialog.rejected.connect(lambda: self.next_download_task())
+        # 直接进入解压阶段
+        self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
+        self.main_window.extraction_handler.extraction_finished.connect(self.on_extraction_finished)
 
     def on_extraction_finished(self, continue_download):
         """解压完成后的回调，决定是否继续下载队列
@@ -896,3 +826,124 @@ class DownloadManager:
     def show_download_thread_settings(self):
         """显示下载线程设置对话框"""
         return self.download_task_manager.show_download_thread_settings() 
+
+    def direct_download_action(self, games_to_download):
+        """直接下载指定游戏的补丁，绕过补丁判断，用于从离线模式转接过来的任务
+        
+        Args:
+            games_to_download: 要下载的游戏列表
+        """
+        debug_mode = self.is_debug_mode()
+        if debug_mode:
+            logger.debug(f"DEBUG: 直接下载模式，绕过补丁判断，游戏列表: {games_to_download}")
+            
+        if not self.selected_folder:
+            QtWidgets.QMessageBox.warning(
+                self.main_window, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
+            )
+            return
+            
+        # 识别游戏目录
+        game_dirs = self.main_window.game_detector.identify_game_directories_improved(self.selected_folder)
+        
+        if not game_dirs:
+            QtWidgets.QMessageBox.warning(
+                self.main_window, f"通知 - {APP_NAME}", "\n未在选择的目录中找到支持的游戏\n"
+            )
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            return
+            
+        # 过滤出存在的游戏目录
+        selected_game_dirs = {game: game_dirs[game] for game in games_to_download if game in game_dirs}
+        
+        if not selected_game_dirs:
+            QtWidgets.QMessageBox.warning(
+                self.main_window, f"通知 - {APP_NAME}", "\n未找到指定游戏的安装目录\n"
+            )
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            return
+            
+        self.main_window.setEnabled(False)
+        
+        # 获取下载配置
+        config = self.get_download_url()
+        if not config:
+            QtWidgets.QMessageBox.critical(
+                self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
+            )
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
+            return
+            
+        # 填充下载队列
+        self._fill_direct_download_queue(config, selected_game_dirs)
+        
+        if not self.download_queue:
+            # 所有下载任务都已完成，进行后检查
+            if debug_mode:
+                logger.debug("DEBUG: 所有下载任务完成，进行后检查")
+            # 使用patch_detector进行安装后哈希比较
+            self.main_window.patch_detector.after_hash_compare()
+            return
+            
+        # 显示Cloudflare优化选项
+        self._show_cloudflare_option()
+        
+    def _fill_direct_download_queue(self, config, game_dirs):
+        """直接填充下载队列，不检查补丁是否已安装
+        
+        Args:
+            config: 包含下载URL的配置字典
+            game_dirs: 包含游戏文件夹路径的字典
+        """
+        self.download_queue.clear()
+        
+        if not hasattr(self.main_window, 'download_queue_history'):
+            self.main_window.download_queue_history = []
+        
+        debug_mode = self.is_debug_mode()
+        if debug_mode:
+            logger.debug(f"DEBUG: 直接填充下载队列, 游戏目录: {game_dirs}")
+        
+        # 记录要下载的游戏，用于历史记录
+        games_to_download = list(game_dirs.keys())
+        self.main_window.download_queue_history = games_to_download
+        
+        for i in range(1, 5):
+            game_version = f"NEKOPARA Vol.{i}"
+            if game_version in game_dirs:
+                # 从配置中获取下载URL
+                url_key = f"vol.{i}.data"
+                if url_key in config and "url" in config[url_key]:
+                    url = config[url_key]["url"]
+                    
+                    game_folder = game_dirs[game_version]
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 添加下载任务 {game_version}: {game_folder}")
+                    
+                    _7z_path = os.path.join(PLUGIN, f"vol.{i}.7z")
+                    plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
+                    self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
+                else:
+                    if debug_mode:
+                        logger.warning(f"DEBUG: 未找到 {game_version} 的下载URL")
+        
+        game_version = "NEKOPARA After"
+        if game_version in game_dirs:
+            # 从配置中获取下载URL
+            url_key = "after.data"
+            if url_key in config and "url" in config[url_key]:
+                url = config[url_key]["url"]
+                
+                game_folder = game_dirs[game_version]
+                if debug_mode:
+                    logger.debug(f"DEBUG: 添加下载任务 {game_version}: {game_folder}")
+                
+                _7z_path = os.path.join(PLUGIN, "after.7z")
+                plugin_path = os.path.join(PLUGIN, GAME_INFO[game_version]["plugin_path"])
+                self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
+            else:
+                if debug_mode:
+                    logger.warning(f"DEBUG: 未找到 {game_version} 的下载URL") 

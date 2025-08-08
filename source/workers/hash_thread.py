@@ -132,23 +132,27 @@ class OfflineHashVerifyThread(QThread):
     """离线模式下验证补丁文件哈希的线程，支持进度更新"""
     
     progress = Signal(int)  # 进度信号，0-100
-    finished = Signal(bool, str)  # 完成信号，(成功/失败, 错误信息)
+    finished = Signal(bool, str, str)  # 完成信号，(成功/失败, 错误信息, 解压后的补丁文件路径)
     
     def __init__(self, game_version, file_path, plugin_hash, main_window=None):
-        """初始化离线哈希验证线程
-        
-        Args:
-            game_version: 游戏版本名称
-            file_path: 补丁压缩包文件路径
-            plugin_hash: 插件哈希值字典
-            main_window: 主窗口实例，用于访问UI和状态
-        """
         super().__init__()
         self.game_version = game_version
         self.file_path = file_path
         self.plugin_hash = plugin_hash
         self.main_window = main_window
+        self.extracted_patch_path = None  # 添加解压后的补丁文件路径
         
+        # 获取预期的哈希值
+        self.expected_hash = None
+        
+        # 直接使用完整游戏名称作为键
+        self.expected_hash = self.plugin_hash.get(game_version, "")
+        
+        # 设置调试模式标志
+        self.debug_mode = False
+        if main_window and hasattr(main_window, 'debug_manager'):
+            self.debug_mode = main_window.debug_manager._is_debug_mode()
+            
     def run(self):
         """运行线程"""
         debug_mode = False
@@ -162,7 +166,7 @@ class OfflineHashVerifyThread(QThread):
         
         if not expected_hash:
             logger.warning(f"DEBUG: 未找到 {self.game_version} 的预期哈希值")
-            self.finished.emit(False, f"未找到 {self.game_version} 的预期哈希值")
+            self.finished.emit(False, f"未找到 {self.game_version} 的预期哈希值", "")
             return
             
         if debug_mode:
@@ -175,7 +179,7 @@ class OfflineHashVerifyThread(QThread):
             if not os.path.exists(self.file_path):
                 if debug_mode:
                     logger.warning(f"DEBUG: 补丁文件不存在: {self.file_path}")
-                self.finished.emit(False, f"补丁文件不存在: {self.file_path}")
+                self.finished.emit(False, f"补丁文件不存在: {self.file_path}", "")
                 return
                 
             # 检查文件大小
@@ -186,7 +190,7 @@ class OfflineHashVerifyThread(QThread):
             if file_size == 0:
                 if debug_mode:
                     logger.warning(f"DEBUG: 补丁文件大小为0，无效文件")
-                self.finished.emit(False, "补丁文件大小为0，无效文件")
+                self.finished.emit(False, "补丁文件大小为0，无效文件", "")
                 return
                 
             # 创建临时目录用于解压文件
@@ -224,7 +228,7 @@ class OfflineHashVerifyThread(QThread):
                         logger.error(f"DEBUG: 解压补丁文件失败: {e}")
                         logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
                         logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
-                    self.finished.emit(False, f"解压补丁文件失败: {str(e)}")
+                    self.finished.emit(False, f"解压补丁文件失败: {str(e)}", "")
                     return
                 
                 # 发送进度信号 - 50%
@@ -261,7 +265,7 @@ class OfflineHashVerifyThread(QThread):
                             logger.debug(f"DEBUG: 目录: {root}")
                             logger.debug(f"DEBUG: 子目录: {dirs}")
                             logger.debug(f"DEBUG: 文件: {files}")
-                    self.finished.emit(False, f"未找到解压后的补丁文件")
+                    self.finished.emit(False, f"未找到解压后的补丁文件", "")
                     return
                 
                 # 发送进度信号 - 70%
@@ -299,15 +303,15 @@ class OfflineHashVerifyThread(QThread):
                         logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
                         logger.debug(f"DEBUG: 实际哈希值: {file_hash}")
                         
-                    self.finished.emit(result, "" if result else "补丁文件哈希验证失败，文件可能已损坏或被篡改")
+                    self.finished.emit(result, "" if result else "补丁文件哈希验证失败，文件可能已损坏或被篡改", patch_file)
                 except Exception as e:
                     if debug_mode:
                         logger.error(f"DEBUG: 计算补丁文件哈希值失败: {e}")
                         logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                    self.finished.emit(False, f"计算补丁文件哈希值失败: {str(e)}")
+                    self.finished.emit(False, f"计算补丁文件哈希值失败: {str(e)}", "")
         except Exception as e:
             if debug_mode:
                 logger.error(f"DEBUG: 验证补丁哈希值失败: {e}")
                 logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
                 logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
-            self.finished.emit(False, f"验证补丁哈希值失败: {str(e)}") 
+            self.finished.emit(False, f"验证补丁哈希值失败: {str(e)}", "") 
