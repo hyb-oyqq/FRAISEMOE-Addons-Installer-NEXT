@@ -75,7 +75,11 @@ class UninstallHandler(QObject):
         if debug_mode:
             logger.debug(f"DEBUG: 卸载功能 - 用户选择了目录: {selected_folder}")
         
-        self.main_window.show_loading_dialog("正在识别游戏目录...")
+        # 使用UI管理器显示加载对话框
+        if hasattr(self.main_window, 'ui_manager'):
+            self.main_window.ui_manager.show_loading_dialog("正在识别游戏目录...")
+        else:
+            logger.warning("无法访问UI管理器，无法显示加载对话框")
         
         self.uninstall_thread = UninstallThread(self, selected_folder)
         self.uninstall_thread.finished.connect(self.on_game_detection_finished)
@@ -83,7 +87,11 @@ class UninstallHandler(QObject):
 
     def on_game_detection_finished(self, game_dirs):
         """游戏识别完成后的回调"""
-        self.main_window.hide_loading_dialog()
+        # 使用UI管理器隐藏加载对话框
+        if hasattr(self.main_window, 'ui_manager'):
+            self.main_window.ui_manager.hide_loading_dialog()
+        else:
+            logger.warning("无法访问UI管理器，无法隐藏加载对话框")
 
         if not game_dirs:
             QMessageBox.information(

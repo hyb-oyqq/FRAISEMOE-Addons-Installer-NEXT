@@ -4,6 +4,7 @@ import datetime
 import sys
 import glob
 import time
+import traceback
 from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
 from config.config import LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_MAX_SIZE, LOG_BACKUP_COUNT, LOG_RETENTION_DAYS
 
@@ -67,6 +68,30 @@ class Logger:
                 self.log = None
         except Exception:
             pass
+
+# 增加异常钩子，确保未捕获的异常也会记录到日志文件中
+def log_uncaught_exceptions(exc_type, exc_value, exc_traceback):
+    """处理未捕获的异常，记录到日志中"""
+    if issubclass(exc_type, KeyboardInterrupt):
+        # 对于键盘中断，使用默认处理
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+        
+    # 获取主日志记录器
+    logger = logging.getLogger('main')
+    
+    # 格式化异常信息
+    lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+    error_message = '未捕获的异常:\n' + ''.join(lines)
+    
+    # 记录到日志中
+    logger.critical(error_message)
+    
+    # 同时也显示在控制台
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+# 设置全局异常处理器
+sys.excepthook = log_uncaught_exceptions
 
 def cleanup_old_logs(retention_days=7):
     """清理超过指定天数的旧日志文件
@@ -147,6 +172,7 @@ def setup_logger(name):
     # 创建更详细的格式器，包括模块名、文件名和行号
     formatter = URLCensorFormatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
     
+    # 设置处理器的格式化器
     console_handler.setFormatter(formatter)
     if main_file_handler:
         main_file_handler.setFormatter(formatter)
@@ -155,5 +181,8 @@ def setup_logger(name):
     logger.addHandler(console_handler)
     if main_file_handler:
         logger.addHandler(main_file_handler)
+    
+    # 确保异常可以被正确记录
+    logger.propagate = True
     
     return logger 
