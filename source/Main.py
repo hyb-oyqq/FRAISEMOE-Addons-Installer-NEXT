@@ -59,4 +59,4 @@ if __name__ == "__main__":
     logger.info("隐私协议已同意，启动主程序")
     window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(app.exec()) 
