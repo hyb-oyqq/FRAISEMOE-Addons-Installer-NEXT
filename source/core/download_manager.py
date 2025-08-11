@@ -109,13 +109,40 @@ class DownloadManager:
                 logger.debug(f"DEBUG: Parsed JSON data: {json.dumps(safe_config, indent=2)}")
 
             urls = {}
+            missing_urls = []
+            
+            # 检查每个游戏版本的URL
             for i in range(4):
                 key = f"vol.{i+1}.data"
                 if key in config_data and "url" in config_data[key]:
                     urls[f"vol{i+1}"] = config_data[key]["url"]
+                else:
+                    missing_urls.append(f"NEKOPARA Vol.{i+1}")
+                    if self.is_debug_mode():
+                        logger.warning(f"DEBUG: 未找到 NEKOPARA Vol.{i+1} 的下载URL")
             
+            # 检查After的URL
             if "after.data" in config_data and "url" in config_data["after.data"]:
                 urls["after"] = config_data["after.data"]["url"]
+            else:
+                missing_urls.append("NEKOPARA After")
+                if self.is_debug_mode():
+                    logger.warning(f"DEBUG: 未找到 NEKOPARA After 的下载URL")
+
+            # 如果有缺失的URL，记录详细信息
+            if missing_urls:
+                if self.is_debug_mode():
+                    logger.warning(f"DEBUG: 以下游戏版本缺少下载URL: {', '.join(missing_urls)}")
+                    logger.warning(f"DEBUG: 当前云端配置中的键: {list(config_data.keys())}")
+                    
+                    # 检查每个游戏数据是否包含url键
+                    for i in range(4):
+                        key = f"vol.{i+1}.data"
+                        if key in config_data:
+                            logger.warning(f"DEBUG: {key} 内容: {list(config_data[key].keys())}")
+                    
+                    if "after.data" in config_data:
+                        logger.warning(f"DEBUG: after.data 内容: {list(config_data['after.data'].keys())}")
 
             if len(urls) != 5:
                 missing_keys_map = {
@@ -128,7 +155,17 @@ class DownloadManager:
                 missing_simple_keys = all_keys - extracted_keys
                 
                 missing_original_keys = [missing_keys_map[k] for k in missing_simple_keys]
-                raise ValueError(f"配置文件缺少必要的键: {', '.join(missing_original_keys)}")
+                
+                # 记录详细的缺失信息
+                if self.is_debug_mode():
+                    logger.warning(f"DEBUG: 缺失的URL键: {missing_original_keys}")
+                    
+                # 如果所有URL都缺失，可能是云端配置问题
+                if len(urls) == 0:
+                    raise ValueError(f"配置文件缺少所有下载URL键: {', '.join(missing_original_keys)}")
+                    
+                # 否则只是部分缺失，可以继续使用已有的URL
+                logger.warning(f"配置文件缺少部分键: {', '.join(missing_original_keys)}")
 
             if self.is_debug_mode():
                 # 创建安全版本的URL字典用于调试输出
@@ -218,9 +255,16 @@ class DownloadManager:
             self.main_window.setEnabled(True)
             self.main_window.ui.start_install_text.setText("开始安装")
             return
+        
+        # 关闭可能存在的哈希校验窗口
+        self.main_window.close_hash_msg_box()
             
         # 显示文件检验窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="pre")
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(
+            check_type="pre",
+            auto_close=True,  # 添加自动关闭参数
+            close_delay=1000  # 1秒后自动关闭
+        )
         
         # 获取安装路径
         install_paths = self.get_install_paths()
@@ -240,9 +284,9 @@ class DownloadManager:
             game_dirs: 识别到的游戏目录
         """
         self.main_window.installed_status = updated_status
-        if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-            self.main_window.hash_msg_box.accept()
-            self.main_window.hash_msg_box = None
+        
+        # 关闭哈希校验窗口
+        self.main_window.close_hash_msg_box()
             
         debug_mode = self.is_debug_mode()
         
@@ -296,96 +340,145 @@ class DownloadManager:
                     logger.info(f"DEBUG: 用户选择不启用被禁用的补丁，这些游戏将被添加到可安装列表")
                 # 用户选择不启用，将这些游戏视为可以安装补丁
                 installable_games.extend(disabled_patch_games)
-
-        # 更新status_message
-        if already_installed_games:
-            status_message = f"已安装补丁的游戏：\n{chr(10).join(already_installed_games)}\n\n"
+                
+        # 如果有可安装的游戏，显示选择对话框
+        if installable_games:
+            # 创建游戏选择对话框
+            dialog = QtWidgets.QDialog(self.main_window)
+            dialog.setWindowTitle(f"选择要安装的游戏 - {APP_NAME}")
+            dialog.setMinimumWidth(400)
+            dialog.setMinimumHeight(300)
             
-        if not installable_games:
+            layout = QtWidgets.QVBoxLayout()
+            
+            # 添加说明标签
+            label = QtWidgets.QLabel("请选择要安装的游戏：")
+            layout.addWidget(label)
+            
+            # 添加已安装游戏的状态提示
+            if already_installed_games:
+                installed_label = QtWidgets.QLabel(status_message)
+                installed_label.setStyleSheet("color: green;")
+                layout.addWidget(installed_label)
+            
+            # 创建列表控件
+            list_widget = QtWidgets.QListWidget()
+            list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.MultiSelection)
+            
+            # 添加可安装的游戏
+            for game in installable_games:
+                item = QtWidgets.QListWidgetItem(game)
+                item.setSelected(True)  # 默认全选
+                list_widget.addItem(item)
+                
+            layout.addWidget(list_widget)
+            
+            # 添加按钮
+            button_layout = QtWidgets.QHBoxLayout()
+            ok_button = QtWidgets.QPushButton("确定")
+            cancel_button = QtWidgets.QPushButton("取消")
+            button_layout.addWidget(ok_button)
+            button_layout.addWidget(cancel_button)
+            layout.addLayout(button_layout)
+            
+            dialog.setLayout(layout)
+            
+            # 连接按钮信号
+            ok_button.clicked.connect(dialog.accept)
+            cancel_button.clicked.connect(dialog.reject)
+            
+            # 显示对话框
+            if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+                selected_games = [item.text() for item in list_widget.selectedItems()]
+                if debug_mode:
+                    logger.debug(f"DEBUG: 用户选择了以下游戏进行安装: {selected_games}")
+                    
+                selected_game_dirs = {game: game_dirs[game] for game in selected_games if game in game_dirs}
+                
+                self.main_window.setEnabled(False)
+
+                # 检查是否处于离线模式
+                is_offline_mode = False
+                if hasattr(self.main_window, 'offline_mode_manager'):
+                    is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
+                    
+                if is_offline_mode:
+                    if debug_mode:
+                        logger.info("DEBUG: 使用离线模式，跳过网络配置获取")
+                    self._fill_offline_download_queue(selected_game_dirs)
+                else:
+                    # 在线模式下，重新获取云端配置
+                    if hasattr(self.main_window, 'fetch_cloud_config'):
+                        if debug_mode:
+                            logger.info("DEBUG: 重新获取云端配置以确保URL最新")
+                        # 重新获取云端配置并继续下载流程
+                        from workers.config_fetch_thread import ConfigFetchThread
+                        self.main_window.config_manager.fetch_cloud_config(
+                            ConfigFetchThread,
+                            lambda data, error: self._continue_download_after_config_fetch(data, error, selected_game_dirs)
+                        )
+                    else:
+                        # 如果无法重新获取配置，使用当前配置
+                        config = self.get_download_url()
+                        self._continue_download_with_config(config, selected_game_dirs)
+            else:
+                if debug_mode:
+                    logger.debug("DEBUG: 用户取消了游戏选择")
+                self.main_window.ui.start_install_text.setText("开始安装")
+        else:
+            # 如果没有可安装的游戏，显示提示
+            if already_installed_games:
+                msg = f"所有游戏已安装补丁，无需重复安装。\n\n已安装的游戏：\n{chr(10).join(already_installed_games)}"
+            else:
+                msg = "未检测到可安装的游戏。"
+                
             QtWidgets.QMessageBox.information(
-                self.main_window, 
-                f"信息 - {APP_NAME}", 
-                f"\n所有检测到的游戏都已安装补丁。\n\n{status_message}"
+                self.main_window,
+                f"通知 - {APP_NAME}",
+                msg
+            )
+            self.main_window.ui.start_install_text.setText("开始安装")
+            
+    def _continue_download_after_config_fetch(self, data, error, selected_game_dirs):
+        """云端配置获取完成后继续下载流程
+        
+        Args:
+            data: 获取到的配置数据
+            error: 错误信息
+            selected_game_dirs: 选择的游戏目录
+        """
+        debug_mode = self.is_debug_mode()
+        
+        if error:
+            if debug_mode:
+                logger.error(f"DEBUG: 重新获取云端配置失败: {error}")
+            # 使用当前配置
+            config = self.get_download_url()
+        else:
+            # 使用新获取的配置
+            self.main_window.cloud_config = data
+            config = self.get_download_url()
+            
+        self._continue_download_with_config(config, selected_game_dirs)
+        
+    def _continue_download_with_config(self, config, selected_game_dirs):
+        """使用配置继续下载流程
+        
+        Args:
+            config: 下载配置
+            selected_game_dirs: 选择的游戏目录
+        """
+        debug_mode = self.is_debug_mode()
+        
+        if not config:
+            QtWidgets.QMessageBox.critical(
+                self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             self.main_window.setEnabled(True)
             self.main_window.ui.start_install_text.setText("开始安装")
             return
-            
-        dialog = QtWidgets.QDialog(self.main_window)
-        dialog.setWindowTitle("选择要安装的游戏")
-        dialog.resize(400, 300)
-        
-        layout = QtWidgets.QVBoxLayout(dialog)
-        
-        if already_installed_games:
-            already_installed_label = QtWidgets.QLabel("已安装补丁的游戏:", dialog)
-            already_installed_label.setFont(QFont(already_installed_label.font().family(), already_installed_label.font().pointSize(), QFont.Weight.Bold))
-            layout.addWidget(already_installed_label)
-            
-            already_installed_list = QtWidgets.QLabel(chr(10).join(already_installed_games), dialog)
-            layout.addWidget(already_installed_list)
-            
-            layout.addSpacing(10)
-        
-        info_label = QtWidgets.QLabel("请选择你需要安装补丁的游戏:", dialog)
-        info_label.setFont(QFont(info_label.font().family(), info_label.font().pointSize(), QFont.Weight.Bold))
-        layout.addWidget(info_label)
-        
-        list_widget = QtWidgets.QListWidget(dialog)
-        list_widget.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
-        for game in installable_games:
-            list_widget.addItem(game)
-        layout.addWidget(list_widget)
-        
-        select_all_btn = QPushButton("全选", dialog)
-        select_all_btn.clicked.connect(lambda: list_widget.selectAll())
-        layout.addWidget(select_all_btn)
-        
-        buttons_layout = QHBoxLayout()
-        ok_button = QPushButton("确定", dialog)
-        cancel_button = QPushButton("取消", dialog)
-        buttons_layout.addWidget(ok_button)
-        buttons_layout.addWidget(cancel_button)
-        layout.addLayout(buttons_layout)
-        
-        ok_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
-        
-        result = dialog.exec()
-        
-        if result != QDialog.DialogCode.Accepted or list_widget.selectedItems() == []:
-            self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
-            return
-            
-        selected_games = [item.text() for item in list_widget.selectedItems()]
-        if debug_mode:
-            logger.debug(f"DEBUG: 用户选择了以下游戏进行安装: {selected_games}")
-            
-        selected_game_dirs = {game: game_dirs[game] for game in selected_games if game in game_dirs}
-        
-        self.main_window.setEnabled(False)
 
-        # 检查是否处于离线模式
-        is_offline_mode = False
-        if hasattr(self.main_window, 'offline_mode_manager'):
-            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
-            
-        if is_offline_mode:
-            if debug_mode:
-                logger.info("DEBUG: 使用离线模式，跳过网络配置获取")
-            self._fill_offline_download_queue(selected_game_dirs)
-        else:
-            config = self.get_download_url()
-            if not config:
-                QtWidgets.QMessageBox.critical(
-                    self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
-                )
-                self.main_window.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("开始安装")
-                return
-
-            self._fill_download_queue(config, selected_game_dirs)
+        self._fill_download_queue(config, selected_game_dirs)
 
         if not self.download_queue:
             # 所有下载任务都已完成，进行后检查
@@ -395,6 +488,11 @@ class DownloadManager:
             self.main_window.patch_detector.after_hash_compare()
             return
         
+        # 检查是否处于离线模式
+        is_offline_mode = False
+        if hasattr(self.main_window, 'offline_mode_manager'):
+            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
+            
         # 如果是离线模式，直接开始下一个下载任务
         if is_offline_mode:
             if debug_mode:

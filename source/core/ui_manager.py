@@ -953,6 +953,10 @@ class UIManager:
             self.main_window.config["offline_mode"] = False
             self.main_window.save_config(self.main_window.config)
             
+            # 重新获取云端配置
+            if hasattr(self.main_window, 'fetch_cloud_config'):
+                self.main_window.fetch_cloud_config()
+                
             # 如果当前版本过低，设置版本警告标志
             if hasattr(self.main_window, 'last_error_message') and self.main_window.last_error_message == "update_required":
                 # 设置版本警告标志

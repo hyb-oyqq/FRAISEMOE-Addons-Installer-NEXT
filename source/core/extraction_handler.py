@@ -2,7 +2,7 @@ import os
 import shutil
 from PySide6 import QtWidgets
 from PySide6.QtWidgets import QMessageBox
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QCoreApplication
 
 from utils.logger import setup_logger
 
@@ -20,6 +20,7 @@ class ExtractionHandler:
         """
         self.main_window = main_window
         self.APP_NAME = main_window.APP_NAME if hasattr(main_window, 'APP_NAME') else ""
+        self.extraction_progress_window = None
         
     def start_extraction(self, _7z_path, game_folder, plugin_path, game_version, extracted_path=None):
         """开始解压任务
@@ -36,19 +37,41 @@ class ExtractionHandler:
         if hasattr(self.main_window, 'offline_mode_manager'):
             is_offline = self.main_window.offline_mode_manager.is_in_offline_mode()
         
-        # 显示解压中的消息窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(
-            check_type="offline_extraction" if is_offline else "extraction", 
-            is_offline=is_offline
-        )
+        # 创建并显示解压进度窗口，替代原来的消息框
+        self.extraction_progress_window = self.main_window.create_extraction_progress_window()
+        self.extraction_progress_window.show()
+        
+        # 确保UI更新
+        QCoreApplication.processEvents()
         
         # 创建并启动解压线程
         self.main_window.extraction_thread = self.main_window.create_extraction_thread(
             _7z_path, game_folder, plugin_path, game_version, extracted_path
         )
+        
+        # 连接进度信号
+        self.main_window.extraction_thread.progress.connect(self.update_extraction_progress)
+        
+        # 连接完成信号
         self.main_window.extraction_thread.finished.connect(self.on_extraction_finished_with_hash_check)
+        
+        # 启动线程
         self.main_window.extraction_thread.start()
         
+    def update_extraction_progress(self, progress, status_text):
+        """更新解压进度
+        
+        Args:
+            progress: 进度百分比
+            status_text: 状态文本
+        """
+        if self.extraction_progress_window and hasattr(self.extraction_progress_window, 'progress_bar'):
+            self.extraction_progress_window.progress_bar.setValue(progress)
+            self.extraction_progress_window.status_label.setText(status_text)
+            
+            # 确保UI更新
+            QCoreApplication.processEvents()
+            
     def on_extraction_finished_with_hash_check(self, success, error_message, game_version):
         """解压完成后进行哈希校验
         
@@ -57,10 +80,10 @@ class ExtractionHandler:
             error_message: 错误信息
             game_version: 游戏版本
         """
-        # 关闭哈希检查窗口
-        if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-            self.main_window.hash_msg_box.close()
-            self.main_window.hash_msg_box = None
+        # 关闭解压进度窗口
+        if self.extraction_progress_window:
+            self.extraction_progress_window.close()
+            self.extraction_progress_window = None
 
         # 如果解压失败，显示错误并询问是否继续
         if not success:
@@ -100,6 +123,10 @@ class ExtractionHandler:
         Args:
             game_version: 游戏版本
         """
+        # 导入所需模块
+        from data.config import GAME_INFO, PLUGIN_HASH
+        from workers.hash_thread import HashThread
+        
         # 获取安装路径
         install_paths = {}
         if hasattr(self.main_window, 'game_detector') and hasattr(self.main_window, 'download_manager'):
@@ -107,7 +134,7 @@ class ExtractionHandler:
                 self.main_window.download_manager.selected_folder
             )
             
-            for game, info in self.main_window.GAME_INFO.items():
+            for game, info in GAME_INFO.items():
                 if game in game_dirs and game == game_version:
                     game_dir = game_dirs[game]
                     install_path = os.path.join(game_dir, os.path.basename(info["install_path"]))
@@ -120,19 +147,30 @@ class ExtractionHandler:
             self.main_window.installed_status[game_version] = True
             self.main_window.download_manager.on_extraction_finished(True)
             return
+        
+        # 关闭可能存在的哈希校验窗口
+        self.main_window.close_hash_msg_box()
             
         # 显示哈希校验窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="post")
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(
+            check_type="post", 
+            auto_close=True,  # 添加自动关闭参数
+            close_delay=1000  # 1秒后自动关闭
+        )
         
-        # 创建并启动哈希线程进行校验
-        self.main_window.hash_thread = self.main_window.create_hash_thread(
+        # 直接创建并启动哈希线程进行校验
+        hash_thread = HashThread(
             "after", 
             install_paths, 
-            self.main_window.plugin_hash, 
-            self.main_window.installed_status
+            PLUGIN_HASH, 
+            self.main_window.installed_status,
+            self.main_window
         )
-        self.main_window.hash_thread.after_finished.connect(self.on_hash_check_finished)
-        self.main_window.hash_thread.start()
+        hash_thread.after_finished.connect(self.on_hash_check_finished)
+        
+        # 保存引用以便后续使用
+        self.hash_thread = hash_thread
+        hash_thread.start()
         
     def on_hash_check_finished(self, result):
         """哈希校验完成后的处理
@@ -140,10 +178,11 @@ class ExtractionHandler:
         Args:
             result: 校验结果，包含通过状态、游戏版本和消息
         """
+        # 导入所需模块
+        from data.config import GAME_INFO
+        
         # 关闭哈希检查窗口
-        if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-            self.main_window.hash_msg_box.close()
-            self.main_window.hash_msg_box = None
+        self.main_window.close_hash_msg_box()
             
         if not result["passed"]:
             # 校验失败，删除已解压的文件并提示重新下载
@@ -160,9 +199,9 @@ class ExtractionHandler:
                     self.main_window.download_manager.selected_folder
                 )
                 
-                if game_version in game_dirs and game_version in self.main_window.GAME_INFO:
+                if game_version in game_dirs and game_version in GAME_INFO:
                     game_dir = game_dirs[game_version]
-                    install_path = os.path.join(game_dir, os.path.basename(self.main_window.GAME_INFO[game_version]["install_path"]))
+                    install_path = os.path.join(game_dir, os.path.basename(GAME_INFO[game_version]["install_path"]))
             
             # 如果找到安装路径，尝试删除已解压的文件
             if install_path and os.path.exists(install_path):
@@ -209,6 +248,7 @@ class ExtractionHandler:
                 self.main_window.download_manager.on_extraction_finished(True)
         else:
             # 校验通过，更新安装状态
+            game_version = result["game"]
             self.main_window.installed_status[game_version] = True
             # 通知DownloadManager继续下一个下载任务
             self.main_window.download_manager.on_extraction_finished(True)

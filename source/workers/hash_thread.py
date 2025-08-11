@@ -4,6 +4,7 @@ import py7zr
 import tempfile
 import traceback
 from PySide6.QtCore import QThread, Signal
+from PySide6.QtWidgets import QApplication
 from utils.logger import setup_logger
 
 # 初始化logger
@@ -166,6 +167,9 @@ class OfflineHashVerifyThread(QThread):
         
         if not expected_hash:
             logger.warning(f"DEBUG: 未找到 {self.game_version} 的预期哈希值")
+            # 确保发送100%进度信号，以便UI更新
+            self.progress.emit(100)
+            QApplication.processEvents()
             self.finished.emit(False, f"未找到 {self.game_version} 的预期哈希值", "")
             return
             
@@ -179,6 +183,9 @@ class OfflineHashVerifyThread(QThread):
             if not os.path.exists(self.file_path):
                 if debug_mode:
                     logger.warning(f"DEBUG: 补丁文件不存在: {self.file_path}")
+                # 确保发送100%进度信号，以便UI更新
+                self.progress.emit(100)
+                QApplication.processEvents()
                 self.finished.emit(False, f"补丁文件不存在: {self.file_path}", "")
                 return
                 
@@ -190,6 +197,9 @@ class OfflineHashVerifyThread(QThread):
             if file_size == 0:
                 if debug_mode:
                     logger.warning(f"DEBUG: 补丁文件大小为0，无效文件")
+                # 确保发送100%进度信号，以便UI更新
+                self.progress.emit(100)
+                QApplication.processEvents()
                 self.finished.emit(False, "补丁文件大小为0，无效文件", "")
                 return
                 
@@ -206,112 +216,192 @@ class OfflineHashVerifyThread(QThread):
                     if debug_mode:
                         logger.debug(f"DEBUG: 开始解压文件: {self.file_path}")
                         
+                    # 确定目标文件名
+                    target_filename = None
+                    if "Vol.1" in self.game_version:
+                        target_filename = "adultsonly.xp3"
+                    elif "Vol.2" in self.game_version:
+                        target_filename = "adultsonly.xp3"
+                    elif "Vol.3" in self.game_version:
+                        target_filename = "update00.int"
+                    elif "Vol.4" in self.game_version:
+                        target_filename = "vol4adult.xp3"
+                    elif "After" in self.game_version:
+                        target_filename = "afteradult.xp3"
+                    
+                    if not target_filename:
+                        if debug_mode:
+                            logger.warning(f"DEBUG: 未知的游戏版本: {self.game_version}")
+                        self.progress.emit(100)
+                        QApplication.processEvents()
+                        self.finished.emit(False, f"未知的游戏版本: {self.game_version}", "")
+                        return
+                        
                     with py7zr.SevenZipFile(self.file_path, mode="r") as archive:
                         # 获取压缩包内文件列表
                         file_list = archive.getnames()
                         if debug_mode:
                             logger.debug(f"DEBUG: 压缩包内文件列表: {file_list}")
                             
-                        # 解压所有文件
-                        archive.extractall(path=temp_dir)
+                        # 查找目标文件
+                        target_file_in_archive = None
+                        for file_path in file_list:
+                            if target_filename in file_path:
+                                target_file_in_archive = file_path
+                                break
+                        
+                        if not target_file_in_archive:
+                            if debug_mode:
+                                logger.warning(f"DEBUG: 在压缩包中未找到目标文件: {target_filename}")
+                            # 尝试查找可能的替代文件
+                            alternative_files = []
+                            for file_path in file_list:
+                                if file_path.endswith('.xp3') or file_path.endswith('.int'):
+                                    alternative_files.append(file_path)
+                            
+                            if alternative_files:
+                                if debug_mode:
+                                    logger.debug(f"DEBUG: 找到可能的替代文件: {alternative_files}")
+                                target_file_in_archive = alternative_files[0]
+                            else:
+                                # 如果找不到任何替代文件，解压全部文件
+                                if debug_mode:
+                                    logger.debug(f"DEBUG: 未找到任何替代文件，解压全部文件")
+                                archive.extractall(path=temp_dir)
+                                
+                                # 尝试在解压后的目录中查找目标文件
+                                for root, dirs, files in os.walk(temp_dir):
+                                    for file in files:
+                                        if file.endswith('.xp3') or file.endswith('.int'):
+                                            patch_file = os.path.join(root, file)
+                                            if debug_mode:
+                                                logger.debug(f"DEBUG: 找到可能的补丁文件: {patch_file}")
+                                            break
+                                    if patch_file:
+                                        break
+                                
+                                if not patch_file:
+                                    if debug_mode:
+                                        logger.warning(f"DEBUG: 未找到解压后的补丁文件")
+                                    self.progress.emit(100)
+                                    QApplication.processEvents()
+                                    self.finished.emit(False, "未找到解压后的补丁文件", "")
+                                    return
+                        else:
+                            # 只解压目标文件
+                            if debug_mode:
+                                logger.debug(f"DEBUG: 解压目标文件: {target_file_in_archive}")
+                            archive.extract(path=temp_dir, targets=[target_file_in_archive])
+                            patch_file = os.path.join(temp_dir, target_file_in_archive)
+                        
+                        # 发送进度信号 - 50%
+                        self.progress.emit(50)
+                        
+                        # 如果还没有设置patch_file，尝试查找
+                        if not 'patch_file' in locals():
+                            if "Vol.1" in self.game_version:
+                                patch_file = os.path.join(temp_dir, "vol.1", "adultsonly.xp3")
+                            elif "Vol.2" in self.game_version:
+                                patch_file = os.path.join(temp_dir, "vol.2", "adultsonly.xp3")
+                            elif "Vol.3" in self.game_version:
+                                patch_file = os.path.join(temp_dir, "vol.3", "update00.int")
+                            elif "Vol.4" in self.game_version:
+                                patch_file = os.path.join(temp_dir, "vol.4", "vol4adult.xp3")
+                            elif "After" in self.game_version:
+                                patch_file = os.path.join(temp_dir, "after", "afteradult.xp3")
+                        
+                        if not os.path.exists(patch_file):
+                            if debug_mode:
+                                logger.warning(f"DEBUG: 未找到解压后的补丁文件: {patch_file}")
+                                # 尝试查找可能的替代文件
+                                alternative_files = []
+                                for root, dirs, files in os.walk(temp_dir):
+                                    for file in files:
+                                        if file.endswith('.xp3') or file.endswith('.int'):
+                                            alternative_files.append(os.path.join(root, file))
+                                if alternative_files:
+                                    logger.debug(f"DEBUG: 找到可能的替代文件: {alternative_files}")
+                                    patch_file = alternative_files[0]
+                                else:
+                                    # 检查解压目录结构
+                                    logger.debug(f"DEBUG: 检查解压目录结构:")
+                                    for root, dirs, files in os.walk(temp_dir):
+                                        logger.debug(f"DEBUG: 目录: {root}")
+                                        logger.debug(f"DEBUG: 子目录: {dirs}")
+                                        logger.debug(f"DEBUG: 文件: {files}")
+                            
+                            if not os.path.exists(patch_file):
+                                # 确保发送100%进度信号，以便UI更新
+                                self.progress.emit(100)
+                                QApplication.processEvents()
+                                self.finished.emit(False, f"未找到解压后的补丁文件", "")
+                                return
+                        
+                        # 发送进度信号 - 70%
+                        self.progress.emit(70)
                         
                         if debug_mode:
-                            logger.debug(f"DEBUG: 解压完成")
-                            # 列出解压后的文件
-                            extracted_files = []
-                            for root, dirs, files in os.walk(temp_dir):
-                                for file in files:
-                                    extracted_files.append(os.path.join(root, file))
-                            logger.debug(f"DEBUG: 解压后的文件列表: {extracted_files}")
+                            logger.debug(f"DEBUG: 找到解压后的补丁文件: {patch_file}")
+                            
+                        # 计算补丁文件哈希值
+                        try:
+                            # 读取文件内容并计算哈希值，同时更新进度
+                            file_size = os.path.getsize(patch_file)
+                            chunk_size = 1024 * 1024  # 1MB
+                            hash_obj = hashlib.sha256()
+                            
+                            with open(patch_file, "rb") as f:
+                                bytes_read = 0
+                                while chunk := f.read(chunk_size):
+                                    hash_obj.update(chunk)
+                                    bytes_read += len(chunk)
+                                    # 计算进度 (70-95%)
+                                    progress = 70 + int(25 * bytes_read / file_size)
+                                    self.progress.emit(min(95, progress))
+                            
+                            file_hash = hash_obj.hexdigest()
+                            
+                            # 比较哈希值
+                            result = file_hash.lower() == expected_hash.lower()
+                            
+                            # 发送进度信号 - 100%
+                            self.progress.emit(100)
+                            # 确保UI更新
+                            QApplication.processEvents()
+                            
+                            if debug_mode:
+                                logger.debug(f"DEBUG: 补丁文件 {patch_file} 哈希值验证: {'成功' if result else '失败'}")
+                                logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
+                                logger.debug(f"DEBUG: 实际哈希值: {file_hash}")
+                                
+                            # 将验证结果和解压后的文件路径传递回去
+                            # 注意：由于使用了临时目录，此路径在函数返回后将不再有效
+                            # 但这里返回的路径只是用于标识验证成功，实际安装时会重新解压
+                            self.finished.emit(result, "" if result else "补丁文件哈希验证失败，文件可能已损坏或被篡改", patch_file if result else "")
+                        except Exception as e:
+                            if debug_mode:
+                                logger.error(f"DEBUG: 计算补丁文件哈希值失败: {e}")
+                                logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
+                            # 确保发送100%进度信号，以便UI更新
+                            self.progress.emit(100)
+                            QApplication.processEvents()
+                            self.finished.emit(False, f"计算补丁文件哈希值失败: {str(e)}", "")
                 except Exception as e:
                     if debug_mode:
                         logger.error(f"DEBUG: 解压补丁文件失败: {e}")
                         logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
                         logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
+                    # 确保发送100%进度信号，以便UI更新
+                    self.progress.emit(100)
+                    QApplication.processEvents()
                     self.finished.emit(False, f"解压补丁文件失败: {str(e)}", "")
                     return
-                
-                # 发送进度信号 - 50%
-                self.progress.emit(50)
-                
-                # 获取补丁文件路径
-                patch_file = None
-                if "Vol.1" in self.game_version:
-                    patch_file = os.path.join(temp_dir, "vol.1", "adultsonly.xp3")
-                elif "Vol.2" in self.game_version:
-                    patch_file = os.path.join(temp_dir, "vol.2", "adultsonly.xp3")
-                elif "Vol.3" in self.game_version:
-                    patch_file = os.path.join(temp_dir, "vol.3", "update00.int")
-                elif "Vol.4" in self.game_version:
-                    patch_file = os.path.join(temp_dir, "vol.4", "vol4adult.xp3")
-                elif "After" in self.game_version:
-                    patch_file = os.path.join(temp_dir, "after", "afteradult.xp3")
-                
-                if not patch_file or not os.path.exists(patch_file):
-                    if debug_mode:
-                        logger.warning(f"DEBUG: 未找到解压后的补丁文件: {patch_file}")
-                        # 尝试查找可能的替代文件
-                        alternative_files = []
-                        for root, dirs, files in os.walk(temp_dir):
-                            for file in files:
-                                if file.endswith('.xp3') or file.endswith('.int'):
-                                    alternative_files.append(os.path.join(root, file))
-                        if alternative_files:
-                            logger.debug(f"DEBUG: 找到可能的替代文件: {alternative_files}")
-                        
-                        # 检查解压目录结构
-                        logger.debug(f"DEBUG: 检查解压目录结构:")
-                        for root, dirs, files in os.walk(temp_dir):
-                            logger.debug(f"DEBUG: 目录: {root}")
-                            logger.debug(f"DEBUG: 子目录: {dirs}")
-                            logger.debug(f"DEBUG: 文件: {files}")
-                    self.finished.emit(False, f"未找到解压后的补丁文件", "")
-                    return
-                
-                # 发送进度信号 - 70%
-                self.progress.emit(70)
-                
-                if debug_mode:
-                    logger.debug(f"DEBUG: 找到解压后的补丁文件: {patch_file}")
-                    
-                # 计算补丁文件哈希值
-                try:
-                    # 读取文件内容并计算哈希值，同时更新进度
-                    file_size = os.path.getsize(patch_file)
-                    chunk_size = 1024 * 1024  # 1MB
-                    hash_obj = hashlib.sha256()
-                    
-                    with open(patch_file, "rb") as f:
-                        bytes_read = 0
-                        while chunk := f.read(chunk_size):
-                            hash_obj.update(chunk)
-                            bytes_read += len(chunk)
-                            # 计算进度 (70-95%)
-                            progress = 70 + int(25 * bytes_read / file_size)
-                            self.progress.emit(min(95, progress))
-                    
-                    file_hash = hash_obj.hexdigest()
-                    
-                    # 比较哈希值
-                    result = file_hash.lower() == expected_hash.lower()
-                    
-                    # 发送进度信号 - 100%
-                    self.progress.emit(100)
-                    
-                    if debug_mode:
-                        logger.debug(f"DEBUG: 补丁文件 {patch_file} 哈希值验证: {'成功' if result else '失败'}")
-                        logger.debug(f"DEBUG: 预期哈希值: {expected_hash}")
-                        logger.debug(f"DEBUG: 实际哈希值: {file_hash}")
-                        
-                    self.finished.emit(result, "" if result else "补丁文件哈希验证失败，文件可能已损坏或被篡改", patch_file)
-                except Exception as e:
-                    if debug_mode:
-                        logger.error(f"DEBUG: 计算补丁文件哈希值失败: {e}")
-                        logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                    self.finished.emit(False, f"计算补丁文件哈希值失败: {str(e)}", "")
         except Exception as e:
             if debug_mode:
                 logger.error(f"DEBUG: 验证补丁哈希值失败: {e}")
                 logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
                 logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
+            # 确保发送100%进度信号，以便UI更新
+            self.progress.emit(100)
+            QApplication.processEvents()
             self.finished.emit(False, f"验证补丁哈希值失败: {str(e)}", "") 

@@ -7,7 +7,7 @@ import webbrowser
 
 from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer, Qt, QPoint, QRect, QSize
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect, QDialog, QVBoxLayout, QProgressBar, QLabel
 from PySide6.QtGui import QPalette, QColor, QPainterPath, QRegion, QFont
 from PySide6.QtGui import QAction # Added for menu actions
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QProgressBar, QLabel # Added for progress window
@@ -32,6 +32,7 @@ from core import (
 from core.ipv6_manager import IPv6Manager
 from handlers import PatchToggleHandler, UninstallHandler
 from utils.logger import setup_logger
+from core.patch_detector import PatchDetector
 
 # 初始化logger
 logger = setup_logger("main_window")
@@ -61,6 +62,11 @@ class MainWindow(QMainWindow):
         # 初始化工具类
         self.hash_manager = HashManager(BLOCK_SIZE)
         self.admin_privileges = AdminPrivileges()
+        
+        # 初始化哈希校验窗口引用
+        self.hash_msg_box = None
+        self.loading_dialog = None
+        self.patch_detector = PatchDetector(self)
         
         # 初始化各种管理器 - 调整初始化顺序，避免循环依赖
         # 1. 首先创建必要的基础管理器
@@ -108,7 +114,6 @@ class MainWindow(QMainWindow):
         self.config_valid = False  # 添加配置有效标志
         self.patch_manager.initialize_status()
         self.installed_status = self.patch_manager.get_status()  # 获取初始化后的状态
-        self.hash_msg_box = None
         self.last_error_message = ""  # 添加错误信息记录
         self.version_warning = False  # 添加版本警告标志
         self.install_button_enabled = True  # 默认启用安装按钮
@@ -367,6 +372,34 @@ class MainWindow(QMainWindow):
         
         return progress_window
         
+    def create_extraction_progress_window(self):
+        """创建解压进度窗口
+        
+        Returns:
+            QDialog: 解压进度窗口实例
+        """
+        progress_window = QDialog(self)
+        progress_window.setWindowTitle(f"解压进度 - {APP_NAME}")
+        progress_window.setFixedSize(400, 150)
+        
+        layout = QVBoxLayout()
+        
+        # 添加进度条
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, 100)
+        progress_bar.setValue(0)
+        layout.addWidget(progress_bar)
+        
+        # 添加标签
+        status_label = QLabel("准备解压...")
+        layout.addWidget(status_label)
+        
+        progress_window.setLayout(layout)
+        progress_window.progress_bar = progress_bar
+        progress_window.status_label = status_label
+        
+        return progress_window
+        
     def create_extraction_thread(self, _7z_path, game_folder, plugin_path, game_version, extracted_path=None):
         """创建解压线程
         
@@ -381,6 +414,26 @@ class MainWindow(QMainWindow):
             ExtractionThread: 解压线程实例
         """
         return ExtractionThread(_7z_path, game_folder, plugin_path, game_version, self, extracted_path)
+        
+    def create_hash_thread(self, mode, install_paths, plugin_hash=None, installed_status=None):
+        """创建哈希校验线程
+        
+        Args:
+            mode: 校验模式，"pre"或"after"
+            install_paths: 安装路径字典
+            plugin_hash: 插件哈希值字典，如果为None则使用self.plugin_hash
+            installed_status: 安装状态字典，如果为None则使用self.installed_status
+            
+        Returns:
+            HashThread: 哈希校验线程实例
+        """
+        if plugin_hash is None:
+            plugin_hash = PLUGIN_HASH
+            
+        if installed_status is None:
+            installed_status = self.installed_status
+            
+        return HashThread(mode, install_paths, plugin_hash, installed_status, self)
         
     def show_result(self):
         """显示安装结果，调用patch_manager的show_result方法"""
@@ -516,57 +569,20 @@ class MainWindow(QMainWindow):
                         # 重试获取配置
                         self.fetch_cloud_config()
         else:
-            # 按钮处于"开始安装"状态，正常执行安装流程
-            # 检查是否处于离线模式
-            if is_offline_mode:
-                # 如果是离线模式，使用离线安装流程
-                # 先选择游戏目录
+            if self.offline_mode_manager.is_in_offline_mode():
                 self.selected_folder = QtWidgets.QFileDialog.getExistingDirectory(
                     self, f"选择游戏所在【上级目录】 {APP_NAME}"
                 )
                 if not self.selected_folder:
-                    QtWidgets.QMessageBox.warning(
-                        self, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n"
-                    )
+                    QtWidgets.QMessageBox.warning(self, f"通知 - {APP_NAME}", "\n未选择任何目录,请重新选择\n")
                     return
                 
-                # 保存选择的目录到下载管理器
                 self.download_manager.selected_folder = self.selected_folder
-                
-                # 设置按钮状态
-                self.ui.start_install_text.setText("正在安装")
+                self.show_loading_dialog("正在识别游戏目录...")
                 self.setEnabled(False)
-                
-                # 清除游戏检测器的目录缓存
-                if hasattr(self, 'game_detector') and hasattr(self.game_detector, 'clear_directory_cache'):
-                    self.game_detector.clear_directory_cache()
-                
-                # 识别游戏目录
-                game_dirs = self.game_detector.identify_game_directories_improved(self.selected_folder)
-                
-                if not game_dirs:
-                    self.last_error_message = "directory_not_found"
-                    QtWidgets.QMessageBox.warning(
-                        self, 
-                        f"目录错误 - {APP_NAME}", 
-                        "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
-                    )
-                    self.setEnabled(True)
-                    self.ui.start_install_text.setText("开始安装")
-                    return
-                
-                # 显示文件检验窗口
-                self.hash_msg_box = self.hash_manager.hash_pop_window(check_type="pre", is_offline=True)
-                
-                # 获取安装路径
-                install_paths = self.download_manager.get_install_paths()
-                
-                # 创建并启动哈希线程进行预检查
-                self.hash_thread = self.patch_detector.create_hash_thread("pre", install_paths)
-                self.hash_thread.pre_finished.connect(
-                    lambda updated_status: self.patch_detector.on_offline_pre_hash_finished(updated_status, game_dirs)
-                )
-                self.hash_thread.start()
+
+                # 异步识别游戏目录
+                self.game_detector.identify_game_directories_async(self.selected_folder, self.on_game_directories_identified)
             else:
                 # 在线模式下，检查版本是否过低
                 if hasattr(self, 'version_warning') and self.version_warning:
@@ -581,6 +597,61 @@ class MainWindow(QMainWindow):
                     # 版本正常，使用原有的下载流程
                     self.download_manager.file_dialog()
 
+    def show_loading_dialog(self, message):
+        """显示加载对话框"""
+        if not self.loading_dialog:
+            self.loading_dialog = QDialog(self)
+            self.loading_dialog.setWindowTitle(f"请稍候 - {APP_NAME}")
+            self.loading_dialog.setFixedSize(300, 100)
+            self.loading_dialog.setModal(True)
+            layout = QVBoxLayout()
+            self.loading_label = QLabel(message)
+            self.loading_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.loading_label)
+            self.loading_dialog.setLayout(layout)
+        else:
+            self.loading_label.setText(message)
+        
+        self.loading_dialog.show()
+        QtWidgets.QApplication.processEvents()
+
+    def hide_loading_dialog(self):
+        """隐藏加载对话框"""
+        if self.loading_dialog:
+            self.loading_dialog.hide()
+            self.loading_dialog = None
+
+    def on_game_directories_identified(self, game_dirs):
+        """游戏目录识别完成后的回调"""
+        self.hide_loading_dialog()
+
+        if not game_dirs:
+            self.setEnabled(True)
+            self.ui.start_install_text.setText("开始安装")
+            QtWidgets.QMessageBox.warning(
+                self, 
+                f"目录错误 - {APP_NAME}", 
+                "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
+            )
+            return
+
+        self.show_loading_dialog("正在检查补丁状态...")
+        
+        install_paths = self.download_manager.get_install_paths()
+        
+        # 使用异步方式进行哈希预检查
+        hash_thread = self.patch_detector.create_hash_thread("pre", install_paths)
+        hash_thread.pre_finished.connect(
+            lambda updated_status: self.on_pre_hash_finished(updated_status, game_dirs)
+        )
+        hash_thread.start()
+
+    def on_pre_hash_finished(self, updated_status, game_dirs):
+        """哈希预检查完成后的回调"""
+        self.hide_loading_dialog()
+        self.setEnabled(True)
+        self.patch_detector.on_offline_pre_hash_finished(updated_status, game_dirs)
+        
     # 移除on_offline_pre_hash_finished方法
 
     def check_and_set_offline_mode(self):
@@ -642,6 +713,17 @@ class MainWindow(QMainWindow):
                 
             logger.error(f"错误: 检查离线模式时发生异常: {e}")
             return False
+
+    def close_hash_msg_box(self):
+        """关闭哈希校验窗口，确保在创建新窗口前关闭旧窗口"""
+        if hasattr(self, 'hash_msg_box') and self.hash_msg_box:
+            try:
+                if self.hash_msg_box.isVisible():
+                    self.hash_msg_box.close()
+                    QtWidgets.QApplication.processEvents()  # 确保UI更新，窗口真正关闭
+            except Exception as e:
+                logger.error(f"关闭哈希校验窗口时发生错误: {e}")
+            self.hash_msg_box = None
 
 
 

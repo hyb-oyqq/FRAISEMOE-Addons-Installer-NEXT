@@ -1,6 +1,20 @@
+from PySide6.QtCore import QThread, Signal
 import os
 import re
 from utils.logger import setup_logger
+
+class GameDetectionThread(QThread):
+    """用于在后台线程中执行游戏目录识别的线程"""
+    finished = Signal(dict)
+
+    def __init__(self, detector_func, selected_folder):
+        super().__init__()
+        self.detector_func = detector_func
+        self.selected_folder = selected_folder
+
+    def run(self):
+        result = self.detector_func(self.selected_folder)
+        self.finished.emit(result)
 
 class GameDetector:
     """游戏检测器，用于识别游戏目录和版本"""
@@ -16,6 +30,17 @@ class GameDetector:
         self.debug_manager = debug_manager
         self.directory_cache = {}  # 添加目录缓存
         self.logger = setup_logger("game_detector")
+        self.detection_thread = None
+        
+    def identify_game_directories_async(self, selected_folder, callback):
+        """异步识别游戏目录"""
+        def on_finished(game_dirs):
+            callback(game_dirs)
+            self.detection_thread = None
+
+        self.detection_thread = GameDetectionThread(self.identify_game_directories_improved, selected_folder)
+        self.detection_thread.finished.connect(on_finished)
+        self.detection_thread.start()
         
     def _is_debug_mode(self):
         """检查是否处于调试模式

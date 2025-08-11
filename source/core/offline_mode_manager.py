@@ -322,15 +322,13 @@ class OfflineModeManager:
         debug_mode = self._is_debug_mode()
         
         # 导入所需模块
-        from data.config import GAME_INFO
+        from data.config import GAME_INFO, PLUGIN
         
         # 存储结果到对话框，以便在exec()返回后获取
         dialog.hash_result = result
         
         # 关闭哈希验证窗口
-        if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-            self.main_window.hash_msg_box.close()
-            self.main_window.hash_msg_box = None
+        self.main_window.close_hash_msg_box()
             
         if not result:
             # 哈希验证失败
@@ -348,78 +346,110 @@ class OfflineModeManager:
             self.process_next_offline_install_task(install_tasks)
             return
             
-        # 哈希验证成功，直接进行安装（复制文件）
+        # 哈希验证成功，直接进行安装
         if debug_mode:
-            logger.debug(f"DEBUG: 哈希验证成功，直接进行安装")
-            if extracted_path:
-                logger.debug(f"DEBUG: 使用已解压的补丁文件: {extracted_path}")
+            logger.debug(f"DEBUG: 哈希验证成功，开始安装")
                 
         # 显示安装进度窗口
         self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="offline_installation", is_offline=True)
         
         try:
-            # 直接复制已解压的文件到游戏目录
+            # 确保游戏目录存在
             os.makedirs(game_folder, exist_ok=True)
             
-            # 获取目标文件路径
-            target_file = None
+            # 根据游戏版本确定目标文件名
+            target_filename = None
             if "Vol.1" in game_version:
-                target_file = os.path.join(game_folder, "adultsonly.xp3")
+                target_filename = "adultsonly.xp3"
             elif "Vol.2" in game_version:
-                target_file = os.path.join(game_folder, "adultsonly.xp3")
+                target_filename = "adultsonly.xp3"
             elif "Vol.3" in game_version:
-                target_file = os.path.join(game_folder, "update00.int")
+                target_filename = "update00.int"
             elif "Vol.4" in game_version:
-                target_file = os.path.join(game_folder, "vol4adult.xp3")
+                target_filename = "vol4adult.xp3"
             elif "After" in game_version:
-                target_file = os.path.join(game_folder, "afteradult.xp3")
+                target_filename = "afteradult.xp3"
                 
-            if not target_file:
+            if not target_filename:
                 raise ValueError(f"未知的游戏版本: {game_version}")
-                
-            # 复制文件
-            shutil.copy2(extracted_path, target_file)
             
-            # 对于NEKOPARA After，还需要复制签名文件
-            if game_version == "NEKOPARA After":
-                # 从已解压文件的目录中获取签名文件
-                extracted_dir = os.path.dirname(extracted_path)
-                sig_filename = os.path.basename(GAME_INFO[game_version]["sig_path"])
-                sig_path = os.path.join(extracted_dir, sig_filename)
-                
-                # 如果签名文件存在，则复制它
-                if os.path.exists(sig_path):
-                    shutil.copy(sig_path, game_folder)
-                else:
-                    # 如果签名文件不存在，则使用原始路径
-                    sig_path = os.path.join(PLUGIN, GAME_INFO[game_version]["sig_path"])
-                    shutil.copy(sig_path, game_folder)
-                    
-            # 更新安装状态
-            self.main_window.installed_status[game_version] = True
+            # 直接解压文件到游戏目录
+            import py7zr
             
-            # 添加到已安装游戏列表
-            if game_version not in self.installed_games:
-                self.installed_games.append(game_version)
-                
             if debug_mode:
-                logger.debug(f"DEBUG: 成功安装 {game_version} 补丁文件")
+                logger.debug(f"DEBUG: 直接解压文件 {_7z_path} 到游戏目录 {game_folder}")
+            
+            # 解压文件
+            with py7zr.SevenZipFile(_7z_path, mode="r") as archive:
+                # 获取压缩包内的文件列表
+                file_list = archive.getnames()
+                if debug_mode:
+                    logger.debug(f"DEBUG: 压缩包内文件列表: {file_list}")
                 
-            # 关闭安装进度窗口
-            if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-                self.main_window.hash_msg_box.close()
-                self.main_window.hash_msg_box = None
+                # 解析压缩包内的文件结构
+                target_file_in_archive = None
+                for file_path in file_list:
+                    if target_filename in file_path:
+                        target_file_in_archive = file_path
+                        break
                 
-            # 继续下一个任务
-            self.process_next_offline_install_task(install_tasks)
+                if not target_file_in_archive:
+                    if debug_mode:
+                        logger.warning(f"DEBUG: 在压缩包中未找到目标文件 {target_filename}")
+                    raise FileNotFoundError(f"在压缩包中未找到目标文件 {target_filename}")
+                
+                # 准备解压特定文件到游戏目录
+                target_path = os.path.join(game_folder, target_filename)
+                
+                # 创建一个临时目录用于解压单个文件
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    # 解压特定文件到临时目录
+                    archive.extract(path=temp_dir, targets=[target_file_in_archive])
+                    
+                    # 找到解压后的文件
+                    extracted_file_path = os.path.join(temp_dir, target_file_in_archive)
+                    
+                    # 复制到目标位置
+                    shutil.copy2(extracted_file_path, target_path)
+                    
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 已解压并复制文件到 {target_path}")
+                    
+                    # 对于NEKOPARA After，还需要复制签名文件
+                    if game_version == "NEKOPARA After":
+                        sig_filename = f"{target_filename}.sig"
+                        sig_file_in_archive = None
+                        
+                        # 查找签名文件
+                        for file_path in file_list:
+                            if sig_filename in file_path:
+                                sig_file_in_archive = file_path
+                                break
+                        
+                        if sig_file_in_archive:
+                            # 解压签名文件
+                            archive.extract(path=temp_dir, targets=[sig_file_in_archive])
+                            extracted_sig_path = os.path.join(temp_dir, sig_file_in_archive)
+                            sig_target = os.path.join(game_folder, sig_filename)
+                            shutil.copy2(extracted_sig_path, sig_target)
+                            
+                            if debug_mode:
+                                logger.debug(f"DEBUG: 已解压并复制签名文件到 {sig_target}")
+                        else:
+                            if debug_mode:
+                                logger.warning(f"DEBUG: 未找到签名文件 {sig_filename}")
+            
+            # 进行安装后的哈希校验
+            self._perform_hash_check(game_version, install_tasks)
+            
         except Exception as e:
             if debug_mode:
                 logger.error(f"DEBUG: 安装补丁文件失败: {e}")
+                import traceback
+                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
                 
             # 关闭安装进度窗口
-            if self.main_window.hash_msg_box and self.main_window.hash_msg_box.isVisible():
-                self.main_window.hash_msg_box.close()
-                self.main_window.hash_msg_box = None
+            self.main_window.close_hash_msg_box()
                 
             # 显示错误消息
             msgbox_frame(
@@ -431,6 +461,130 @@ class OfflineModeManager:
             # 继续下一个任务
             self.process_next_offline_install_task(install_tasks)
             
+    def _perform_hash_check(self, game_version, install_tasks):
+        """安装完成后进行哈希校验
+        
+        Args:
+            game_version: 游戏版本
+            install_tasks: 剩余的安装任务列表
+        """
+        debug_mode = self._is_debug_mode()
+        
+        # 导入所需模块
+        from data.config import GAME_INFO, PLUGIN_HASH
+        from workers.hash_thread import HashThread
+        
+        # 获取安装路径
+        install_paths = {}
+        game_dirs = self.main_window.game_detector.identify_game_directories_improved(
+            self.main_window.download_manager.selected_folder
+        )
+        
+        for game, info in GAME_INFO.items():
+            if game in game_dirs and game == game_version:
+                game_dir = game_dirs[game]
+                install_path = os.path.join(game_dir, os.path.basename(info["install_path"]))
+                install_paths[game] = install_path
+                break
+        
+        if not install_paths:
+            # 如果找不到安装路径，直接认为安装成功
+            logger.warning(f"未找到 {game_version} 的安装路径，跳过哈希校验")
+            self.main_window.installed_status[game_version] = True
+            
+            # 添加到已安装游戏列表
+            if game_version not in self.installed_games:
+                self.installed_games.append(game_version)
+                
+            # 关闭安装进度窗口
+            self.main_window.close_hash_msg_box()
+                
+            # 继续下一个任务
+            self.process_next_offline_install_task(install_tasks)
+            return
+            
+        # 关闭可能存在的哈希校验窗口，然后创建新窗口
+        self.main_window.close_hash_msg_box()
+        
+        # 显示哈希校验窗口
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="post", is_offline=True)
+        
+        # 直接创建并启动哈希线程进行校验，而不是通过主窗口
+        hash_thread = HashThread(
+            "after", 
+            install_paths, 
+            PLUGIN_HASH, 
+            self.main_window.installed_status,
+            self.main_window
+        )
+        hash_thread.after_finished.connect(
+            lambda result: self._on_hash_check_finished(result, game_version, install_tasks)
+        )
+        
+        # 保存引用以便后续使用
+        self.hash_thread = hash_thread
+        hash_thread.start()
+        
+    def _on_hash_check_finished(self, result, game_version, install_tasks):
+        """哈希校验完成后的处理
+        
+        Args:
+            result: 校验结果，包含通过状态、游戏版本和消息
+            game_version: 游戏版本
+            install_tasks: 剩余的安装任务列表
+        """
+        debug_mode = self._is_debug_mode()
+        
+        # 关闭哈希检查窗口
+        self.main_window.close_hash_msg_box()
+            
+        if not result["passed"]:
+            # 校验失败，删除已解压的文件并提示重新安装
+            error_message = result["message"]
+            
+            # 获取安装路径
+            install_path = None
+            game_dirs = self.main_window.game_detector.identify_game_directories_improved(
+                self.main_window.download_manager.selected_folder
+            )
+            
+            from data.config import GAME_INFO
+            if game_version in game_dirs and game_version in GAME_INFO:
+                game_dir = game_dirs[game_version]
+                install_path = os.path.join(game_dir, os.path.basename(GAME_INFO[game_version]["install_path"]))
+            
+            # 如果找到安装路径，尝试删除已解压的文件
+            if install_path and os.path.exists(install_path):
+                try:
+                    os.remove(install_path)
+                    logger.info(f"已删除校验失败的文件: {install_path}")
+                except Exception as e:
+                    logger.error(f"删除文件失败: {e}")
+            
+            # 显示错误消息
+            msgbox_frame(
+                f"校验失败 - {self.app_name}",
+                f"{error_message}\n\n跳过此游戏的安装。",
+                QMessageBox.StandardButton.Ok
+            ).exec()
+            
+            # 更新安装状态
+            self.main_window.installed_status[game_version] = False
+        else:
+            # 校验通过，更新安装状态
+            self.main_window.installed_status[game_version] = True
+            
+            # 添加到已安装游戏列表
+            if game_version not in self.installed_games:
+                self.installed_games.append(game_version)
+                
+            # 显示安装成功消息
+            if debug_mode:
+                logger.debug(f"DEBUG: {game_version} 安装成功并通过哈希校验")
+        
+        # 继续处理下一个任务
+        self.process_next_offline_install_task(install_tasks)
+        
     def _on_extraction_finished_with_hash_check(self, success, error_message, game_version, install_tasks):
         """解压完成后进行哈希校验
         
@@ -692,67 +846,96 @@ class OfflineModeManager:
             logger.debug(f"DEBUG: 补丁文件: {patch_file}")
             logger.debug(f"DEBUG: 游戏目录: {game_folder}")
             
-        # 确保目标目录存在
-        os.makedirs(os.path.dirname(_7z_path), exist_ok=True)
+        # 显示安装进度窗口
+        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="offline_installation", is_offline=True)
         
         try:
-            # 复制补丁文件到缓存目录
-            shutil.copy2(patch_file, _7z_path)
+            # 确保游戏目录存在
+            os.makedirs(game_folder, exist_ok=True)
             
+            # 从GAME_INFO获取目标文件名
+            target_filename = os.path.basename(GAME_INFO[game_version]["install_path"])
+            if not target_filename:
+                raise ValueError(f"未知的游戏版本或配置错误: {game_version}")
+
+            # 直接从源7z文件解压
+            with py7zr.SevenZipFile(patch_file, mode="r") as archive:
+                file_list = archive.getnames()
+                target_file_in_archive = None
+                
+                # 查找压缩包中的目标文件
+                for f_path in file_list:
+                    if target_filename in f_path:
+                        target_file_in_archive = f_path
+                        break
+
+                if not target_file_in_archive:
+                    raise FileNotFoundError(f"在压缩包 {os.path.basename(patch_file)} 中未找到目标文件 {target_filename}")
+
+                # 使用临时目录来解压单个文件
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    archive.extract(path=temp_dir, targets=[target_file_in_archive])
+                    extracted_file_path = os.path.join(temp_dir, target_file_in_archive)
+                    
+                    # 最终目标路径
+                    target_path = os.path.join(game_folder, target_filename)
+                    
+                    # 复制到游戏目录
+                    shutil.copy2(extracted_file_path, target_path)
+
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 已解压并复制文件到 {target_path}")
+
+                    # 对于NEKOPARA After，还需要处理签名文件
+                    if game_version == "NEKOPARA After":
+                        sig_filename = f"{target_filename}.sig"
+                        sig_file_in_archive = None
+                        
+                        for f_path in file_list:
+                            if sig_filename in f_path:
+                                sig_file_in_archive = f_path
+                                break
+                        
+                        if sig_file_in_archive:
+                            try:
+                                archive.extract(path=temp_dir, targets=[sig_file_in_archive])
+                                extracted_sig_path = os.path.join(temp_dir, sig_file_in_archive)
+                                sig_target = os.path.join(game_folder, sig_filename)
+                                shutil.copy2(extracted_sig_path, sig_target)
+                                if debug_mode:
+                                    logger.debug(f"DEBUG: 已解压并复制签名文件到 {sig_target}")
+                            except py7zr.exceptions.CrcError as sig_e:
+                                if debug_mode:
+                                    logger.warning(f"DEBUG: 签名文件 '{sig_e.filename}' CRC校验失败，已忽略此文件。")
+
+            # 进行安装后的哈希校验
+            self._perform_hash_check(game_version, install_tasks)
+
+        except py7zr.exceptions.CrcError as e:
             if debug_mode:
-                logger.debug(f"DEBUG: 已复制补丁文件到缓存目录: {_7z_path}")
-                logger.debug(f"DEBUG: 开始验证补丁文件哈希值")
-                
-            # 验证补丁文件哈希
-            hash_valid = False
-            extracted_path = None
+                logger.error(f"DEBUG: CRC校验失败，文件可能已损坏: {e}")
+                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
+
+            self.main_window.close_hash_msg_box()
+
+            msgbox_frame(
+                f"安装错误 - {self.app_name}",
+                f"\n补丁文件 {os.path.basename(patch_file)} 在解压时CRC校验失败。\n"
+                f"这通常意味着文件已损坏，请尝试重新下载该文件。\n\n"
+                f"游戏: {game_version}\n"
+                f"错误文件: {e.filename}\n\n"
+                "跳过此游戏的安装。",
+                QMessageBox.StandardButton.Ok
+            ).exec()
             
-            # 显示哈希验证窗口 - 使用离线特定消息
-            self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(check_type="offline_verify", is_offline=True)
-            
-            # 验证补丁文件哈希
-            # 使用特殊版本的verify_patch_hash方法，它会返回哈希验证结果和解压后的文件路径
-            from utils.helpers import ProgressHashVerifyDialog
-            from data.config import PLUGIN_HASH
-            from workers.hash_thread import OfflineHashVerifyThread
-            
-            # 创建并显示进度对话框
-            progress_dialog = ProgressHashVerifyDialog(
-                f"验证补丁文件 - {self.app_name}",
-                f"正在验证 {game_version} 的补丁文件完整性...",
-                self.main_window
-            )
-            
-            # 创建哈希验证线程
-            hash_thread = OfflineHashVerifyThread(game_version, _7z_path, PLUGIN_HASH, self.main_window)
-            
-            # 存储解压后的文件路径
-            extracted_file_path = ""
-            
-            # 连接信号
-            hash_thread.progress.connect(progress_dialog.update_progress)
-            hash_thread.finished.connect(
-                lambda result, error, path: self._on_offline_install_hash_finished(
-                    result, error, path, progress_dialog, game_version, _7z_path, game_folder, plugin_path, install_tasks
-                )
-            )
-            
-            # 启动线程
-            hash_thread.start()
-            
-            # 显示对话框，阻塞直到对话框关闭
-            progress_dialog.exec()
-            
-            # 如果用户取消了验证，停止线程并继续下一个任务
-            if hash_thread.isRunning():
-                hash_thread.terminate()
-                hash_thread.wait()
-                self.process_next_offline_install_task(install_tasks)
-                return
-                
+            self.process_next_offline_install_task(install_tasks)
         except Exception as e:
             if debug_mode:
                 logger.error(f"DEBUG: 离线安装任务处理失败: {e}")
+                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
+            
+            # 关闭安装进度窗口
+            self.main_window.close_hash_msg_box()
                 
             # 显示错误消息
             msgbox_frame(

@@ -201,12 +201,14 @@ class HashManager:
                     logger.error(f"Error calculating hash for {file_path}: {e}")
         return results
 
-    def hash_pop_window(self, check_type="default", is_offline=False):
+    def hash_pop_window(self, check_type="default", is_offline=False, auto_close=False, close_delay=500):
         """显示文件检验窗口
         
         Args:
             check_type: 检查类型，可以是 'pre'(预检查), 'after'(后检查), 'extraction'(解压后检查), 'offline_extraction'(离线解压), 'offline_verify'(离线验证)
             is_offline: 是否处于离线模式
+            auto_close: 是否自动关闭窗口
+            close_delay: 自动关闭延迟（毫秒）
             
         Returns:
             QMessageBox: 消息框实例
@@ -223,6 +225,8 @@ class HashManager:
                 message = "\n正在验证本地补丁压缩文件完整性...\n"
             elif check_type == "offline_extraction":
                 message = "\n正在解压安装补丁文件...\n"
+            elif check_type == "offline_installation":
+                message = "\n正在安装补丁文件...\n"
             else:
                 message = "\n正在处理离线补丁文件...\n"
         else:
@@ -233,10 +237,27 @@ class HashManager:
                 message = "\n正在检验本地文件完整性...\n"
             elif check_type == "extraction":
                 message = "\n正在验证下载的解压文件完整性...\n"
+            elif check_type == "post":
+                message = "\n正在检验补丁文件完整性...\n"
         
+        # 创建新的消息框
         msg_box = msgbox_frame(f"通知 - {APP_NAME}", message)
+        
+        # 使用open()而不是exec()，避免阻塞UI线程
         msg_box.open()
+        
+        # 处理事件循环，确保窗口显示
         QtWidgets.QApplication.processEvents()
+        
+        # 如果设置了自动关闭，添加定时器
+        if auto_close:
+            timer = QtCore.QTimer()
+            timer.setSingleShot(True)
+            timer.timeout.connect(msg_box.close)
+            timer.start(close_delay)
+            # 保存定时器引用，防止被垃圾回收
+            msg_box.close_timer = timer
+        
         return msg_box
 
     def cfg_pre_hash_compare(self, install_paths, plugin_hash, installed_status):

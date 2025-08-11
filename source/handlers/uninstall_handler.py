@@ -3,13 +3,27 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout, 
     QAbstractItemView, QFileDialog, QMessageBox
 )
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, Signal, QThread
 from PySide6.QtGui import QFont
 from utils import msgbox_frame
 from utils.logger import setup_logger
 
 # 初始化logger
 logger = setup_logger("uninstall_handler")
+
+class UninstallThread(QThread):
+    """在后台线程中处理卸载逻辑"""
+    finished = Signal(object)
+
+    def __init__(self, handler, selected_folder):
+        super().__init__()
+        self.handler = handler
+        self.selected_folder = selected_folder
+
+    def run(self):
+        # 在后台线程中执行耗时操作
+        game_dirs = self.handler.game_detector.identify_game_directories_improved(self.selected_folder)
+        self.finished.emit(game_dirs)
 
 class UninstallHandler(QObject):
     """
@@ -28,6 +42,7 @@ class UninstallHandler(QObject):
         self.game_detector = main_window.game_detector
         self.patch_manager = main_window.patch_manager
         self.app_name = main_window.patch_manager.app_name
+        self.uninstall_thread = None
         
         # 记录初始化日志
         debug_mode = self.debug_manager._is_debug_mode() if hasattr(self.debug_manager, '_is_debug_mode') else False
@@ -60,16 +75,58 @@ class UninstallHandler(QObject):
         if debug_mode:
             logger.debug(f"DEBUG: 卸载功能 - 用户选择了目录: {selected_folder}")
         
-        # 首先尝试将选择的目录视为上级目录，使用增强的目录识别功能
-        logger.info("尝试识别游戏目录")
-        game_dirs = self.game_detector.identify_game_directories_improved(selected_folder)
+        self.main_window.show_loading_dialog("正在识别游戏目录...")
         
-        if game_dirs and len(game_dirs) > 0:
-            logger.info(f"在上级目录中找到游戏: {list(game_dirs.keys())}")
-            self._handle_multiple_games(game_dirs, debug_mode)
-        else:
-            logger.info("未在上级目录找到游戏，尝试将选择的目录作为单个游戏目录处理")
-            self._handle_single_game(selected_folder, debug_mode)
+        self.uninstall_thread = UninstallThread(self, selected_folder)
+        self.uninstall_thread.finished.connect(self.on_game_detection_finished)
+        self.uninstall_thread.start()
+
+    def on_game_detection_finished(self, game_dirs):
+        """游戏识别完成后的回调"""
+        self.main_window.hide_loading_dialog()
+
+        if not game_dirs:
+            QMessageBox.information(
+                self.main_window,
+                f"提示 - {self.app_name}",
+                "\n未在选择的目录中找到任何支持的游戏。\n",
+            )
+            return
+
+        games_with_patch = {}
+        for game_version, game_dir in game_dirs.items():
+            if self.patch_manager.check_patch_installed(game_dir, game_version):
+                games_with_patch[game_version] = game_dir
+        
+        if not games_with_patch:
+            QMessageBox.information(
+                self.main_window,
+                f"提示 - {self.app_name}",
+                "\n目录中未找到已安装补丁的游戏。\n",
+            )
+            return
+
+        selected_games = self._show_game_selection_dialog(games_with_patch)
+        
+        if not selected_games:
+            return
+        
+        selected_game_dirs = {game: games_with_patch[game] for game in selected_games if game in games_with_patch}
+        
+        game_list = '\n'.join(selected_games)
+        reply = QMessageBox.question(
+            self.main_window,
+            f"确认卸载 - {self.app_name}",
+            f"\n确定要卸载以下游戏的补丁吗？\n\n{game_list}\n",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.No:
+            return
+        
+        success_count, fail_count, results = self.patch_manager.batch_uninstall_patches(selected_game_dirs)
+        self.patch_manager.show_uninstall_result(success_count, fail_count, results)
     
     def _handle_multiple_games(self, game_dirs, debug_mode):
         """

@@ -3,13 +3,27 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout, 
     QAbstractItemView, QRadioButton, QButtonGroup, QFileDialog, QMessageBox
 )
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, Signal, QThread
 from PySide6.QtGui import QFont
 from utils import msgbox_frame
 from utils.logger import setup_logger
 
 # 初始化logger
 logger = setup_logger("patch_toggle_handler")
+
+class PatchToggleThread(QThread):
+    """在后台线程中处理补丁切换逻辑"""
+    finished = Signal(object)
+
+    def __init__(self, handler, selected_folder):
+        super().__init__()
+        self.handler = handler
+        self.selected_folder = selected_folder
+
+    def run(self):
+        # 在后台线程中执行耗时操作
+        game_dirs = self.handler.game_detector.identify_game_directories_improved(self.selected_folder)
+        self.finished.emit(game_dirs)
 
 class PatchToggleHandler(QObject):
     """
@@ -28,32 +42,59 @@ class PatchToggleHandler(QObject):
         self.game_detector = main_window.game_detector
         self.patch_manager = main_window.patch_manager
         self.app_name = main_window.patch_manager.app_name
+        self.toggle_thread = None
     
     def handle_toggle_patch_button_click(self):
         """
         处理禁/启用补丁按钮点击事件
         打开文件选择对话框选择游戏目录，然后禁用或启用对应游戏的补丁
         """
-        # 获取游戏目录
-        debug_mode = self.debug_manager._is_debug_mode()
+        selected_folder = QFileDialog.getExistingDirectory(self.main_window, "选择游戏上级目录", "")
         
-        # 提示用户选择目录
-        file_dialog_info = "选择游戏上级目录" if debug_mode else "选择游戏目录"
-        selected_folder = QFileDialog.getExistingDirectory(self.main_window, file_dialog_info, "")
+        if not selected_folder:
+            return
+
+        self.main_window.show_loading_dialog("正在识别游戏目录并检查补丁状态...")
         
-        if not selected_folder or selected_folder == "":
-            return  # 用户取消了选择
+        self.toggle_thread = PatchToggleThread(self, selected_folder)
+        self.toggle_thread.finished.connect(self.on_game_detection_finished)
+        self.toggle_thread.start()
+
+    def on_game_detection_finished(self, game_dirs):
+        """游戏识别完成后的回调"""
+        self.main_window.hide_loading_dialog()
+
+        if not game_dirs:
+            QMessageBox.information(
+                self.main_window,
+                f"提示 - {self.app_name}",
+                "\n未在选择的目录中找到任何支持的游戏。\n",
+            )
+            return
+
+        games_with_patch = {}
+        for game_version, game_dir in game_dirs.items():
+            if self.patch_manager.check_patch_installed(game_dir, game_version):
+                is_disabled, _ = self.patch_manager.check_patch_disabled(game_dir, game_version)
+                status = "已禁用" if is_disabled else "已启用"
+                games_with_patch[game_version] = {"dir": game_dir, "status": status}
         
-        if debug_mode:
-            logger.debug(f"DEBUG: 禁/启用功能 - 用户选择了目录: {selected_folder}")
+        if not games_with_patch:
+            QMessageBox.information(
+                self.main_window,
+                f"提示 - {self.app_name}",
+                "\n目录中未找到已安装补丁的游戏。\n",
+            )
+            return
+
+        selected_games, operation = self._show_multi_game_dialog(games_with_patch)
         
-        # 首先尝试将选择的目录视为上级目录，使用增强的目录识别功能
-        game_dirs = self.game_detector.identify_game_directories_improved(selected_folder)
+        if not selected_games:
+            return
         
-        if game_dirs and len(game_dirs) > 0:
-            self._handle_multiple_games(game_dirs, debug_mode)
-        else:
-            self._handle_single_game(selected_folder, debug_mode)
+        selected_game_dirs = {game: games_with_patch[game]["dir"] for game in selected_games if game in games_with_patch}
+        
+        self._execute_batch_toggle(selected_game_dirs, operation)
     
     def _handle_multiple_games(self, game_dirs, debug_mode):
         """
