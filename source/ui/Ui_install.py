@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QMenu,
 import os
 
 # 导入配置常量
-from data.config import APP_NAME, APP_VERSION
+from config.config import APP_NAME, APP_VERSION
 from utils import load_image_from_file
 
 class Ui_MainWindows(object):

@@ -8,7 +8,7 @@ import threading
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QTextEdit, QProgressBar, QMessageBox
 
-from data.config import APP_NAME
+from config.config import APP_NAME
 from utils import msgbox_frame
 
 

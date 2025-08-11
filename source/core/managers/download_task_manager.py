@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QRadioButton, QPushButton, QLabel, QButtonGroup, QHBoxLayout
 from PySide6.QtGui import QFont
 
-from data.config import DOWNLOAD_THREADS
+from config.config import DOWNLOAD_THREADS
 
 
 class DownloadTaskManager:

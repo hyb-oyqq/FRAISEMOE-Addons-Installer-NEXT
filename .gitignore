@@ -180,3 +180,10 @@ vol.2.7z
 vol.3.7z
 vol.4.7z
 log/
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+Thumbs.db
+.DS_Store
+STRUCTURE.md

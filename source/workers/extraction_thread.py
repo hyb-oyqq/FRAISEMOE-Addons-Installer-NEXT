@@ -2,7 +2,7 @@ import os
 import shutil
 import py7zr
 from PySide6.QtCore import QThread, Signal
-from data.config import PLUGIN, GAME_INFO
+from config.config import PLUGIN, GAME_INFO
 
 class ExtractionThread(QThread):
     finished = Signal(bool, str, str)  # success, error_message, game_version

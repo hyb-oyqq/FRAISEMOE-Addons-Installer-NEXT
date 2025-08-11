@@ -11,7 +11,7 @@ import re
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar
-from data.config import APP_NAME, CONFIG_FILE
+from config.config import APP_NAME, CONFIG_FILE
 from utils.logger import setup_logger
 import datetime
 import traceback
@@ -144,7 +144,7 @@ def msgbox_frame(title, text, buttons=QtWidgets.QMessageBox.StandardButton.NoBut
     msg_box.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
     
     # 直接加载图标文件
-    icon_path = resource_path(os.path.join("IMG", "ICO", "icon.png"))
+    icon_path = resource_path(os.path.join("assets", "images", "ICO", "icon.png"))
     if os.path.exists(icon_path):
         pixmap = QPixmap(icon_path)
         if not pixmap.isNull():
@@ -266,7 +266,7 @@ class HashManager:
         
         # 尝试检测是否处于调试模式
         try:
-            from data.config import CACHE
+            from config.config import CACHE
             debug_file = os.path.join(os.path.dirname(CACHE), "debug_mode.txt")
             debug_mode = os.path.exists(debug_file)
         except:
@@ -316,7 +316,7 @@ class HashManager:
         
         # 尝试检测是否处于调试模式
         try:
-            from data.config import CACHE
+            from config.config import CACHE
             debug_file = os.path.join(os.path.dirname(CACHE), "debug_mode.txt")
             debug_mode = os.path.exists(debug_file)
         except:

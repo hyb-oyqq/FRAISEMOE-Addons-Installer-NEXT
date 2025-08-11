@@ -112,7 +112,7 @@ class CloudflareOptimizer:
             ipv6_warning.setIcon(QtWidgets.QMessageBox.Icon.Warning)
             
             # 设置图标
-            icon_path = resource_path(os.path.join("IMG", "ICO", "icon.png"))
+            icon_path = resource_path(os.path.join("assets", "images", "ICO", "icon.png"))
             if os.path.exists(icon_path):
                 pixmap = QPixmap(icon_path)
                 if not pixmap.isNull():
@@ -150,7 +150,7 @@ class CloudflareOptimizer:
             optimization_msg
         )
         # 设置Cloudflare图标
-        cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
+        cf_icon_path = resource_path("assets/images/ICO/cloudflare_logo_icon.ico")
         if os.path.exists(cf_icon_path):
             cf_pixmap = QPixmap(cf_icon_path)
             if not cf_pixmap.isNull():

@@ -5,8 +5,8 @@ import webbrowser
 import os
 
 from utils import load_base64_image, msgbox_frame, resource_path
-from data.config import APP_NAME, APP_VERSION, LOG_FILE
-from core.ipv6_manager import IPv6Manager  # 导入新的IPv6Manager类
+from config.config import APP_NAME, APP_VERSION, LOG_FILE
+from core.managers.ipv6_manager import IPv6Manager  # 导入新的IPv6Manager类
 
 class UIManager:
     def __init__(self, main_window):
@@ -33,7 +33,7 @@ class UIManager:
         # 设置窗口图标
         import os
         from utils import resource_path
-        icon_path = resource_path(os.path.join("IMG", "ICO", "icon.png"))
+        icon_path = resource_path(os.path.join("assets", "images", "ICO", "icon.png"))
         if os.path.exists(icon_path):
             self.main_window.setWindowIcon(QIcon(icon_path))
 
@@ -572,7 +572,7 @@ class UIManager:
             # 用户确认撤回
             try:
                 # 导入隐私管理器
-                from core.privacy_manager import PrivacyManager
+                from core.managers.privacy_manager import PrivacyManager
                 import sys
                 import subprocess
                 import os

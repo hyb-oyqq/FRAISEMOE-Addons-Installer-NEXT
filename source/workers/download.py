@@ -7,7 +7,7 @@ from PySide6 import QtCore, QtWidgets
 from PySide6.QtCore import (Qt, Signal, QThread, QTimer)
 from PySide6.QtWidgets import (QLabel, QProgressBar, QVBoxLayout, QDialog, QHBoxLayout)
 from utils import resource_path
-from data.config import APP_NAME, UA
+from config.config import APP_NAME, UA
 import signal
 import ctypes
 import time

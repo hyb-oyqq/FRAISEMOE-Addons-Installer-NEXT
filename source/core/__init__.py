@@ -24,6 +24,5 @@ __all__ = [
     'PrivacyManager',
     'CloudflareOptimizer',
     'DownloadTaskManager',
-    'ExtractionHandler',
-    'PatchDetector'
+    'PatchDetector',
 ] 

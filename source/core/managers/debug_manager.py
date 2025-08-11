@@ -1,11 +1,11 @@
 import os
 import sys
 from PySide6 import QtWidgets
-from data.config import LOG_FILE
+from config.config import LOG_FILE
 from utils.logger import setup_logger
 from utils import Logger
 import datetime
-from data.config import APP_NAME
+from config.config import APP_NAME
 
 # 初始化logger
 logger = setup_logger("debug_manager")
@@ -64,7 +64,7 @@ class DebugManager:
         
         # 创建或删除debug_mode.txt标记文件
         try:
-            from data.config import CACHE
+            from config.config import CACHE
             debug_file = os.path.join(os.path.dirname(CACHE), "debug_mode.txt")
             
             if checked:

@@ -124,7 +124,7 @@ class ExtractionHandler:
             game_version: 游戏版本
         """
         # 导入所需模块
-        from data.config import GAME_INFO, PLUGIN_HASH
+        from config.config import GAME_INFO, PLUGIN_HASH
         from workers.hash_thread import HashThread
         
         # 获取安装路径
@@ -179,7 +179,7 @@ class ExtractionHandler:
             result: 校验结果，包含通过状态、游戏版本和消息
         """
         # 导入所需模块
-        from data.config import GAME_INFO
+        from config.config import GAME_INFO
         
         # 关闭哈希检查窗口
         self.main_window.close_hash_msg_box()

@@ -13,7 +13,7 @@ from PySide6.QtGui import QAction # Added for menu actions
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QProgressBar, QLabel # Added for progress window
 
 from ui.Ui_install import Ui_MainWindows
-from data.config import (
+from config.config import (
     APP_NAME, PLUGIN, GAME_INFO, BLOCK_SIZE,
     PLUGIN_HASH, UA, CONFIG_URL, LOG_FILE,
     DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL, APP_VERSION # 添加APP_VERSION导入
@@ -29,10 +29,10 @@ from core import (
     MultiStageAnimations, UIManager, DownloadManager, DebugManager,
     WindowManager, GameDetector, PatchManager, ConfigManager, PatchDetector
 )
-from core.ipv6_manager import IPv6Manager
-from handlers import PatchToggleHandler, UninstallHandler
+from core.managers.ipv6_manager import IPv6Manager
+from core.handlers import PatchToggleHandler, UninstallHandler
 from utils.logger import setup_logger
-from core.patch_detector import PatchDetector
+
 
 # 初始化logger
 logger = setup_logger("main_window")

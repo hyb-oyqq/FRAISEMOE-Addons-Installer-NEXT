@@ -11,11 +11,11 @@ from PySide6.QtGui import QIcon, QPixmap, QFont
 from PySide6.QtWidgets import QPushButton, QDialog, QHBoxLayout
 
 from utils import msgbox_frame, HostsManager, resource_path
-from data.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL, DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL
+from config.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL, DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL
 from workers import IpOptimizerThread
-from core.cloudflare_optimizer import CloudflareOptimizer
-from core.download_task_manager import DownloadTaskManager
-from core.extraction_handler import ExtractionHandler
+from core.managers.cloudflare_optimizer import CloudflareOptimizer
+from core.managers.download_task_manager import DownloadTaskManager
+from core.handlers.extraction_handler import ExtractionHandler
 from utils.logger import setup_logger
 
 # 初始化logger
@@ -629,7 +629,7 @@ class DownloadManager:
         msg_box.setWindowTitle(f"下载优化 - {APP_NAME}")
         msg_box.setText("是否愿意通过Cloudflare加速来优化下载速度？\n\n这将临时修改系统的hosts文件，并需要管理员权限。\n如您的杀毒软件提醒有软件正在修改hosts文件，请注意放行。")
         
-        cf_icon_path = resource_path("IMG/ICO/cloudflare_logo_icon.ico")
+        cf_icon_path = resource_path("assets/images/ICO/cloudflare_logo_icon.ico")
         if os.path.exists(cf_icon_path):
             cf_pixmap = QPixmap(cf_icon_path)
             if not cf_pixmap.isNull():

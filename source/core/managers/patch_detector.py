@@ -6,7 +6,7 @@ import traceback
 from utils.logger import setup_logger
 from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import QTimer, QThread, Signal
-from data.config import PLUGIN_HASH, APP_NAME
+from config.config import PLUGIN_HASH, APP_NAME
 
 # 初始化logger
 logger = setup_logger("patch_detector")
@@ -43,7 +43,7 @@ class PatchDetector:
     def _load_game_info(self):
         """从配置中加载游戏信息和补丁哈希值"""
         try:
-            from data.config import GAME_INFO, PLUGIN_HASH
+            from config.config import GAME_INFO, PLUGIN_HASH
             self.game_info = GAME_INFO
             self.plugin_hash = PLUGIN_HASH
         except ImportError:

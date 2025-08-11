@@ -3,7 +3,7 @@ import shutil
 import traceback
 from PySide6.QtWidgets import QMessageBox
 from utils.logger import setup_logger
-from data.config import APP_NAME
+from config.config import APP_NAME
 from utils import msgbox_frame
 
 class PatchManager:

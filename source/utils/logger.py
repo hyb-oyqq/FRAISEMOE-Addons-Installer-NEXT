@@ -1,7 +1,7 @@
 from .url_censor import censor_url
 import logging
 import os
-from data.config import CACHE
+from config.config import CACHE
 
 class URLCensorFormatter(logging.Formatter):
     """自定义的日志格式化器，用于隐藏日志消息中的URL"""
@@ -72,7 +72,7 @@ def setup_logger(name):
         logging.Logger: 配置好的logger对象
     """
     # 导入LOG_FILE
-    from data.config import LOG_FILE
+    from config.config import LOG_FILE
     
     # 创建logger
     logger = logging.getLogger(name)

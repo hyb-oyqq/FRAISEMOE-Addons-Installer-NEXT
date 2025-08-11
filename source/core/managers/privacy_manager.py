@@ -6,8 +6,8 @@ import json
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QTextBrowser, QPushButton, QCheckBox, QLabel, QMessageBox
 from PySide6.QtCore import Qt
 
-from data.privacy_policy import PRIVACY_POLICY_BRIEF, get_local_privacy_policy, PRIVACY_POLICY_VERSION
-from data.config import CACHE, APP_NAME, APP_VERSION
+from config.privacy_policy import PRIVACY_POLICY_BRIEF, get_local_privacy_policy, PRIVACY_POLICY_VERSION
+from config.config import CACHE, APP_NAME, APP_VERSION
 from utils import msgbox_frame
 from utils.logger import setup_logger
 

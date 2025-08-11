@@ -8,7 +8,7 @@ from PySide6 import QtWidgets, QtCore
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QMessageBox
 
-from data.config import PLUGIN, PLUGIN_HASH, GAME_INFO
+from config.config import PLUGIN, PLUGIN_HASH, GAME_INFO
 from utils import msgbox_frame
 from utils.logger import setup_logger
 
@@ -140,7 +140,7 @@ class OfflineModeManager:
         
         # 更新窗口标题
         if hasattr(self.main_window, 'setWindowTitle'):
-            from data.config import APP_NAME, APP_VERSION
+            from config.config import APP_NAME, APP_VERSION
             mode_indicator = "[离线模式]" if enabled else "[在线模式]"
             self.main_window.setWindowTitle(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
             
@@ -245,7 +245,7 @@ class OfflineModeManager:
             
         # 创建进度对话框
         from utils.helpers import ProgressHashVerifyDialog
-        from data.config import PLUGIN_HASH
+        from config.config import PLUGIN_HASH
         from workers.hash_thread import OfflineHashVerifyThread
         
         # 创建并显示进度对话框
@@ -327,7 +327,7 @@ class OfflineModeManager:
         debug_mode = self._is_debug_mode()
         
         # 导入所需模块
-        from data.config import GAME_INFO, PLUGIN
+        from config.config import GAME_INFO, PLUGIN
         
         # 存储结果到对话框，以便在exec()返回后获取
         dialog.hash_result = result
@@ -476,7 +476,7 @@ class OfflineModeManager:
         debug_mode = self._is_debug_mode()
         
         # 导入所需模块
-        from data.config import GAME_INFO, PLUGIN_HASH
+        from config.config import GAME_INFO, PLUGIN_HASH
         from workers.hash_thread import HashThread
         
         # 获取安装路径
@@ -557,7 +557,7 @@ class OfflineModeManager:
                 self.main_window.download_manager.selected_folder
             )
             
-            from data.config import GAME_INFO
+            from config.config import GAME_INFO
             if game_version in game_dirs and game_version in GAME_INFO:
                 game_dir = game_dirs[game_version]
                 install_path = os.path.join(game_dir, os.path.basename(GAME_INFO[game_version]["install_path"]))
