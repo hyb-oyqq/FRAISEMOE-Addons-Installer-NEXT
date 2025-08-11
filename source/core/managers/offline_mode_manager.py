@@ -846,12 +846,14 @@ class OfflineModeManager:
                 if debug_mode:
                     logger.debug(f"DEBUG: 有未找到离线补丁文件的游戏: {self.missing_offline_patches}")
                 
-                # 不再先弹出安装结果，直接询问是否联网继续
+                # 先显示已安装的结果
                 if self.installed_games:
                     installed_msg = f"已成功安装以下补丁：\n\n{chr(10).join(self.installed_games)}\n\n"
                 else:
                     installed_msg = ""
-                QTimer.singleShot(100, lambda: self._show_missing_patches_dialog(installed_msg))
+                
+                # 使用QTimer延迟显示询问对话框，确保安装结果窗口先显示并关闭
+                QTimer.singleShot(500, lambda: self._show_missing_patches_dialog(installed_msg))
             else:
                 # 恢复UI状态
                 self.main_window.setEnabled(True)
@@ -987,9 +989,4 @@ class OfflineModeManager:
             
             # 恢复UI状态
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
-            # 用户拒绝联网后，再显示本次安装结果
-            try:
-                QTimer.singleShot(100, self.main_window.show_result)
-            except Exception:
-                pass 
+            self.main_window.ui.start_install_text.setText("开始安装") 

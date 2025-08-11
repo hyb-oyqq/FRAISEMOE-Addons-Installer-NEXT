@@ -43,6 +43,8 @@ class HashThread(QThread):
             status_copy = self.installed_status.copy()
             
             for game_version, install_path in self.install_paths.items():
+                if self.isInterruptionRequested():
+                    break
                 if not os.path.exists(install_path):
                     status_copy[game_version] = False
                     if debug_mode:
@@ -57,8 +59,17 @@ class HashThread(QThread):
                         # 当没有预期哈希值时，保持当前状态不变
                         continue
                         
+                    # 分块读取，避免大文件一次性读取内存
+                    hash_obj = hashlib.sha256()
                     with open(install_path, "rb") as f:
-                        file_hash = hashlib.sha256(f.read()).hexdigest()
+                        while True:
+                            if self.isInterruptionRequested():
+                                break
+                            chunk = f.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            hash_obj.update(chunk)
+                    file_hash = hash_obj.hexdigest()
                     
                     if debug_mode:
                         logger.debug(f"DEBUG: 哈希预检查 - {game_version}")
@@ -86,6 +97,8 @@ class HashThread(QThread):
             result = {"passed": True, "game": "", "message": ""}
             
             for game_version, install_path in self.install_paths.items():
+                if self.isInterruptionRequested():
+                    break
                 if not os.path.exists(install_path):
                     if debug_mode:
                         logger.debug(f"DEBUG: 哈希后检查 - {game_version} 补丁文件不存在: {install_path}")
@@ -99,8 +112,17 @@ class HashThread(QThread):
                         # 当没有预期哈希值时，跳过检查
                         continue
                         
+                    # 分块读取，避免大文件一次性读取内存
+                    hash_obj = hashlib.sha256()
                     with open(install_path, "rb") as f:
-                        file_hash = hashlib.sha256(f.read()).hexdigest()
+                        while True:
+                            if self.isInterruptionRequested():
+                                break
+                            chunk = f.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            hash_obj.update(chunk)
+                    file_hash = hash_obj.hexdigest()
                     
                     if debug_mode:
                         logger.debug(f"DEBUG: 哈希后检查 - {game_version}")
@@ -167,9 +189,7 @@ class OfflineHashVerifyThread(QThread):
         
         if not expected_hash:
             logger.warning(f"DEBUG: 未找到 {self.game_version} 的预期哈希值")
-            # 确保发送100%进度信号，以便UI更新
             self.progress.emit(100)
-            QApplication.processEvents()
             self.finished.emit(False, f"未找到 {self.game_version} 的预期哈希值", "")
             return
             
@@ -183,9 +203,7 @@ class OfflineHashVerifyThread(QThread):
             if not os.path.exists(self.file_path):
                 if debug_mode:
                     logger.warning(f"DEBUG: 补丁文件不存在: {self.file_path}")
-                # 确保发送100%进度信号，以便UI更新
                 self.progress.emit(100)
-                QApplication.processEvents()
                 self.finished.emit(False, f"补丁文件不存在: {self.file_path}", "")
                 return
                 
@@ -197,9 +215,7 @@ class OfflineHashVerifyThread(QThread):
             if file_size == 0:
                 if debug_mode:
                     logger.warning(f"DEBUG: 补丁文件大小为0，无效文件")
-                # 确保发送100%进度信号，以便UI更新
                 self.progress.emit(100)
-                QApplication.processEvents()
                 self.finished.emit(False, "补丁文件大小为0，无效文件", "")
                 return
                 
@@ -233,7 +249,6 @@ class OfflineHashVerifyThread(QThread):
                         if debug_mode:
                             logger.warning(f"DEBUG: 未知的游戏版本: {self.game_version}")
                         self.progress.emit(100)
-                        QApplication.processEvents()
                         self.finished.emit(False, f"未知的游戏版本: {self.game_version}", "")
                         return
                         
@@ -284,7 +299,6 @@ class OfflineHashVerifyThread(QThread):
                                     if debug_mode:
                                         logger.warning(f"DEBUG: 未找到解压后的补丁文件")
                                     self.progress.emit(100)
-                                    QApplication.processEvents()
                                     self.finished.emit(False, "未找到解压后的补丁文件", "")
                                     return
                         else:
@@ -331,9 +345,7 @@ class OfflineHashVerifyThread(QThread):
                                         logger.debug(f"DEBUG: 文件: {files}")
                             
                             if not os.path.exists(patch_file):
-                                # 确保发送100%进度信号，以便UI更新
                                 self.progress.emit(100)
-                                QApplication.processEvents()
                                 self.finished.emit(False, f"未找到解压后的补丁文件", "")
                                 return
                         
@@ -352,7 +364,12 @@ class OfflineHashVerifyThread(QThread):
                             
                             with open(patch_file, "rb") as f:
                                 bytes_read = 0
-                                while chunk := f.read(chunk_size):
+                                while True:
+                                    if self.isInterruptionRequested():
+                                        break
+                                    chunk = f.read(chunk_size)
+                                    if not chunk:
+                                        break
                                     hash_obj.update(chunk)
                                     bytes_read += len(chunk)
                                     # 计算进度 (70-95%)
@@ -366,8 +383,6 @@ class OfflineHashVerifyThread(QThread):
                             
                             # 发送进度信号 - 100%
                             self.progress.emit(100)
-                            # 确保UI更新
-                            QApplication.processEvents()
                             
                             if debug_mode:
                                 logger.debug(f"DEBUG: 补丁文件 {patch_file} 哈希值验证: {'成功' if result else '失败'}")
@@ -382,26 +397,20 @@ class OfflineHashVerifyThread(QThread):
                             if debug_mode:
                                 logger.error(f"DEBUG: 计算补丁文件哈希值失败: {e}")
                                 logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                            # 确保发送100%进度信号，以便UI更新
                             self.progress.emit(100)
-                            QApplication.processEvents()
                             self.finished.emit(False, f"计算补丁文件哈希值失败: {str(e)}", "")
                 except Exception as e:
                     if debug_mode:
                         logger.error(f"DEBUG: 解压补丁文件失败: {e}")
                         logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
                         logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
-                    # 确保发送100%进度信号，以便UI更新
                     self.progress.emit(100)
-                    QApplication.processEvents()
                     self.finished.emit(False, f"解压补丁文件失败: {str(e)}", "")
                     return
         except Exception as e:
             if debug_mode:
                 logger.error(f"DEBUG: 验证补丁哈希值失败: {e}")
                 logger.error(f"DEBUG: 错误类型: {type(e).__name__}")
-                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}")
-            # 确保发送100%进度信号，以便UI更新
+                logger.error(f"DEBUG: 错误堆栈: {traceback.format_exc()}" )
             self.progress.emit(100)
-            QApplication.processEvents()
             self.finished.emit(False, f"验证补丁哈希值失败: {str(e)}", "") 

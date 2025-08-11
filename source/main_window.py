@@ -118,6 +118,9 @@ class MainWindow(QMainWindow):
         self.version_warning = False  # 添加版本警告标志
         self.install_button_enabled = True  # 默认启用安装按钮
         self.progress_window = None
+        # 线程持有引用，避免 QThread 在运行中被销毁
+        self.pre_hash_thread = None
+        self.hash_thread = None  # after 校验线程引用（由 PatchDetector 赋值）
         
         # 设置关闭按钮事件连接
         if hasattr(self.ui, 'close_btn'):
@@ -477,7 +480,61 @@ class MainWindow(QMainWindow):
                 if event:
                     event.ignore()
                 return
-                
+ 
+        # 在退出前优雅地清理后台线程，避免 QThread 在运行中被销毁
+        def _graceful_stop(thread_obj, name="thread", timeout_ms=2000):
+            try:
+                if thread_obj and hasattr(thread_obj, 'isRunning') and thread_obj.isRunning():
+                    # 首选等待自然结束
+                    if hasattr(thread_obj, 'requestInterruption'):
+                        try:
+                            thread_obj.requestInterruption()
+                        except Exception:
+                            pass
+                    thread_obj.wait(timeout_ms)
+                    # 仍未退出时，最后手段终止
+                    if thread_obj.isRunning():
+                        try:
+                            thread_obj.terminate()
+                        except Exception:
+                            pass
+                        thread_obj.wait(1000)
+            except Exception:
+                pass
+
+        # 清理主窗口直接持有的线程
+        _graceful_stop(getattr(self, 'pre_hash_thread', None), 'pre_hash_thread')
+        _graceful_stop(getattr(self, 'hash_thread', None), 'hash_thread')
+
+        # 清理离线管理器中的线程
+        try:
+            if hasattr(self, 'offline_mode_manager') and self.offline_mode_manager:
+                _graceful_stop(getattr(self.offline_mode_manager, 'hash_thread', None), 'offline_hash_thread')
+                _graceful_stop(getattr(self.offline_mode_manager, 'extraction_thread', None), 'extraction_thread')
+        except Exception:
+            pass
+
+        # 清理配置获取线程
+        try:
+            if hasattr(self, 'config_manager') and hasattr(self.config_manager, 'config_fetch_thread'):
+                _graceful_stop(self.config_manager.config_fetch_thread, 'config_fetch_thread', 1000)
+        except Exception:
+            pass
+
+        # 清理游戏识别线程
+        try:
+            if hasattr(self, 'game_detector') and hasattr(self.game_detector, 'detection_thread'):
+                _graceful_stop(self.game_detector.detection_thread, 'detection_thread', 1000)
+        except Exception:
+            pass
+
+        # 清理补丁检查线程
+        try:
+            if hasattr(self, 'patch_detector') and hasattr(self.patch_detector, 'patch_check_thread'):
+                _graceful_stop(self.patch_detector.patch_check_thread, 'patch_check_thread', 1000)
+        except Exception:
+            pass
+
         # 恢复hosts文件（如果未禁用自动还原）
         self.download_manager.hosts_manager.restore()
         
@@ -640,11 +697,16 @@ class MainWindow(QMainWindow):
         install_paths = self.download_manager.get_install_paths()
         
         # 使用异步方式进行哈希预检查
-        hash_thread = self.patch_detector.create_hash_thread("pre", install_paths)
-        hash_thread.pre_finished.connect(
+        self.pre_hash_thread = self.patch_detector.create_hash_thread("pre", install_paths)
+        self.pre_hash_thread.pre_finished.connect(
             lambda updated_status: self.on_pre_hash_finished(updated_status, game_dirs)
         )
-        hash_thread.start()
+        # 在线程自然结束时清理引用
+        try:
+            self.pre_hash_thread.finished.connect(lambda: setattr(self, 'pre_hash_thread', None))
+        except Exception:
+            pass
+        self.pre_hash_thread.start()
 
     def on_pre_hash_finished(self, updated_status, game_dirs):
         """哈希预检查完成后的回调"""

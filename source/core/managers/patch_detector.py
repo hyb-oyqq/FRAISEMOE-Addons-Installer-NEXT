@@ -269,19 +269,7 @@ class PatchDetector:
 
         self.main_window.setEnabled(True)
         self.main_window.ui.start_install_text.setText("开始安装")
-        # 当处于离线模式且存在缺失补丁需要联网继续时，暂不立即显示安装结果
-        should_defer_result = False
-        try:
-            offline_mgr = getattr(self.main_window, 'offline_mode_manager', None)
-            if offline_mgr and offline_mgr.is_in_offline_mode():
-                missing_list = getattr(offline_mgr, 'missing_offline_patches', [])
-                if missing_list:
-                    should_defer_result = True
-        except Exception:
-            should_defer_result = False
-
-        if not should_defer_result:
-            QTimer.singleShot(100, self.main_window.show_result)
+        QTimer.singleShot(100, self.main_window.show_result)
         
     def on_offline_pre_hash_finished(self, updated_status, game_dirs):
         self.main_window.installed_status = updated_status

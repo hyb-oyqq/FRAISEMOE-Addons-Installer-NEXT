@@ -3,9 +3,9 @@ import os
 import datetime
 from PySide6.QtWidgets import QApplication, QMessageBox
 from main_window import MainWindow
-from core.privacy_manager import PrivacyManager
+from core.managers.privacy_manager import PrivacyManager
 from utils.logger import setup_logger
-from data.config import LOG_FILE, APP_NAME
+from config.config import LOG_FILE, APP_NAME
 from utils import load_config
 
 if __name__ == "__main__":
