@@ -1,7 +1,13 @@
-from .url_censor import censor_url
-import logging
 import os
-from config.config import CACHE
+import logging
+import datetime
+import sys
+import glob
+import time
+from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from config.config import LOG_DIR, LOG_FILE, LOG_LEVEL, LOG_MAX_SIZE, LOG_BACKUP_COUNT, LOG_RETENTION_DAYS
+
+from .url_censor import censor_url
 
 class URLCensorFormatter(logging.Formatter):
     """自定义的日志格式化器，用于隐藏日志消息中的URL"""
@@ -44,7 +50,7 @@ class Logger:
         except Exception as e:
             # 发生错误时记录到控制台
             self.terminal.write(f"Error writing to log: {e}\n")
-
+        
     def flush(self):
         try:
             self.terminal.flush()
@@ -62,63 +68,90 @@ class Logger:
         except Exception:
             pass
 
+def cleanup_old_logs(retention_days=7):
+    """清理超过指定天数的旧日志文件
+    
+    Args:
+        retention_days: 日志保留天数，默认7天
+    """
+    try:
+        now = time.time()
+        cutoff = now - (retention_days * 86400)  # 86400秒 = 1天
+        
+        # 获取所有日志文件
+        log_files = glob.glob(os.path.join(LOG_DIR, "log-*.txt"))
+        
+        for log_file in log_files:
+            # 检查文件修改时间
+            if os.path.getmtime(log_file) < cutoff:
+                try:
+                    os.remove(log_file)
+                    print(f"已删除过期日志: {log_file}")
+                except Exception as e:
+                    print(f"删除日志文件失败 {log_file}: {e}")
+    except Exception as e:
+        print(f"清理旧日志文件时出错: {e}")
+
 def setup_logger(name):
     """设置并返回一个命名的logger
     
+    使用统一的日志文件，添加日志轮转功能，实现自动清理过期日志
+
     Args:
         name: logger的名称
-        
+
     Returns:
         logging.Logger: 配置好的logger对象
     """
-    # 导入LOG_FILE
-    from config.config import LOG_FILE
-    
     # 创建logger
     logger = logging.getLogger(name)
     
     # 避免重复添加处理器
     if logger.hasHandlers():
         return logger
-        
-    logger.setLevel(logging.DEBUG)
+    
+    # 根据配置设置日志级别
+    log_level = getattr(logging, LOG_LEVEL.upper(), logging.DEBUG)
+    logger.setLevel(log_level)
     
     # 确保日志目录存在
-    log_dir = os.path.join(CACHE, "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    log_file = os.path.join(log_dir, f"{name}.log")
+    os.makedirs(LOG_DIR, exist_ok=True)
     
-    # 创建文件处理器 - 模块日志
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
+    # 清理过期日志文件
+    cleanup_old_logs(LOG_RETENTION_DAYS)
     
-    # 创建主日志文件处理器 - 所有日志合并到主LOG_FILE
+    # 创建主日志文件的轮转处理器
     try:
         # 确保主日志文件目录存在
         log_file_dir = os.path.dirname(LOG_FILE)
         if log_file_dir and not os.path.exists(log_file_dir):
             os.makedirs(log_file_dir, exist_ok=True)
             print(f"已创建主日志目录: {log_file_dir}")
-            
-        main_file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8", mode="w")
-        main_file_handler.setLevel(logging.DEBUG)
+        
+        # 使用RotatingFileHandler实现日志轮转
+        main_file_handler = RotatingFileHandler(
+            LOG_FILE,
+            maxBytes=LOG_MAX_SIZE,
+            backupCount=LOG_BACKUP_COUNT,
+            encoding="utf-8"
+        )
+        main_file_handler.setLevel(log_level)
     except (IOError, OSError) as e:
         print(f"无法创建主日志文件处理器: {e}")
         main_file_handler = None
     
     # 创建控制台处理器
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.INFO)  # 控制台只显示INFO以上级别
     
-    # 创建格式器并添加到处理器
-    formatter = URLCensorFormatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
+    # 创建更详细的格式器，包括模块名、文件名和行号
+    formatter = URLCensorFormatter('%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+    
     console_handler.setFormatter(formatter)
     if main_file_handler:
         main_file_handler.setFormatter(formatter)
     
     # 添加处理器到logger
-    logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     if main_file_handler:
         logger.addHandler(main_file_handler)

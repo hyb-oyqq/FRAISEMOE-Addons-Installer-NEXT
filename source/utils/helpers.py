@@ -101,24 +101,48 @@ class ProgressHashVerifyDialog(QDialog):
         self.status_label.setText(status)
 
 def resource_path(relative_path):
-    """获取资源的绝对路径，适用于开发环境和Nuitka打包环境"""
-    if getattr(sys, 'frozen', False):
-        # Nuitka/PyInstaller创建的临时文件夹，并将路径存储在_MEIPASS中或与可执行文件同目录
-        if hasattr(sys, '_MEIPASS'):
-            base_path = sys._MEIPASS
+    """获取资源的绝对路径，适用于开发环境和打包环境"""
+    try:
+        if getattr(sys, 'frozen', False):
+            # 打包环境 - 可执行文件所在目录
+            if hasattr(sys, '_MEIPASS'):
+                # PyInstaller打包的临时目录
+                base_path = sys._MEIPASS
+            else:
+                # 其他打包方式，直接使用可执行文件目录
+                base_path = os.path.dirname(sys.executable)
+                
+            # 对于离线补丁文件，需要在可执行文件所在目录查找
+            if relative_path.lower() in ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]:
+                exe_dir = os.path.dirname(sys.executable)
+                patch_path = os.path.join(exe_dir, relative_path)
+                if os.path.exists(patch_path):
+                    logger.debug(f"找到离线补丁文件: {patch_path}")
+                    return patch_path
         else:
-            base_path = os.path.dirname(sys.executable)
-    else:
-        # 在开发环境中运行
-        base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+            # 在开发环境中运行
+            base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
         # 处理特殊的可执行文件和数据文件路径
         if relative_path in ("aria2c-fast_x64.exe", "cfst.exe"):
-            return os.path.join(base_path, 'bin', relative_path)
+            result_path = os.path.join(base_path, 'bin', relative_path)
         elif relative_path in ("ip.txt", "ipv6.txt"):
-            return os.path.join(base_path, 'data', relative_path)
+            result_path = os.path.join(base_path, 'data', relative_path)
+        else:
+            # 标准资源路径
+            result_path = os.path.join(base_path, relative_path)
+        
+        # 记录资源路径并验证是否存在
+        if not os.path.exists(result_path) and relative_path:  # 只在非空路径时检查
+            logger.warning(f"资源文件不存在: {result_path}")
+        elif relative_path:  # 避免记录空路径
+            logger.debug(f"已找到资源文件: {result_path}")
             
-    return os.path.join(base_path, relative_path)
+        return result_path
+    except Exception as e:
+        logger.error(f"资源路径解析错误 ({relative_path}): {e}")
+        # 出错时仍返回一个基本路径
+        return os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", relative_path)
 
 def load_base64_image(base64_str):
     pixmap = QPixmap()
@@ -134,9 +158,57 @@ def load_image_from_file(file_path):
     Returns:
         QPixmap: 加载的图像
     """
-    if os.path.exists(file_path):
-        return QPixmap(file_path)
-    return QPixmap()
+    try:
+        if os.path.exists(file_path):
+            logger.info(f"加载图片: {file_path}")
+            pixmap = QPixmap(file_path)
+            
+            if pixmap.isNull():
+                logger.error(f"图片加载失败(pixmap为空): {file_path}")
+                
+                # 检查文件大小和是否可读
+                try:
+                    file_size = os.path.getsize(file_path)
+                    logger.debug(f"图片文件大小: {file_size} 字节")
+                    if file_size == 0:
+                        logger.error(f"图片文件大小为0字节: {file_path}")
+                    
+                    # 尝试打开文件测试可读性
+                    with open(file_path, 'rb') as f:
+                        # 只读取前几个字节测试可访问性
+                        f.read(10)
+                        logger.debug(f"图片文件可以正常打开和读取")
+                        
+                    # 检查文件扩展名是否正确
+                    ext = os.path.splitext(file_path)[1].lower()
+                    if ext not in ['.png', '.jpg', '.jpeg', '.bmp', '.ico']:
+                        logger.warning(f"图片文件扩展名可能不受支持: {ext}")
+                        
+                except Exception as file_error:
+                    logger.error(f"图片文件访问错误: {file_error}")
+                
+                return QPixmap()
+            else:
+                logger.debug(f"图片加载成功: {file_path}, 大小: {pixmap.width()}x{pixmap.height()}")
+                return pixmap
+        else:
+            logger.warning(f"图片文件不存在: {file_path}")
+            # 尝试列出父目录下的文件
+            try:
+                parent_dir = os.path.dirname(file_path)
+                if os.path.exists(parent_dir):
+                    files = os.listdir(parent_dir)
+                    logger.debug(f"目录 {parent_dir} 中的文件: {files}")
+                else:
+                    logger.debug(f"目录不存在: {parent_dir}")
+            except Exception as dir_error:
+                logger.error(f"无法列出目录内容: {dir_error}")
+            
+            return QPixmap()
+    except Exception as e:
+        logger.error(f"加载图片时发生异常: {e}")
+        logger.error(f"异常详情: {traceback.format_exc()}")
+        return QPixmap()
 
 def msgbox_frame(title, text, buttons=QtWidgets.QMessageBox.StandardButton.NoButton):
     msg_box = QtWidgets.QMessageBox()

@@ -46,29 +46,51 @@ app_data = {
     },
 }
 
-# Base64解码
-def decode_base64(encoded_str):
-    return base64.b64decode(encoded_str).decode("utf-8")
+def decode_base64(b64str):
+    """解码base64字符串"""
+    try:
+        return base64.b64decode(b64str).decode('utf-8')
+    except:
+        return b64str
+        
+# 确保缓存目录存在
+def ensure_cache_dirs():
+    os.makedirs(CACHE, exist_ok=True)
+    os.makedirs(PLUGIN, exist_ok=True)
 
 # 全局变量
-APP_VERSION = app_data["APP_VERSION"]
 APP_NAME = app_data["APP_NAME"]
+APP_VERSION = app_data["APP_VERSION"]  # 从app_data中获取，不再重复定义
 TEMP = os.getenv(app_data["TEMP"]) or app_data["TEMP"]
 CACHE = os.path.join(TEMP, app_data["CACHE"])
 CONFIG_FILE = os.path.join(CACHE, "config.json")
 
+# 日志配置
+LOG_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "log")
+LOG_LEVEL = "DEBUG"  # 可选值: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# 日志文件大小和轮转配置（新增）
+LOG_MAX_SIZE = 10 * 1024 * 1024  # 10MB
+LOG_BACKUP_COUNT = 3  # 保留3个备份文件
+LOG_RETENTION_DAYS = 7  # 日志保留7天
+
 # 将log文件放在程序根目录下的log文件夹中，使用日期+时间戳格式命名
 root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 log_dir = os.path.join(root_dir, "log")
+os.makedirs(log_dir, exist_ok=True)
 current_datetime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 LOG_FILE = os.path.join(log_dir, f"log-{current_datetime}.txt")
 
 PLUGIN = os.path.join(CACHE, app_data["PLUGIN"])
 CONFIG_URL = decode_base64(app_data["CONFIG_URL"])
 UA = app_data["UA_TEMPLATE"].format(APP_VERSION)
-GAME_INFO = app_data["game_info"]
+
+# 哈希计算块大小
 BLOCK_SIZE = 67108864
 HASH_SIZE = 134217728
+
+# 资源哈希值
+GAME_INFO = app_data["game_info"]
 PLUGIN_HASH = {
     "NEKOPARA Vol.1": GAME_INFO["NEKOPARA Vol.1"]["hash"],
     "NEKOPARA Vol.2": GAME_INFO["NEKOPARA Vol.2"]["hash"],

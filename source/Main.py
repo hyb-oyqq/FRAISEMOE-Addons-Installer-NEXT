@@ -4,8 +4,8 @@ import datetime
 from PySide6.QtWidgets import QApplication, QMessageBox
 from main_window import MainWindow
 from core.managers.privacy_manager import PrivacyManager
-from utils.logger import setup_logger
-from config.config import LOG_FILE, APP_NAME
+from utils.logger import setup_logger, cleanup_old_logs
+from config.config import LOG_FILE, APP_NAME, LOG_RETENTION_DAYS
 from utils import load_config
 
 if __name__ == "__main__":
@@ -17,6 +17,10 @@ if __name__ == "__main__":
     config = load_config()
     debug_mode = config.get("debug_mode", False)
     
+    # 在应用启动时清理过期的日志文件
+    cleanup_old_logs(LOG_RETENTION_DAYS)
+    logger.info(f"已执行日志清理，保留最近{LOG_RETENTION_DAYS}天的日志")
+    
     # 如果调试模式已启用，确保立即创建主日志文件
     if debug_mode:
         try:
@@ -26,14 +30,13 @@ if __name__ == "__main__":
                 os.makedirs(log_dir, exist_ok=True)
                 logger.info(f"已创建日志目录: {log_dir}")
             
-            # 创建新的日志文件（使用覆盖模式）
-            with open(LOG_FILE, 'w', encoding='utf-8') as f:
-                current_time = datetime.datetime.now()
-                formatted_date = current_time.strftime("%Y-%m-%d")
-                formatted_time = current_time.strftime("%H:%M:%S")
-                f.write(f"--- 新调试会话开始于 {os.path.basename(LOG_FILE)} ---\n")
-                f.write(f"--- 应用版本: {APP_NAME} ---\n")
-                f.write(f"--- 日期: {formatted_date} 时间: {formatted_time} ---\n\n")
+            # 记录调试会话信息
+            logger.info(f"--- 新调试会话开始于 {os.path.basename(LOG_FILE)} ---")
+            logger.info(f"--- 应用版本: {APP_NAME} ---")
+            current_time = datetime.datetime.now()
+            formatted_date = current_time.strftime("%Y-%m-%d")
+            formatted_time = current_time.strftime("%H:%M:%S")
+            logger.info(f"--- 日期: {formatted_date} 时间: {formatted_time} ---")
                 
             logger.info(f"调试模式已启用，日志文件路径: {os.path.abspath(LOG_FILE)}")
         except Exception as e:

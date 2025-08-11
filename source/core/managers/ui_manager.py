@@ -1,12 +1,16 @@
 from PySide6.QtGui import QIcon, QAction, QFont, QCursor, QActionGroup
-from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QPushButton
+from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QPushButton, QDialog, QVBoxLayout, QProgressBar, QLabel
 from PySide6.QtCore import Qt, QRect
 import webbrowser
 import os
+import logging
+import traceback
 
 from utils import load_base64_image, msgbox_frame, resource_path
 from config.config import APP_NAME, APP_VERSION, LOG_FILE
 from core.managers.ipv6_manager import IPv6Manager  # 导入新的IPv6Manager类
+
+logger = logging.getLogger(__name__)
 
 class UIManager:
     def __init__(self, main_window):
@@ -24,6 +28,7 @@ class UIManager:
         self.privacy_menu = None  # 隐私协议菜单
         self.about_menu = None    # 关于菜单
         self.about_btn = None     # 关于按钮
+        self.loading_dialog = None # 添加loading_dialog实例变量
         
         # 获取主窗口的IPv6Manager实例
         self.ipv6_manager = getattr(main_window, 'ipv6_manager', None)
@@ -246,13 +251,53 @@ class UIManager:
         
         try:
             from PySide6.QtGui import QFontDatabase
+            from utils import resource_path
             
-            # 尝试加载字体
-            font_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts", "SmileySans-Oblique.ttf")
+            # 使用resource_path查找字体文件
+            font_path = resource_path(os.path.join("assets", "fonts", "SmileySans-Oblique.ttf"))
+            
+            # 详细记录字体加载过程
             if os.path.exists(font_path):
+                logger.info(f"尝试加载字体文件: {font_path}")
                 font_id = QFontDatabase.addApplicationFont(font_path)
+                
                 if font_id != -1:
-                    font_family = QFontDatabase.applicationFontFamilies(font_id)[0]
+                    font_families = QFontDatabase.applicationFontFamilies(font_id)
+                    if font_families:
+                        font_family = font_families[0]
+                        logger.info(f"成功加载字体: {font_family} 从 {font_path}")
+                    else:
+                        logger.warning(f"字体加载成功但无法获取字体族: {font_path}")
+                else:
+                    logger.warning(f"字体加载失败: {font_path} (返回ID: {font_id})")
+                    
+                    # 检查文件大小和是否可读
+                    try:
+                        file_size = os.path.getsize(font_path)
+                        logger.debug(f"字体文件大小: {file_size} 字节")
+                        if file_size == 0:
+                            logger.error(f"字体文件大小为0字节: {font_path}")
+                        
+                        # 尝试打开文件测试可读性
+                        with open(font_path, 'rb') as f:
+                            # 只读取前几个字节测试可访问性
+                            f.read(10)
+                            logger.debug(f"字体文件可以正常打开和读取")
+                    except Exception as file_error:
+                        logger.error(f"字体文件访问错误: {file_error}")
+            else:
+                logger.error(f"找不到字体文件: {font_path}")
+                
+                # 尝试列出assets/fonts目录下的文件
+                try:
+                    fonts_dir = os.path.dirname(font_path)
+                    if os.path.exists(fonts_dir):
+                        files = os.listdir(fonts_dir)
+                        logger.debug(f"字体目录 {fonts_dir} 中的文件: {files}")
+                    else:
+                        logger.debug(f"字体目录不存在: {fonts_dir}")
+                except Exception as dir_error:
+                    logger.error(f"无法列出字体目录内容: {dir_error}")
             
             # 创建菜单字体
             menu_font = QFont(font_family, 14)
@@ -260,7 +305,8 @@ class UIManager:
             return menu_font
             
         except Exception as e:
-            print(f"加载字体失败: {e}")
+            logger.error(f"加载字体过程中发生异常: {e}")
+            logger.error(f"异常详情: {traceback.format_exc()}")
             # 返回默认字体
             menu_font = QFont(font_family, 14)
             menu_font.setBold(True)
@@ -969,3 +1015,61 @@ class UIManager:
                 "\n已切换到在线模式。\n\n将从网络下载补丁进行安装。\n"
             )
             msg_box.exec() 
+
+    def create_progress_window(self, title, initial_text="准备中..."):
+        """创建并返回一个通用的进度窗口.
+        
+        Args:
+            title (str): 窗口标题.
+            initial_text (str): 初始状态文本.
+
+        Returns:
+            QDialog: 配置好的进度窗口实例.
+        """
+        progress_window = QDialog(self.main_window)
+        progress_window.setWindowTitle(f"{title} - {APP_NAME}")
+        progress_window.setFixedSize(400, 150)
+        
+        layout = QVBoxLayout()
+        
+        progress_bar = QProgressBar()
+        progress_bar.setRange(0, 100)
+        progress_bar.setValue(0)
+        layout.addWidget(progress_bar)
+        
+        status_label = QLabel(initial_text)
+        layout.addWidget(status_label)
+        
+        progress_window.setLayout(layout)
+        # 将控件附加到窗口对象上，以便外部访问
+        progress_window.progress_bar = progress_bar
+        progress_window.status_label = status_label
+        
+        return progress_window
+
+    def show_loading_dialog(self, message):
+        """显示或更新加载对话框."""
+        if not self.loading_dialog:
+            self.loading_dialog = QDialog(self.main_window)
+            self.loading_dialog.setWindowTitle(f"请稍候 - {APP_NAME}")
+            self.loading_dialog.setFixedSize(300, 100)
+            self.loading_dialog.setModal(True)
+            layout = QVBoxLayout()
+            loading_label = QLabel(message)
+            loading_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(loading_label)
+            self.loading_dialog.setLayout(layout)
+            # 将label附加到dialog，方便后续更新
+            self.loading_dialog.loading_label = loading_label
+        else:
+            self.loading_dialog.loading_label.setText(message)
+        
+        self.loading_dialog.show()
+        # force UI update
+        QMessageBox.QApplication.processEvents()
+
+    def hide_loading_dialog(self):
+        """隐藏并销毁加载对话框."""
+        if self.loading_dialog:
+            self.loading_dialog.hide()
+            self.loading_dialog = None 

@@ -65,8 +65,43 @@ class OfflineModeManager:
             dict: 找到的补丁文件 {补丁名称: 文件路径}
         """
         if directory is None:
-            # 获取软件所在目录
-            directory = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            # 获取软件所在目录 - 直接使用最简单的方式
+            try:
+                import sys
+                
+                if getattr(sys, 'frozen', False):
+                    # 如果是PyInstaller打包的环境，使用可执行文件所在目录
+                    directory = os.path.dirname(sys.executable)
+                else:
+                    # 直接取当前工作目录
+                    directory = os.getcwd()
+                    
+                    # 对于开发环境的特殊处理：
+                    # 如果当前目录路径中包含'source'，则可能是在开发模式下从source目录运行
+                    # 尝试找到项目根目录
+                    if 'source' in directory:
+                        # 尝试向上一级查找补丁文件
+                        parent_dir = os.path.dirname(directory)
+                        # 看看父目录是否存在补丁文件
+                        potential_patches = ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]
+                        for patch_file in potential_patches:
+                            if os.path.exists(os.path.join(parent_dir, patch_file)):
+                                # 如果在父目录找到了补丁文件，使用父目录作为扫描目录
+                                directory = parent_dir
+                                break
+                
+                if self._is_debug_mode():
+                    logger.debug(f"DEBUG: 使用目录 {directory} 扫描离线补丁文件")
+                    current_dir = os.getcwd()
+                    logger.debug(f"DEBUG: 当前工作目录: {current_dir}")
+                    logger.debug(f"DEBUG: 是否为打包环境: {getattr(sys, 'frozen', False)}")
+                    if getattr(sys, 'frozen', False):
+                        logger.debug(f"DEBUG: 可执行文件路径: {sys.executable}")
+            except Exception as e:
+                # 如果出现异常，使用当前工作目录
+                directory = os.getcwd()
+                if self._is_debug_mode():
+                    logger.debug(f"DEBUG: 路径计算出错，使用工作目录: {directory}, 错误: {e}")
             
         debug_mode = self._is_debug_mode()
         
@@ -76,19 +111,60 @@ class OfflineModeManager:
         # 要查找的补丁文件名
         patch_files = ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]
         
+        # 尝试多个可能的目录位置，从指定目录开始，然后是其父目录
+        search_dirs = [directory]
+        
+        # 添加可能的父目录
+        current = directory
+        for i in range(3):  # 最多向上查找3层目录
+            parent = os.path.dirname(current)
+            if parent and parent != current:  # 确保不是根目录
+                search_dirs.append(parent)
+                current = parent
+            else:
+                break
+
+        # 添加工作目录（如果与指定目录不同）
+        work_dir = os.getcwd()
+        if work_dir not in search_dirs:
+            search_dirs.append(work_dir)
+            
+        if debug_mode:
+            logger.debug(f"DEBUG: 将在以下目录中查找补丁文件: {search_dirs}")
+        
         found_patches = {}
         
-        # 扫描目录中的文件
-        for file in os.listdir(directory):
-            if file.lower() in patch_files:
-                file_path = os.path.join(directory, file)
-                if os.path.isfile(file_path):
-                    patch_name = file.lower()
-                    found_patches[patch_name] = file_path
-                    # 无论是否为调试模式，都记录找到的补丁文件
-                    logger.info(f"找到离线补丁文件: {patch_name} 路径: {file_path}")
+        # 扫描所有可能的目录查找补丁文件
+        try:
+            # 首先尝试在指定目录查找
+            for search_dir in search_dirs:
+                if debug_mode:
+                    logger.debug(f"DEBUG: 正在搜索目录: {search_dir}")
+                    
+                if not os.path.exists(search_dir):
                     if debug_mode:
-                        logger.debug(f"DEBUG: 找到离线补丁文件: {patch_name} 路径: {file_path}")
+                        logger.debug(f"DEBUG: 目录不存在，跳过: {search_dir}")
+                    continue
+                    
+                for file in os.listdir(search_dir):
+                    if file.lower() in patch_files:
+                        file_path = os.path.join(search_dir, file)
+                        if os.path.isfile(file_path):
+                            patch_name = file.lower()
+                            found_patches[patch_name] = file_path
+                            # 无论是否为调试模式，都记录找到的补丁文件
+                            logger.info(f"找到离线补丁文件: {patch_name} 路径: {file_path}")
+                            if debug_mode:
+                                logger.debug(f"DEBUG: 找到离线补丁文件: {patch_name} 路径: {file_path}")
+                
+                # 如果在当前目录找到了补丁文件，停止继续查找
+                if found_patches:
+                    if debug_mode:
+                        logger.debug(f"DEBUG: 在目录 {search_dir} 找到补丁文件，停止继续搜索")
+                    break
+                    
+        except Exception as e:
+            logger.error(f"扫描目录时出错: {str(e)}")
                         
         self.offline_patches = found_patches
         
@@ -745,59 +821,54 @@ class OfflineModeManager:
                 
             # 添加到安装任务列表
             install_tasks.append((patch_file, game_folder, game_version, _7z_path, plugin_path))
-            
+        
+        # 检查是否有未找到离线补丁文件的游戏
+        if self.missing_offline_patches:
+            if debug_mode:
+                logger.debug(f"DEBUG: 有未找到离线补丁文件的游戏: {self.missing_offline_patches}")
+                
+            # 询问用户是否切换到在线模式
+            msg_box = msgbox_frame(
+                f"离线安装信息 - {self.app_name}",
+                f"\n本地未发现对应离线文件，是否切换为在线模式安装？\n\n以下游戏未找到对应的离线补丁文件：\n\n{chr(10).join(self.missing_offline_patches)}\n",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            result = msg_box.exec()
+                
+            if result == QMessageBox.StandardButton.Yes:
+                if debug_mode:
+                    logger.debug("DEBUG: 用户选择切换到在线模式")
+                    
+                # 切换到在线模式
+                if hasattr(self.main_window, 'ui_manager'):
+                    self.main_window.ui_manager.switch_work_mode("online")
+                    
+                    # 直接启动下载流程
+                    self.main_window.setEnabled(True)
+                    # 保存当前选择的游戏列表，以便在线模式使用
+                    missing_games = self.missing_offline_patches.copy()
+                    # 启动下载流程
+                    QTimer.singleShot(500, lambda: self._start_online_download(missing_games))
+                    return True
+                    
         # 开始执行第一个安装任务
         if install_tasks:
             if debug_mode:
                 logger.info(f"DEBUG: 开始离线安装流程，安装游戏数量: {len(install_tasks)}")
             self.process_next_offline_install_task(install_tasks)
+            return True
         else:
             if debug_mode:
                 logger.warning("DEBUG: 没有可安装的游戏，安装流程结束")
-            
-            # 检查是否有未找到离线补丁文件的游戏
-            if self.missing_offline_patches:
-                if debug_mode:
-                    logger.debug(f"DEBUG: 有未找到离线补丁文件的游戏: {self.missing_offline_patches}")
                 
-                # 询问用户是否切换到在线模式
-                msg_box = msgbox_frame(
-                    f"离线安装信息 - {self.app_name}",
-                    f"\n本地未发现对应离线文件，是否切换为在线模式安装？\n\n以下游戏未找到对应的离线补丁文件：\n\n{chr(10).join(self.missing_offline_patches)}\n",
-                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                )
-                result = msg_box.exec()
-                
-                if result == QMessageBox.StandardButton.Yes:
-                    if debug_mode:
-                        logger.debug("DEBUG: 用户选择切换到在线模式")
-                    
-                    # 切换到在线模式
-                    if hasattr(self.main_window, 'ui_manager'):
-                        self.main_window.ui_manager.switch_work_mode("online")
-                        
-                        # 直接启动下载流程
-                        self.main_window.setEnabled(True)
-                        # 保存当前选择的游戏列表，以便在线模式使用
-                        missing_games = self.missing_offline_patches.copy()
-                        # 启动下载流程
-                        QTimer.singleShot(500, lambda: self._start_online_download(missing_games))
-                else:
-                    if debug_mode:
-                        logger.debug("DEBUG: 用户选择不切换到在线模式")
-                    
-                    # 恢复UI状态
-                    self.main_window.setEnabled(True)
-                    self.main_window.ui.start_install_text.setText("开始安装")
-            else:
-                # 没有缺少离线补丁的游戏，显示一般消息
-                msgbox_frame(
-                    f"离线安装信息 - {self.app_name}",
-                    "\n没有可安装的游戏或未找到对应的离线补丁文件。\n",
-                    QMessageBox.StandardButton.Ok
-                ).exec()
-                self.main_window.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("开始安装")
+            # 如果没有找到任何可安装的游戏，显示一般消息
+            msgbox_frame(
+                f"离线安装信息 - {self.app_name}",
+                "\n没有可安装的游戏或未找到对应的离线补丁文件。\n",
+                QMessageBox.StandardButton.Ok
+            ).exec()
+            self.main_window.setEnabled(True)
+            self.main_window.ui.start_install_text.setText("开始安装")
             
         return True
         

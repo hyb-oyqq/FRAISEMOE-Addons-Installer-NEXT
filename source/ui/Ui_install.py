@@ -11,10 +11,14 @@ from PySide6.QtGui import (QAction, QBrush, QColor, QConicalGradient,
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QMenu,
     QMenuBar, QPushButton, QSizePolicy, QWidget, QHBoxLayout)
 import os
+import logging
+
+# 初始化日志记录器
+logger = logging.getLogger(__name__)
 
 # 导入配置常量
 from config.config import APP_NAME, APP_VERSION
-from utils import load_image_from_file
+from utils import load_image_from_file, resource_path
 
 class Ui_MainWindows(object):
     def setupUi(self, MainWindows):
@@ -38,8 +42,21 @@ class Ui_MainWindows(object):
         MainWindows.setDockNestingEnabled(False)
         
         # 加载自定义字体
-        font_id = QFontDatabase.addApplicationFont(os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts", "SmileySans-Oblique.ttf"))
-        font_family = QFontDatabase.applicationFontFamilies(font_id)[0] if font_id != -1 else "Arial"
+        font_path = resource_path(os.path.join("assets", "fonts", "SmileySans-Oblique.ttf"))
+        logger.info(f"尝试加载字体文件: {font_path}")
+        font_id = QFontDatabase.addApplicationFont(font_path)
+        if font_id != -1:
+            font_families = QFontDatabase.applicationFontFamilies(font_id)
+            if font_families:
+                font_family = font_families[0]
+                logger.info(f"成功加载字体: {font_family} 从 {font_path}")
+            else:
+                logger.warning(f"字体加载成功但无法获取字体族: {font_path}")
+                font_family = "Arial"
+        else:
+            logger.error(f"字体加载失败: {font_path}")
+            font_family = "Arial"
+
         self.custom_font = QFont(font_family, 16)  # 创建字体对象，大小为16
         self.custom_font.setWeight(QFont.Weight.Medium)  # 设置为中等粗细，不要太粗
         
@@ -299,8 +316,11 @@ class Ui_MainWindows(object):
         self.loadbg.setObjectName(u"loadbg")
         self.loadbg.setGeometry(QRect(0, 0, 1280, 655))
         # 加载背景图并允许拉伸
-        bg_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BG", "bg1.jpg")
+        bg_path = resource_path(os.path.join("assets", "images", "BG", "bg1.jpg"))
+        logger.info(f"加载背景图: {bg_path}")
         bg_pixmap = QPixmap(bg_path)
+        if bg_pixmap.isNull():
+            logger.error(f"背景图加载失败: {bg_path}")
         self.loadbg.setPixmap(bg_pixmap)
         self.loadbg.setScaledContents(True)
         
@@ -308,7 +328,8 @@ class Ui_MainWindows(object):
         self.vol1bg.setObjectName(u"vol1bg")
         self.vol1bg.setGeometry(QRect(0, 150, 93, 64))
         # 直接加载图片文件
-        vol1_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo01_logo.png")
+        vol1_path = resource_path(os.path.join("assets", "images", "LOGO", "vo01_logo.png"))
+        logger.info(f"加载LOGO图: {vol1_path}")
         self.vol1bg.setPixmap(QPixmap(vol1_path))
         self.vol1bg.setScaledContents(True)
         
@@ -316,7 +337,7 @@ class Ui_MainWindows(object):
         self.vol2bg.setObjectName(u"vol2bg")
         self.vol2bg.setGeometry(QRect(0, 210, 93, 64))
         # 直接加载图片文件
-        vol2_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo02_logo.png")
+        vol2_path = resource_path(os.path.join("assets", "images", "LOGO", "vo02_logo.png"))
         self.vol2bg.setPixmap(QPixmap(vol2_path))
         self.vol2bg.setScaledContents(True)
         
@@ -324,7 +345,7 @@ class Ui_MainWindows(object):
         self.vol3bg.setObjectName(u"vol3bg")
         self.vol3bg.setGeometry(QRect(0, 270, 93, 64))
         # 直接加载图片文件
-        vol3_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo03_logo.png")
+        vol3_path = resource_path(os.path.join("assets", "images", "LOGO", "vo03_logo.png"))
         self.vol3bg.setPixmap(QPixmap(vol3_path))
         self.vol3bg.setScaledContents(True)
         
@@ -332,7 +353,7 @@ class Ui_MainWindows(object):
         self.vol4bg.setObjectName(u"vol4bg")
         self.vol4bg.setGeometry(QRect(0, 330, 93, 64))
         # 直接加载图片文件
-        vol4_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "vo04_logo.png")
+        vol4_path = resource_path(os.path.join("assets", "images", "LOGO", "vo04_logo.png"))
         self.vol4bg.setPixmap(QPixmap(vol4_path))
         self.vol4bg.setScaledContents(True)
         
@@ -340,7 +361,7 @@ class Ui_MainWindows(object):
         self.afterbg.setObjectName(u"afterbg")
         self.afterbg.setGeometry(QRect(0, 390, 93, 64))
         # 直接加载图片文件
-        after_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "LOGO", "voaf_logo.png")
+        after_path = resource_path(os.path.join("assets", "images", "LOGO", "voaf_logo.png"))
         self.afterbg.setPixmap(QPixmap(after_path))
         self.afterbg.setScaledContents(True)
         
@@ -349,8 +370,12 @@ class Ui_MainWindows(object):
         self.Mainbg.setObjectName(u"Mainbg")
         self.Mainbg.setGeometry(QRect(0, 0, 1280, 655))
         # 允许拉伸以填满整个区域
-        main_bg_pixmap = load_image_from_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BG", "title_bg1.png"))
-        
+        main_bg_path = resource_path(os.path.join("assets", "images", "BG", "title_bg1.png"))
+        logger.info(f"加载主背景图: {main_bg_path}")
+        main_bg_pixmap = QPixmap(main_bg_path)
+        if main_bg_pixmap.isNull():
+            logger.error(f"主背景图加载失败: {main_bg_path}")
+
         # 如果加载的图片不是空的，则设置，并允许拉伸填满
         if not main_bg_pixmap.isNull():
             self.Mainbg.setPixmap(main_bg_pixmap)
@@ -358,7 +383,11 @@ class Ui_MainWindows(object):
         self.Mainbg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # 使用新的按钮图片
-        button_pixmap = load_image_from_file(os.path.join(os.path.dirname(os.path.dirname(__file__)), "IMG", "BTN", "Button.png"))
+        button_path = resource_path(os.path.join("assets", "images", "BTN", "Button.png"))
+        logger.info(f"加载按钮图片: {button_path}")
+        button_pixmap = QPixmap(button_path)
+        if button_pixmap.isNull():
+            logger.error(f"按钮图片加载失败: {button_path}")
         
         # 创建文本标签布局的按钮
         # 开始安装按钮 - 基于背景图片和标签组合

@@ -23,7 +23,58 @@ class WindowManager:
         
         # 设置圆角窗口
         self.setRoundedCorners()
-    
+        
+        # 初始化状态管理
+        self._setup_window_state()
+
+    def _setup_window_state(self):
+        """初始化窗口状态管理."""
+        self.STATE_INITIALIZING = "initializing"
+        self.STATE_READY = "ready"
+        self.STATE_DOWNLOADING = "downloading"
+        self.STATE_EXTRACTING = "extracting"
+        self.STATE_VERIFYING = "verifying"
+        self.STATE_INSTALLING = "installing"
+        self.STATE_COMPLETED = "completed"
+        self.STATE_ERROR = "error"
+        
+        self.current_state = self.STATE_INITIALIZING
+
+    def change_window_state(self, new_state, error_message=None):
+        """更改窗口状态并更新UI.
+        
+        Args:
+            new_state (str): 新的状态.
+            error_message (str, optional): 错误信息. Defaults to None.
+        """
+        if new_state == self.current_state:
+            return
+            
+        self.current_state = new_state
+        self._update_ui_for_state(new_state, error_message)
+
+    def _update_ui_for_state(self, state, error_message=None):
+        """根据当前状态更新UI组件."""
+        is_offline = self.window.offline_mode_manager.is_in_offline_mode()
+        config_valid = self.window.config_valid
+        
+        button_enabled = False
+        button_text = "!无法安装!"
+
+        if state == self.STATE_READY:
+            if is_offline or config_valid:
+                button_enabled = True
+                button_text = "开始安装"
+        elif state in [self.STATE_DOWNLOADING, self.STATE_EXTRACTING, self.STATE_VERIFYING, self.STATE_INSTALLING]:
+            button_text = "正在安装"
+        elif state == self.STATE_COMPLETED:
+            button_enabled = True
+            button_text = "安装完成" # Or back to "开始安装"
+        
+        self.window.ui.start_install_btn.setEnabled(button_enabled)
+        self.window.ui.start_install_text.setText(button_text)
+        self.window.install_button_enabled = button_enabled
+
     def setRoundedCorners(self):
         """设置窗口圆角"""
         # 实现圆角窗口

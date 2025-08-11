@@ -17,6 +17,11 @@ from core.managers.cloudflare_optimizer import CloudflareOptimizer
 from core.managers.download_task_manager import DownloadTaskManager
 from core.handlers.extraction_handler import ExtractionHandler
 from utils.logger import setup_logger
+from utils.url_censor import censor_url
+from utils.helpers import (
+    HashManager, AdminPrivileges, msgbox_frame, HostsManager
+)
+from workers.download import DownloadThread, ProgressWindow
 
 # 初始化logger
 logger = setup_logger("download_manager")
@@ -41,6 +46,12 @@ class DownloadManager:
         self.download_task_manager = DownloadTaskManager(main_window, self.download_thread_level)
         self.extraction_handler = ExtractionHandler(main_window)
         
+        self.extraction_thread = None
+        self.progress_window = None
+        
+        # 调试管理器
+        self.debug_manager = getattr(main_window, 'debug_manager', None)
+
     def file_dialog(self):
         """显示文件夹选择对话框，选择游戏安装目录"""
         self.selected_folder = QtWidgets.QFileDialog.getExistingDirectory(
@@ -1059,3 +1070,40 @@ class DownloadManager:
                 self.download_queue.append((url, game_folder, game_version, _7z_path, plugin_path))
             elif debug_mode:
                 logger.warning(f"DEBUG: 未找到 {game_version} 的下载URL") 
+
+    def graceful_stop_threads(self, threads_dict, timeout_ms=2000):
+        """优雅地停止一组线程.
+        
+        Args:
+            threads_dict (dict): 线程名字和线程对象的字典.
+            timeout_ms (int): 等待线程自然结束的超时时间.
+        """
+        for name, thread_obj in threads_dict.items():
+            if not thread_obj or not hasattr(thread_obj, 'isRunning') or not thread_obj.isRunning():
+                continue
+
+            try:
+                if hasattr(thread_obj, 'requestInterruption'):
+                    thread_obj.requestInterruption()
+                
+                if thread_obj.wait(timeout_ms):
+                    if self.debug_manager:
+                        self.debug_manager.log_debug(f"线程 {name} 已优雅停止.")
+                else:
+                    if self.debug_manager:
+                        self.debug_manager.log_warning(f"线程 {name} 超时，强制终止.")
+                    thread_obj.terminate()
+                    thread_obj.wait(1000) # a short wait after termination
+            except Exception as e:
+                if self.debug_manager:
+                    self.debug_manager.log_error(f"停止线程 {name} 时发生错误: {e}")
+
+    def on_game_directories_identified(self, game_dirs):
+        """当游戏目录识别完成后的回调.
+        
+        Args:
+            game_dirs: 识别到的游戏目录
+        """
+        self.main_window.hide_loading_dialog()
+        self.main_window.setEnabled(True)
+        self.main_window.patch_detector.on_offline_pre_hash_finished(updated_status, game_dirs) 

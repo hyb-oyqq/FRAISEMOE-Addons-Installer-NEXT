@@ -125,14 +125,9 @@ class DebugManager:
                     f.write(f"--- 日期: {formatted_date} 时间: {formatted_time} ---\n\n")
                     logger.info(f"已创建日志文件: {os.path.abspath(LOG_FILE)}")
                 
-                # 保存原始的 stdout 和 stderr
+                # 保存原始的 stdout 并创建Logger实例
                 self.original_stdout = sys.stdout
-                self.original_stderr = sys.stderr
-                
-                # 创建 Logger 实例
                 self.logger = Logger(LOG_FILE, self.original_stdout)
-                sys.stdout = self.logger
-                sys.stderr = self.logger
                 
                 logger.info(f"--- Debug mode enabled (log file: {os.path.abspath(LOG_FILE)}) ---")
             except (IOError, OSError) as e:
@@ -143,7 +138,10 @@ class DebugManager:
         """停止日志记录"""
         if self.logger:
             logger.info("--- Debug mode disabled ---")
-            sys.stdout = self.original_stdout
-            sys.stderr = self.original_stderr
-            self.logger.close()
+            # 恢复stdout到原始状态
+            if hasattr(self, 'original_stdout') and self.original_stdout:
+                sys.stdout = self.original_stdout
+            # 关闭日志文件
+            if hasattr(self.logger, 'close'):
+                self.logger.close()
             self.logger = None 
