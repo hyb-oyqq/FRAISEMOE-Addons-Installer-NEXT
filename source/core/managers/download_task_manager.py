@@ -5,6 +5,7 @@ from PySide6.QtGui import QFont
 
 from config.config import DOWNLOAD_THREADS
 from workers.download import DownloadThread
+from utils.logger import setup_logger
 
 
 class DownloadTaskManager:
@@ -53,7 +54,7 @@ class DownloadTaskManager:
         self.main_window.progress_window.stop_button.clicked.connect(self.main_window.download_manager.on_download_stopped)
         
         # 连接暂停/恢复按钮
-        self.main_window.progress_window.pause_resume_button.clicked.connect(self.toggle_download_pause)
+        self.main_window.progress_window.pause_resume_button.clicked.connect(self._on_pause_resume_clicked)
         
         # 启动线程和显示进度窗口
         self.current_download_thread.start()
@@ -61,6 +62,8 @@ class DownloadTaskManager:
 
     def toggle_download_pause(self):
         """切换下载的暂停/恢复状态"""
+        logger = setup_logger("download_task_manager")
+        logger.debug("执行暂停/恢复下载操作")
         if not self.current_download_thread:
             return
             
@@ -112,6 +115,8 @@ class DownloadTaskManager:
     
     def show_download_thread_settings(self):
         """显示下载线程设置对话框"""
+        logger = setup_logger("download_task_manager")
+        logger.info("用户打开下载线程数设置对话框")
         # 创建对话框
         dialog = QDialog(self.main_window)
         dialog.setWindowTitle(f"下载线程设置 - {self.APP_NAME}")
@@ -179,6 +184,7 @@ class DownloadTaskManager:
                     break
                     
             if selected_level:
+                old_level = self.download_thread_level
                 # 为极速和狂暴模式显示警告
                 if selected_level in ["extreme", "insane"]:
                     warning_result = QtWidgets.QMessageBox.warning(
@@ -193,6 +199,9 @@ class DownloadTaskManager:
                         return False
                 
                 success = self.set_download_thread_level(selected_level)
+                
+                logger.info(f"用户修改下载线程数设置: {old_level} -> {selected_level}")
+                logger.debug(f"对应线程数: {DOWNLOAD_THREADS[old_level]} -> {DOWNLOAD_THREADS[selected_level]}")
                 
                 if success:
                     # 显示设置成功消息
@@ -215,8 +224,19 @@ class DownloadTaskManager:
     
     def stop_download(self):
         """停止当前下载线程"""
+        logger = setup_logger("download_task_manager")
+        logger.info("用户点击停止下载按钮")
         if self.current_download_thread and self.current_download_thread.isRunning():
             self.current_download_thread.stop()
             self.current_download_thread.wait()  # 等待线程完全终止
             return True
         return False 
+    
+    def _on_pause_resume_clicked(self):
+        """处理暂停/恢复按钮点击"""
+        logger = setup_logger("download_task_manager")
+        logger.info("用户点击暂停/恢复下载按钮")
+        self.toggle_download_pause()
+    
+    def toggle_download_pause(self):
+        """切换下载暂停/恢复状态"""

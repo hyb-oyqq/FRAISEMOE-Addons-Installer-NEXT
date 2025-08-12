@@ -147,12 +147,13 @@ class HashThread(QThread):
                     
                     # 记录文件大小信息
                     file_size = os.path.getsize(install_path)
-                    logger.info(f"正在校验 {game_version} 补丁文件: {install_path}, 文件大小: {file_size} 字节")
+                    logger.info(f"开始校验 {game_version} 补丁文件")
+                    logger.debug(f"文件路径: {install_path}, 文件大小: {file_size} 字节")
                     
                     # 增加块大小，提高大文件处理性能
                     # 文件越大，块越大，最大256MB
                     chunk_size = min(256 * 1024 * 1024, max(16 * 1024 * 1024, file_size // 20))
-                    logger.info(f"  使用块大小: {chunk_size // (1024 * 1024)}MB")
+                    logger.debug(f"使用块大小: {chunk_size // (1024 * 1024)}MB")
                     
                     # 分块读取，避免大文件一次性读取内存
                     hash_obj = hashlib.sha256()
@@ -182,7 +183,7 @@ class HashThread(QThread):
                                 progress = bytes_read / file_size * 100
                                 elapsed = current_time - start_time
                                 speed = bytes_read / (elapsed if elapsed > 0 else 1) / (1024 * 1024)  # MB/s
-                                logger.info(f"  进度: {progress:.1f}% - 已处理: {bytes_read/(1024*1024):.1f}MB/{file_size/(1024*1024):.1f}MB - 速度: {speed:.1f}MB/s")
+                                logger.debug(f"哈希计算进度: {progress:.1f}% - 已处理: {bytes_read/(1024*1024):.1f}MB/{file_size/(1024*1024):.1f}MB - 速度: {speed:.1f}MB/s")
                                 last_progress_time = current_time
                                 
                     # 计算最终的哈希值
@@ -190,15 +191,16 @@ class HashThread(QThread):
                     
                     # 记录总用时
                     total_time = time.time() - start_time
-                    logger.info(f"  哈希计算完成，耗时: {total_time:.1f}秒，平均速度: {file_size/(total_time*1024*1024):.1f}MB/s")
+                    logger.debug(f"哈希计算完成，耗时: {total_time:.1f}秒，平均速度: {file_size/(total_time*1024*1024):.1f}MB/s")
                     
-                    # 详细记录哈希比较结果
-                    logger.info(f"哈希校验结果 - {game_version}:")
-                    logger.info(f"  文件: {install_path}")
-                    logger.info(f"  读取字节数: {bytes_read} / {file_size}")
-                    logger.info(f"  预期哈希: {expected_hash}")
-                    logger.info(f"  实际哈希: {file_hash}")
-                    logger.info(f"  匹配结果: {file_hash == expected_hash}")
+                    # 记录哈希比较结果
+                    is_valid = file_hash == expected_hash
+                    logger.info(f"{game_version} 哈希校验{'通过' if is_valid else '失败'}")
+                    logger.debug(f"哈希校验详情 - {game_version}:")
+                    logger.debug(f"  文件: {install_path}")
+                    logger.debug(f"  读取字节数: {bytes_read} / {file_size}")
+                    logger.debug(f"  预期哈希: {expected_hash}")
+                    logger.debug(f"  实际哈希: {file_hash}")
                     
                     if debug_mode:
                         logger.debug(f"DEBUG: 哈希后检查 - {game_version}")

@@ -250,9 +250,9 @@ class MainWindow(QMainWindow):
     def _connect_signals(self):
         """连接UI组件的信号到相应的槽函数."""
         if hasattr(self.ui, 'close_btn'):
-            self.ui.close_btn.clicked.connect(self.close)
+            self.ui.close_btn.clicked.connect(self._on_close_clicked)
         if hasattr(self.ui, 'minimize_btn'):
-            self.ui.minimize_btn.clicked.connect(self.showMinimized)
+            self.ui.minimize_btn.clicked.connect(self._on_minimize_clicked)
         
         self.ui.start_install_btn.clicked.connect(self.handle_install_button_click)
         self.ui.uninstall_btn.clicked.connect(self.uninstall_handler.handle_uninstall_button_click)
@@ -337,14 +337,11 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'offline_mode_manager'):
             is_offline_mode = self.offline_mode_manager.is_in_offline_mode()
             
-        # 如果是离线模式，始终启用开始安装按钮
-        if is_offline_mode:
-            self.set_start_button_enabled(True)
-        # 否则，只有在配置有效时才启用开始安装按钮
-        elif self.config_valid:
-            self.set_start_button_enabled(True)
+        # 根据离线模式和配置状态设置按钮
+        if is_offline_mode or self.config_valid:
+            self.window_manager.change_window_state(self.window_manager.STATE_READY)
         else:
-            self.set_start_button_enabled(False)
+            self.window_manager.change_window_state(self.window_manager.STATE_ERROR)
             
     def set_start_button_enabled(self, enabled, installing=False):
         """[过渡方法] 设置按钮状态，将调用委托给WindowManager
@@ -379,6 +376,11 @@ class MainWindow(QMainWindow):
         # 处理返回结果
         result = self.config_manager.on_config_fetched(data, error_message)
         
+        # 先同步状态
+        self.cloud_config = self.config_manager.get_cloud_config()
+        self.config_valid = self.config_manager.is_config_valid()
+        self.last_error_message = self.config_manager.get_last_error()
+        
         # 根据返回的操作执行相应动作
         if result and "action" in result:
             if result["action"] == "exit":
@@ -386,20 +388,15 @@ class MainWindow(QMainWindow):
                 self.shutdown_app(force_exit=True)
             elif result["action"] == "disable_button":
                 # 禁用开始安装按钮
-                self.set_start_button_enabled(False)
+                self.window_manager.change_window_state(self.window_manager.STATE_ERROR)
             elif result["action"] == "enable_button":
                 # 启用开始安装按钮
-                self.set_start_button_enabled(True)
+                self.window_manager.change_window_state(self.window_manager.STATE_READY)
                 # 检查是否需要记录版本警告
                 if "version_warning" in result and result["version_warning"]:
                     self.version_warning = True
                 else:
                     self.version_warning = False
-        
-        # 同步状态
-        self.cloud_config = self.config_manager.get_cloud_config()
-        self.config_valid = self.config_manager.is_config_valid()
-        self.last_error_message = self.config_manager.get_last_error()
         
         # 重新启用窗口，恢复用户交互
         self.setEnabled(True)
@@ -430,6 +427,10 @@ class MainWindow(QMainWindow):
 
     def shutdown_app(self, event=None, force_exit=False):
         """关闭应用程序"""
+        logger = setup_logger("main_window")
+        logger.info("用户点击退出按钮")
+        logger.debug("开始关闭应用程序")
+        
         if hasattr(self, 'animation_in_progress') and self.animation_in_progress and not force_exit:
             if event:
                 event.ignore()
@@ -482,6 +483,9 @@ class MainWindow(QMainWindow):
         """处理安装按钮点击事件
         根据按钮当前状态决定是显示错误还是执行安装
         """
+        logger = setup_logger("main_window")
+        logger.info("用户点击开始安装按钮")
+        logger.debug("开始处理安装按钮点击事件")
         # 检查是否处于离线模式
         is_offline_mode = False
         if hasattr(self, 'offline_mode_manager'):
@@ -727,6 +731,18 @@ class MainWindow(QMainWindow):
             message: 要显示的消息
         """
         self.ui_manager.show_loading_dialog(message)
+    
+    def _on_close_clicked(self):
+        """处理关闭按钮点击"""
+        logger = setup_logger("main_window")
+        logger.info("用户点击关闭按钮")
+        self.close()
+    
+    def _on_minimize_clicked(self):
+        """处理最小化按钮点击"""
+        logger = setup_logger("main_window")
+        logger.info("用户点击最小化按钮")
+        self.showMinimized()
         
     def hide_loading_dialog(self):
         """隐藏加载对话框"""

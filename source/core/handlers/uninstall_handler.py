@@ -73,7 +73,7 @@ class UninstallHandler(QObject):
         
         logger.info(f"用户选择了目录: {selected_folder}")
         if debug_mode:
-            logger.debug(f"DEBUG: 卸载功能 - 用户选择了目录: {selected_folder}")
+            logger.debug(f"卸载功能 - 用户选择了目录: {selected_folder}")
         
         # 使用UI管理器显示加载对话框
         if hasattr(self.main_window, 'ui_manager'):
@@ -191,7 +191,7 @@ class UninstallHandler(QObject):
         
         logger.info(f"用户选择了以下游戏: {selected_games}")
         if debug_mode:
-            logger.debug(f"DEBUG: 卸载功能 - 用户选择了以下游戏: {selected_games}")
+            logger.debug(f"卸载功能 - 用户选择了以下游戏: {selected_games}")
         
         # 过滤game_dirs，只保留选中的游戏
         selected_game_dirs = {game: games_with_patch[game] for game in selected_games if game in games_with_patch}

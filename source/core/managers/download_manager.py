@@ -794,7 +794,6 @@ class DownloadManager:
                         logger.info(f"DEBUG: 成功复制并验证补丁文件 {_7z_path}")
                     # 直接进入解压阶段
                     self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
-                    self.main_window.extraction_handler.extraction_finished.connect(self.on_extraction_finished)
                 else:
                     if debug_mode:
                         logger.warning(f"DEBUG: 补丁文件哈希验证失败")
@@ -910,7 +909,6 @@ class DownloadManager:
             
         # 直接进入解压阶段
         self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
-        self.main_window.extraction_handler.extraction_finished.connect(self.on_extraction_finished)
 
     def on_extraction_finished(self, continue_download):
         """解压完成后的回调，决定是否继续下载队列

@@ -102,10 +102,10 @@ class ExtractionThread(QThread):
                 file_list = archive.getnames()
                 
                 # 详细记录压缩包中的所有文件
-                debug_logger.info(f"压缩包内容分析:")
-                debug_logger.info(f"- 文件总数: {len(file_list)}")
+                debug_logger.debug(f"压缩包内容分析:")
+                debug_logger.debug(f"- 文件总数: {len(file_list)}")
                 for i, f in enumerate(file_list):
-                    debug_logger.info(f"  {i+1}. {f} - 类型: {'文件夹' if f.endswith('/') or f.endswith('\\') else '文件'}")
+                    debug_logger.debug(f"  {i+1}. {f} - 类型: {'文件夹' if f.endswith('/') or f.endswith('\\') else '文件'}")
 
                 update_progress(20, f"正在分析 {self.game_version} 的补丁文件...")
 
@@ -114,9 +114,15 @@ class ExtractionThread(QThread):
                 with tempfile.TemporaryDirectory() as temp_dir:
                     # 查找主补丁文件和签名文件
                     target_filename = os.path.basename(self.plugin_path)
-                    sig_filename = target_filename + ".sig"  # 签名文件名
-                    debug_logger.info(f"查找主补丁文件: {target_filename}")
-                    debug_logger.info(f"查找签名文件: {sig_filename}")
+                    # 只有NEKOPARA After版本才需要查找签名文件
+                    if self.game_version == "NEKOPARA After":
+                        sig_filename = target_filename + ".sig"  # 签名文件名
+                        debug_logger.debug(f"查找主补丁文件: {target_filename}")
+                        debug_logger.debug(f"查找签名文件: {sig_filename}")
+                    else:
+                        sig_filename = None
+                        debug_logger.debug(f"查找主补丁文件: {target_filename}")
+                        debug_logger.debug(f"{self.game_version} 不需要签名文件")
                     
                     target_file_in_archive = None
                     sig_file_in_archive = None
@@ -124,7 +130,7 @@ class ExtractionThread(QThread):
                     # 对于NEKOPARA After，增加特殊处理
                     if self.game_version == "NEKOPARA After":
                         # 增加专门的检查，同时识别主补丁和签名文件
-                        debug_logger.info("执行NEKOPARA After特殊补丁文件识别")
+                        debug_logger.debug("执行NEKOPARA After特殊补丁文件识别")
                         
                         # 查找主补丁和签名文件
                         for file_path in file_list:
@@ -133,19 +139,19 @@ class ExtractionThread(QThread):
                             # 查找主补丁文件
                             if basename == "afteradult.xp3" and not basename.endswith('.sig'):
                                 target_file_in_archive = file_path
-                                debug_logger.info(f"找到精确匹配的After主补丁文件: {target_file_in_archive}")
+                                debug_logger.debug(f"找到精确匹配的After主补丁文件: {target_file_in_archive}")
                                 
                             # 查找签名文件
                             elif basename == "afteradult.xp3.sig" or basename.endswith('.sig'):
                                 sig_file_in_archive = file_path
-                                debug_logger.info(f"找到After签名文件: {sig_file_in_archive}")
+                                debug_logger.debug(f"找到After签名文件: {sig_file_in_archive}")
                         
                         # 如果没找到主补丁文件，寻找可能的替代文件
                         if not target_file_in_archive:
                             for file_path in file_list:
                                 if "afteradult.xp3" in file_path and not file_path.endswith('.sig'):
                                     target_file_in_archive = file_path
-                                    debug_logger.info(f"找到备选After主补丁文件: {target_file_in_archive}")
+                                    debug_logger.debug(f"找到备选After主补丁文件: {target_file_in_archive}")
                                     break
                     else:
                         # 标准处理逻辑
@@ -155,12 +161,12 @@ class ExtractionThread(QThread):
                             # 查找主补丁文件
                             if basename == target_filename and not basename.endswith('.sig'):
                                 target_file_in_archive = file_path
-                                debug_logger.info(f"在压缩包中找到主补丁文件: {target_file_in_archive}")
+                                debug_logger.debug(f"在压缩包中找到主补丁文件: {target_file_in_archive}")
                             
                             # 查找签名文件
                             elif basename == sig_filename:
                                 sig_file_in_archive = file_path
-                                debug_logger.info(f"在压缩包中找到签名文件: {sig_file_in_archive}")
+                                debug_logger.debug(f"在压缩包中找到签名文件: {sig_file_in_archive}")
                         
                         # 如果没有找到精确匹配的主补丁文件，使用更宽松的搜索
                         if not target_file_in_archive:
@@ -178,7 +184,7 @@ class ExtractionThread(QThread):
                         # 提取所有文件到临时目录
                         update_progress(30, f"正在解压所有文件...")
                         archive.extractall(path=temp_dir)
-                        debug_logger.info(f"已提取所有文件到临时目录")
+                        debug_logger.debug(f"已提取所有文件到临时目录")
                         
                         # 在提取的文件中查找主补丁文件和签名文件
                         found_main = False
@@ -190,29 +196,29 @@ class ExtractionThread(QThread):
                                 if file == target_filename and not file.endswith('.sig'):
                                     extracted_file_path = os.path.join(root, file)
                                     file_size = os.path.getsize(extracted_file_path)
-                                    debug_logger.info(f"在提取的文件中找到主补丁文件: {extracted_file_path}, 大小: {file_size} 字节")
+                                    debug_logger.debug(f"在提取的文件中找到主补丁文件: {extracted_file_path}, 大小: {file_size} 字节")
                                     
                                     # 复制到目标位置
                                     target_path = os.path.join(self.game_folder, target_filename)
                                     shutil.copy2(extracted_file_path, target_path)
-                                    debug_logger.info(f"已复制主补丁文件到: {target_path}")
+                                    debug_logger.debug(f"已复制主补丁文件到: {target_path}")
                                     found_main = True
                                 
                                 # 查找签名文件
                                 elif file == sig_filename or file.endswith('.sig'):
                                     extracted_sig_path = os.path.join(root, file)
                                     sig_size = os.path.getsize(extracted_sig_path)
-                                    debug_logger.info(f"在提取的文件中找到签名文件: {extracted_sig_path}, 大小: {sig_size} 字节")
+                                    debug_logger.debug(f"在提取的文件中找到签名文件: {extracted_sig_path}, 大小: {sig_size} 字节")
                                     
                                     # 复制到目标位置
                                     sig_target = os.path.join(self.game_folder, sig_filename)
                                     shutil.copy2(extracted_sig_path, sig_target)
-                                    debug_logger.info(f"已复制签名文件到: {sig_target}")
+                                    debug_logger.debug(f"已复制签名文件到: {sig_target}")
                                     found_sig = True
                                 
                                 # 如果两个文件都找到，可以停止遍历
                                 if found_main and found_sig:
-                                    debug_logger.info("已找到所有需要的文件，停止遍历")
+                                    debug_logger.debug("已找到所有需要的文件，停止遍历")
                                     break
                             
                             if found_main and found_sig:
@@ -222,26 +228,29 @@ class ExtractionThread(QThread):
                             debug_logger.error(f"无法找到主补丁文件，安装失败")
                             raise FileNotFoundError(f"在压缩包中未找到主补丁文件 {target_filename}")
                             
-                        # 签名文件没找到不影响主流程，但记录警告
-                        if not found_sig:
-                            debug_logger.warning(f"未找到签名文件 {sig_filename}，将尝试使用内置签名文件")
-                            # 尝试使用内置签名文件
-                            self._try_use_builtin_signature(sig_filename, debug_logger, update_progress)
+                        # 只有NEKOPARA After版本才需要处理签名文件
+                        if self.game_version == "NEKOPARA After":
+                            # 签名文件没找到不影响主流程，但记录警告
+                            if not found_sig:
+                                debug_logger.warning(f"未找到签名文件 {sig_filename}，但继续安装主补丁文件")
+                        else:
+                            debug_logger.info(f"{self.game_version} 不需要签名文件，跳过签名文件处理")
                     else:
                         # 准备要解压的文件列表
                         files_to_extract = [target_file_in_archive]
-                        if sig_file_in_archive:
+                        # 只有NEKOPARA After版本才需要解压签名文件
+                        if self.game_version == "NEKOPARA After" and sig_file_in_archive:
                             files_to_extract.append(sig_file_in_archive)
-                            debug_logger.info(f"将同时解压主补丁文件和签名文件: {files_to_extract}")
+                            debug_logger.debug(f"将同时解压主补丁文件和签名文件: {files_to_extract}")
                         else:
-                            debug_logger.info(f"将仅解压主补丁文件: {files_to_extract}")
+                            debug_logger.debug(f"将仅解压主补丁文件: {files_to_extract}")
                         
                         # 解压选定的文件到临时目录
-                        debug_logger.info(f"开始解压选定文件到临时目录: {temp_dir}")
+                        debug_logger.debug(f"开始解压选定文件到临时目录: {temp_dir}")
                         
                         # 设置解压超时时间（秒）
                         extract_timeout = 180  # 3分钟超时
-                        debug_logger.info(f"设置解压超时: {extract_timeout}秒")
+                        debug_logger.debug(f"设置解压超时: {extract_timeout}秒")
                         
                         # 创建子线程执行解压
                         import threading
@@ -280,7 +289,7 @@ class ExtractionThread(QThread):
                                 debug_logger.error(f"解压错误: {error}")
                                 raise error
                         
-                        debug_logger.info(f"文件解压完成")
+                        debug_logger.debug(f"文件解压完成")
 
                         update_progress(60, f"正在复制 {self.game_version} 的补丁文件...")
 
@@ -290,45 +299,45 @@ class ExtractionThread(QThread):
                         # 检查解压后的文件是否存在及其大小
                         if os.path.exists(extracted_file_path):
                             file_size = os.path.getsize(extracted_file_path)
-                            debug_logger.info(f"解压后的主补丁文件存在: {extracted_file_path}, 大小: {file_size} 字节")
+                            debug_logger.debug(f"解压后的主补丁文件存在: {extracted_file_path}, 大小: {file_size} 字节")
                         else:
                             debug_logger.error(f"解压后的主补丁文件不存在: {extracted_file_path}")
                             raise FileNotFoundError(f"解压后的文件不存在: {extracted_file_path}")
 
                         # 构建目标路径并复制
                         target_path = os.path.join(self.game_folder, target_filename)
-                        debug_logger.info(f"复制主补丁文件: {extracted_file_path} 到 {target_path}")
+                        debug_logger.debug(f"复制主补丁文件: {extracted_file_path} 到 {target_path}")
                         shutil.copy2(extracted_file_path, target_path)
                         
                         # 验证主补丁文件是否成功复制
                         if os.path.exists(target_path):
                             target_size = os.path.getsize(target_path)
-                            debug_logger.info(f"主补丁文件成功复制: {target_path}, 大小: {target_size} 字节")
+                            debug_logger.debug(f"主补丁文件成功复制: {target_path}, 大小: {target_size} 字节")
                         else:
                             debug_logger.error(f"主补丁文件复制失败: {target_path}")
                             raise FileNotFoundError(f"目标文件复制失败: {target_path}")
                             
-                        # 如果有找到签名文件，也复制它
-                        if sig_file_in_archive:
-                            update_progress(80, f"正在复制签名文件...")
-                            extracted_sig_path = os.path.join(temp_dir, sig_file_in_archive)
-                            
-                            if os.path.exists(extracted_sig_path):
-                                sig_size = os.path.getsize(extracted_sig_path)
-                                debug_logger.info(f"解压后的签名文件存在: {extracted_sig_path}, 大小: {sig_size} 字节")
+                        # 只有NEKOPARA After版本才需要处理签名文件
+                        if self.game_version == "NEKOPARA After":
+                            # 如果有找到签名文件，也复制它
+                            if sig_file_in_archive:
+                                update_progress(80, f"正在复制签名文件...")
+                                extracted_sig_path = os.path.join(temp_dir, sig_file_in_archive)
                                 
-                                # 复制签名文件到游戏目录
-                                sig_target = os.path.join(self.game_folder, sig_filename)
-                                shutil.copy2(extracted_sig_path, sig_target)
-                                debug_logger.info(f"签名文件成功复制: {sig_target}")
+                                if os.path.exists(extracted_sig_path):
+                                    sig_size = os.path.getsize(extracted_sig_path)
+                                    debug_logger.debug(f"解压后的签名文件存在: {extracted_sig_path}, 大小: {sig_size} 字节")
+                                    
+                                    # 复制签名文件到游戏目录
+                                    sig_target = os.path.join(self.game_folder, sig_filename)
+                                    shutil.copy2(extracted_sig_path, sig_target)
+                                    debug_logger.debug(f"签名文件成功复制: {sig_target}")
+                                else:
+                                    debug_logger.warning(f"解压后的签名文件不存在: {extracted_sig_path}")
                             else:
-                                debug_logger.warning(f"解压后的签名文件不存在: {extracted_sig_path}")
-                                # 尝试使用内置签名文件
-                                self._try_use_builtin_signature(sig_filename, debug_logger, update_progress)
+                                debug_logger.warning(f"压缩包中没有找到签名文件，但继续安装主补丁文件")
                         else:
-                            debug_logger.warning(f"没有找到签名文件，尝试使用内置签名文件")
-                            # 尝试使用内置签名文件
-                            self._try_use_builtin_signature(sig_filename, debug_logger, update_progress)
+                            debug_logger.info(f"{self.game_version} 不需要签名文件，跳过签名文件处理")
 
                 update_progress(100, f"{self.game_version} 补丁文件解压完成")
                 self.finished.emit(True, "", self.game_version)
@@ -339,42 +348,4 @@ class ExtractionThread(QThread):
                 pass
             self.finished.emit(False, f"\n文件操作失败，请重试\n\n【错误信息】：{e}\n", self.game_version) 
 
-# 添加一个新的辅助方法用于使用内置签名文件
-def _try_use_builtin_signature(self, sig_filename, debug_logger, update_progress):
-    """尝试使用内置的签名文件"""
-    try:
-        # 如果签名文件不在压缩包中，则尝试使用原始路径
-        update_progress(85, f"尝试使用内置签名文件...")
-        sig_path = os.path.join(PLUGIN, GAME_INFO[self.game_version]["sig_path"])
-        debug_logger.info(f"内置签名文件路径: {sig_path}")
-        
-        if os.path.exists(sig_path):
-            sig_size = os.path.getsize(sig_path)
-            debug_logger.info(f"内置签名文件存在，大小: {sig_size} 字节")
-            
-            # 确保使用正确的签名文件名
-            sig_target = os.path.join(self.game_folder, sig_filename)
-            debug_logger.info(f"目标签名文件路径: {sig_target}")
-            
-            # 增加异常处理
-            try:
-                shutil.copy2(sig_path, sig_target)
-                
-                if os.path.exists(sig_target):
-                    target_sig_size = os.path.getsize(sig_target)
-                    debug_logger.info(f"内置签名文件成功复制到目标位置，大小: {target_sig_size} 字节")
-                else:
-                    debug_logger.error(f"内置签名文件复制失败，目标文件不存在: {sig_target}")
-            except Exception as copy_err:
-                debug_logger.error(f"复制内置签名文件时出错: {str(copy_err)}")
-                debug_logger.error(f"错误详情: {traceback.format_exc()}")
-            
-            update_progress(90, f"使用内置签名文件完成")
-        else:
-            debug_logger.warning(f"内置签名文件不存在: {sig_path}")
-            update_progress(85, f"未找到内置签名文件，继续安装主补丁文件")
-    except Exception as sig_err:
-        # 签名文件处理失败时记录错误但不中断主流程
-        debug_logger.error(f"内置签名文件处理异常: {str(sig_err)}")
-        debug_logger.error(f"异常详情: {traceback.format_exc()}")
-        update_progress(85, f"内置签名文件处理失败: {str(sig_err)}") 
+ 

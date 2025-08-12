@@ -9,6 +9,7 @@ import traceback
 from utils import load_base64_image, msgbox_frame, resource_path
 from config.config import APP_NAME, APP_VERSION, LOG_FILE
 from core.managers.ipv6_manager import IPv6Manager  # 导入新的IPv6Manager类
+from workers.download import ProgressWindow
 
 logger = logging.getLogger(__name__)
 
@@ -1025,6 +1026,11 @@ class UIManager:
         Returns:
             QDialog: 配置好的进度窗口实例.
         """
+        # 如果是下载进度窗口，使用专用的ProgressWindow类
+        if "下载" in title:
+            return ProgressWindow(self.main_window)
+        
+        # 其他情况使用基本的进度窗口
         progress_window = QDialog(self.main_window)
         progress_window.setWindowTitle(f"{title} - {APP_NAME}")
         progress_window.setFixedSize(400, 150)
