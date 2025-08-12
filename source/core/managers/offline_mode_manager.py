@@ -822,35 +822,6 @@ class OfflineModeManager:
             # 添加到安装任务列表
             install_tasks.append((patch_file, game_folder, game_version, _7z_path, plugin_path))
         
-        # 检查是否有未找到离线补丁文件的游戏
-        if self.missing_offline_patches:
-            if debug_mode:
-                logger.debug(f"DEBUG: 有未找到离线补丁文件的游戏: {self.missing_offline_patches}")
-                
-            # 询问用户是否切换到在线模式
-            msg_box = msgbox_frame(
-                f"离线安装信息 - {self.app_name}",
-                f"\n本地未发现对应离线文件，是否切换为在线模式安装？\n\n以下游戏未找到对应的离线补丁文件：\n\n{chr(10).join(self.missing_offline_patches)}\n",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            result = msg_box.exec()
-                
-            if result == QMessageBox.StandardButton.Yes:
-                if debug_mode:
-                    logger.debug("DEBUG: 用户选择切换到在线模式")
-                    
-                # 切换到在线模式
-                if hasattr(self.main_window, 'ui_manager'):
-                    self.main_window.ui_manager.switch_work_mode("online")
-                    
-                    # 直接启动下载流程
-                    self.main_window.setEnabled(True)
-                    # 保存当前选择的游戏列表，以便在线模式使用
-                    missing_games = self.missing_offline_patches.copy()
-                    # 启动下载流程
-                    QTimer.singleShot(500, lambda: self._start_online_download(missing_games))
-                    return True
-                    
         # 开始执行第一个安装任务
         if install_tasks:
             if debug_mode:
@@ -923,8 +894,8 @@ class OfflineModeManager:
                 else:
                     installed_msg = ""
                 
-                # 使用QTimer延迟显示询问对话框，确保安装结果窗口先显示并关闭
-                QTimer.singleShot(500, lambda: self._show_missing_patches_dialog(installed_msg))
+                # 在安装完成后询问用户是否切换到在线模式
+                self._show_missing_patches_dialog(installed_msg)
             else:
                 # 恢复UI状态
                 self.main_window.setEnabled(True)

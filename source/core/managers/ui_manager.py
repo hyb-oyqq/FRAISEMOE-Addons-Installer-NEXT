@@ -1066,7 +1066,8 @@ class UIManager:
         
         self.loading_dialog.show()
         # force UI update
-        QMessageBox.QApplication.processEvents()
+        from PySide6.QtWidgets import QApplication
+        QApplication.processEvents()
 
     def hide_loading_dialog(self):
         """隐藏并销毁加载对话框."""

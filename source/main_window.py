@@ -85,6 +85,8 @@ class MainWindow(QMainWindow):
         self.progress_window = None
         self.pre_hash_thread = None
         self.hash_thread = None
+        self.installed_status = {}  
+        self.hash_msg_box = None    
         
         # 验证关键资源
         self._verify_resources()
@@ -468,8 +470,9 @@ class MainWindow(QMainWindow):
 
         self.download_manager.graceful_stop_threads(threads_to_stop)
 
-        self.download_manager.hosts_manager.restore()
-        self.download_manager.hosts_manager.check_and_clean_all_entries()
+        # 移除此处的hosts操作
+        # self.download_manager.hosts_manager.restore()
+        # self.download_manager.hosts_manager.check_and_clean_all_entries()
         self.debug_manager.stop_logging()
 
         if not force_exit:
@@ -482,6 +485,14 @@ class MainWindow(QMainWindow):
                 if event:
                     event.ignore()
                 return
+            
+            # 用户确认退出后，再执行hosts相关操作
+            self.download_manager.hosts_manager.restore()
+            self.download_manager.hosts_manager.check_and_clean_all_entries()
+        else:
+            # 强制退出时，也需执行hosts相关操作
+            self.download_manager.hosts_manager.restore()
+            self.download_manager.hosts_manager.check_and_clean_all_entries()
 
         if event:
             event.accept()
@@ -709,6 +720,29 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 logger.error(f"关闭哈希校验窗口时发生错误: {e}")
             self.hash_msg_box = None
+
+    def create_extraction_progress_window(self):
+        """创建一个用于显示解压进度的窗口
+        
+        Returns:
+            QDialog: 配置好的解压进度窗口实例
+        """
+        return self.ui_manager.create_progress_window("解压进度", "正在准备解压...")
+
+    def create_extraction_thread(self, patch_file, game_folder, plugin_path, game_version):
+        """创建一个解压线程
+        
+        Args:
+            patch_file: 补丁文件路径
+            game_folder: 游戏目录路径
+            plugin_path: 插件路径
+            game_version: 游戏版本
+            
+        Returns:
+            ExtractionThread: 配置好的解压线程实例
+        """
+        from workers.extraction_thread import ExtractionThread
+        return ExtractionThread(patch_file, game_folder, plugin_path, game_version, self)
 
 
 
