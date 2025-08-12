@@ -188,7 +188,7 @@ class MultiStageAnimations(QObject):
             widget.show()
             
         # 禁用所有按钮，直到动画完成
-        self.ui.start_install_btn.setEnabled(False)
+        self.ui.start_install_btn.setEnabled(False)  # 动画期间禁用
         self.ui.uninstall_btn.setEnabled(False)
         self.ui.exit_btn.setEnabled(False)
 
@@ -358,7 +358,7 @@ class MultiStageAnimations(QObject):
         self.clear_animations()
         
         # 确保按钮在动画开始时被禁用
-        self.ui.start_install_btn.setEnabled(False)
+        self.ui.start_install_btn.setEnabled(False)  # 动画期间禁用
         self.ui.uninstall_btn.setEnabled(False)
         self.ui.exit_btn.setEnabled(False)
         

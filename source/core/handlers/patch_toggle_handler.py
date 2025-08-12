@@ -94,7 +94,7 @@ class PatchToggleHandler(QObject):
         
         selected_game_dirs = {game: games_with_patch[game]["dir"] for game in selected_games if game in games_with_patch}
         
-        self._execute_batch_toggle(selected_game_dirs, operation, self.debug_manager.debug_mode)
+        self._execute_batch_toggle(selected_game_dirs, operation, self.debug_manager._is_debug_mode)
     
     def _handle_multiple_games(self, game_dirs, debug_mode):
         """

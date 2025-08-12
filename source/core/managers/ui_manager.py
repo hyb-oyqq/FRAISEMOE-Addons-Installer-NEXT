@@ -977,9 +977,8 @@ class UIManager:
             self.main_window.config["offline_mode"] = True
             self.main_window.save_config(self.main_window.config)
             
-            # 在离线模式下始终启用开始安装按钮
-            if hasattr(self.main_window, 'set_start_button_enabled'):
-                self.main_window.set_start_button_enabled(True)
+            # 在离线模式下启用开始安装按钮
+            self.set_install_button_state("ready")
             
             # 清除版本警告标志
             if hasattr(self.main_window, 'version_warning'):
@@ -1073,4 +1072,34 @@ class UIManager:
         """隐藏并销毁加载对话框."""
         if self.loading_dialog:
             self.loading_dialog.hide()
-            self.loading_dialog = None 
+            self.loading_dialog = None
+
+    def set_install_button_state(self, state):
+        """统一的安装按钮状态管理方法
+        
+        Args:
+            state (str): 按钮状态 - "ready", "installing", "disabled", "completed"
+        """
+        if hasattr(self.main_window, 'window_manager'):
+            if state == "ready":
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
+            elif state == "installing":
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_INSTALLING)
+            elif state == "disabled":
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_ERROR)
+            elif state == "completed":
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_COMPLETED)
+        else:
+            # 降级处理，直接设置按钮状态
+            if state == "ready":
+                self.main_window.ui.start_install_btn.setEnabled(True)
+                self.main_window.ui.start_install_text.setText("开始安装")
+            elif state == "installing":
+                self.main_window.ui.start_install_btn.setEnabled(False)
+                self.main_window.ui.start_install_text.setText("正在安装")
+            elif state == "disabled":
+                self.main_window.ui.start_install_btn.setEnabled(False)
+                self.main_window.ui.start_install_text.setText("!无法安装!")
+            elif state == "completed":
+                self.main_window.ui.start_install_btn.setEnabled(True)
+                self.main_window.ui.start_install_text.setText("安装完成") 

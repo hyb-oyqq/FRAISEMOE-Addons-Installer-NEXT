@@ -8,23 +8,22 @@ import traceback
 
 from PySide6 import QtWidgets
 from PySide6.QtCore import QTimer, Qt, QPoint, QRect, QSize
-from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect, QDialog, QVBoxLayout, QProgressBar, QLabel
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QGraphicsOpacityEffect, QGraphicsColorizeEffect
 from PySide6.QtGui import QPalette, QColor, QPainterPath, QRegion, QFont
-from PySide6.QtGui import QAction # Added for menu actions
-# Removed QDialog, QVBoxLayout, QProgressBar, QLabel from here as they are managed by UIManager
+from PySide6.QtGui import QAction
 
 from ui.Ui_install import Ui_MainWindows
 from config.config import (
     APP_NAME, PLUGIN, GAME_INFO, BLOCK_SIZE,
     PLUGIN_HASH, UA, CONFIG_URL, LOG_FILE,
-    DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL, APP_VERSION # 添加APP_VERSION导入
+    DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL, APP_VERSION
 )
 from utils import (
     load_config, save_config, HashManager, AdminPrivileges, msgbox_frame, load_image_from_file
 )
 from workers import (
     IpOptimizerThread, 
-    HashThread, ExtractionThread, ConfigFetchThread, DownloadThread
+    HashThread, ConfigFetchThread
 )
 from core import (
     MultiStageAnimations, UIManager, DownloadManager, DebugManager,
@@ -328,9 +327,9 @@ class MainWindow(QMainWindow):
         self.animation_in_progress = False
         
         # 启用所有菜单按钮
-        self.ui.start_install_btn.setEnabled(True)
+        # 按钮状态由WindowManager统一管理
         self.ui.uninstall_btn.setEnabled(True)
-        self.ui.toggle_patch_btn.setEnabled(True)  # 启用禁/启用补丁按钮
+        self.ui.toggle_patch_btn.setEnabled(True)
         self.ui.exit_btn.setEnabled(True)
         
         # 检查是否处于离线模式
@@ -348,25 +347,20 @@ class MainWindow(QMainWindow):
             self.set_start_button_enabled(False)
             
     def set_start_button_enabled(self, enabled, installing=False):
-        """[已弃用] 设置按钮启用状态的旧方法，保留以兼容旧代码
+        """[过渡方法] 设置按钮状态，将调用委托给WindowManager
         
-        现在推荐使用主窗口的setEnabled方法和直接设置按钮文本
+        这个方法将逐步被淘汰，请使用 self.window_manager.change_window_state()
         
         Args:
             enabled: 是否启用按钮
             installing: 是否正在安装中
         """
-        # 直接设置按钮文本，不改变窗口启用状态
         if installing:
-            self.ui.start_install_text.setText("正在安装")
-            self.install_button_enabled = False
+            self.window_manager.change_window_state(self.window_manager.STATE_INSTALLING)
+        elif enabled:
+            self.window_manager.change_window_state(self.window_manager.STATE_READY)
         else:
-            if enabled:
-                self.ui.start_install_text.setText("开始安装")
-            else:
-                self.ui.start_install_text.setText("!无法安装!")
-                
-            self.install_button_enabled = enabled
+            self.window_manager.change_window_state(self.window_manager.STATE_ERROR)
 
     def fetch_cloud_config(self):
         """获取云端配置（异步方式）"""
@@ -421,19 +415,6 @@ class MainWindow(QMainWindow):
     def save_config(self, config):
         """保存配置的便捷方法"""
         self.config_manager.save_config(config)
-        
-    # Remove create_progress_window, create_extraction_progress_window, show_loading_dialog, hide_loading_dialog
-    # These are now handled by UIManager
-    # def create_progress_window(self): ...
-    # def create_extraction_progress_window(self): ...
-    # def show_loading_dialog(self, message): ...
-    # def hide_loading_dialog(self): ...
-
-    # Remove create_download_thread, create_extraction_thread, create_hash_thread
-    # These are now handled by their respective managers or a new ThreadManager if we create one
-    # def create_download_thread(self, ...): ...
-    # def create_extraction_thread(self, ...): ...
-    # def create_hash_thread(self, ...): ...
 
     def show_result(self):
         """显示安装结果，调用patch_manager的show_result方法"""
@@ -470,9 +451,7 @@ class MainWindow(QMainWindow):
 
         self.download_manager.graceful_stop_threads(threads_to_stop)
 
-        # 移除此处的hosts操作
-        # self.download_manager.hosts_manager.restore()
-        # self.download_manager.hosts_manager.check_and_clean_all_entries()
+
         self.debug_manager.stop_logging()
 
         if not force_exit:
@@ -595,7 +574,7 @@ class MainWindow(QMainWindow):
 
         if not game_dirs:
             self.setEnabled(True)
-            self.ui.start_install_text.setText("开始安装")
+            self.window_manager.change_window_state(self.window_manager.STATE_READY)
             QtWidgets.QMessageBox.warning(
                 self, 
                 f"目录错误 - {APP_NAME}", 
@@ -624,7 +603,7 @@ class MainWindow(QMainWindow):
         self.setEnabled(True)
         self.patch_detector.on_offline_pre_hash_finished(updated_status, game_dirs)
         
-    # 移除on_offline_pre_hash_finished方法
+    
 
     def check_and_set_offline_mode(self):
         """检查是否有离线补丁文件，如果有则自动启用离线模式
@@ -721,28 +700,25 @@ class MainWindow(QMainWindow):
                 logger.error(f"关闭哈希校验窗口时发生错误: {e}")
             self.hash_msg_box = None
 
+    def create_progress_window(self, title="下载进度", initial_text="准备中..."):
+        """创建一个用于显示下载进度的窗口
+        
+        Args:
+            title (str): 窗口标题，默认为"下载进度"
+            initial_text (str): 初始状态文本，默认为"准备中..."
+            
+        Returns:
+            进度窗口实例
+        """
+        return self.ui_manager.create_progress_window(title, initial_text)
+
     def create_extraction_progress_window(self):
         """创建一个用于显示解压进度的窗口
         
         Returns:
-            QDialog: 配置好的解压进度窗口实例
+            解压进度窗口实例
         """
         return self.ui_manager.create_progress_window("解压进度", "正在准备解压...")
-
-    def create_extraction_thread(self, patch_file, game_folder, plugin_path, game_version):
-        """创建一个解压线程
-        
-        Args:
-            patch_file: 补丁文件路径
-            game_folder: 游戏目录路径
-            plugin_path: 插件路径
-            game_version: 游戏版本
-            
-        Returns:
-            ExtractionThread: 配置好的解压线程实例
-        """
-        from workers.extraction_thread import ExtractionThread
-        return ExtractionThread(patch_file, game_folder, plugin_path, game_version, self)
 
     def show_loading_dialog(self, message):
         """显示加载对话框
@@ -755,7 +731,3 @@ class MainWindow(QMainWindow):
     def hide_loading_dialog(self):
         """隐藏加载对话框"""
         self.ui_manager.hide_loading_dialog()
-
-
-
- 

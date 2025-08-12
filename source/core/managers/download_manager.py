@@ -63,7 +63,7 @@ class DownloadManager:
             )
             return
         
-        self.main_window.ui.start_install_text.setText("正在安装")
+        self.main_window.ui_manager.set_install_button_state("installing")
         
         self.main_window.setEnabled(False)
         
@@ -264,7 +264,7 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未在选择的目录中找到支持的游戏\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             return
         
         # 关闭可能存在的哈希校验窗口
@@ -281,7 +281,7 @@ class DownloadManager:
         install_paths = self.get_install_paths()
         
         # 创建并启动哈希线程进行预检查
-        self.main_window.hash_thread = self.main_window.create_hash_thread("pre", install_paths)
+        self.main_window.hash_thread = self.main_window.patch_detector.create_hash_thread("pre", install_paths)
         self.main_window.hash_thread.pre_finished.connect(
             lambda updated_status: self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
         )
@@ -384,7 +384,16 @@ class DownloadManager:
                 
             layout.addWidget(list_widget)
             
-            # 添加按钮
+            # 添加全选/取消全选按钮
+            select_all_layout = QtWidgets.QHBoxLayout()
+            select_all_button = QtWidgets.QPushButton("全选")
+            deselect_all_button = QtWidgets.QPushButton("取消全选")
+            select_all_layout.addWidget(select_all_button)
+            select_all_layout.addWidget(deselect_all_button)
+            select_all_layout.addStretch()  # 添加弹性空间，将按钮左对齐
+            layout.addLayout(select_all_layout)
+            
+            # 添加主要操作按钮
             button_layout = QtWidgets.QHBoxLayout()
             ok_button = QtWidgets.QPushButton("确定")
             cancel_button = QtWidgets.QPushButton("取消")
@@ -394,7 +403,22 @@ class DownloadManager:
             
             dialog.setLayout(layout)
             
+            # 全选功能的实现
+            def select_all_items():
+                """选择所有游戏项目"""
+                for i in range(list_widget.count()):
+                    item = list_widget.item(i)
+                    item.setSelected(True)
+                    
+            def deselect_all_items():
+                """取消选择所有游戏项目"""
+                for i in range(list_widget.count()):
+                    item = list_widget.item(i)
+                    item.setSelected(False)
+            
             # 连接按钮信号
+            select_all_button.clicked.connect(select_all_items)
+            deselect_all_button.clicked.connect(deselect_all_items)
             ok_button.clicked.connect(dialog.accept)
             cancel_button.clicked.connect(dialog.reject)
             
@@ -435,7 +459,7 @@ class DownloadManager:
             else:
                 if debug_mode:
                     logger.debug("DEBUG: 用户取消了游戏选择")
-                self.main_window.ui.start_install_text.setText("开始安装")
+                self.main_window.ui_manager.set_install_button_state("ready")
         else:
             # 如果没有可安装的游戏，显示提示
             if already_installed_games:
@@ -448,7 +472,7 @@ class DownloadManager:
                 f"通知 - {APP_NAME}",
                 msg
             )
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             
     def _continue_download_after_config_fetch(self, data, error, selected_game_dirs):
         """云端配置获取完成后继续下载流程
@@ -486,7 +510,7 @@ class DownloadManager:
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             return
 
         self._fill_download_queue(config, selected_game_dirs)
@@ -659,7 +683,7 @@ class DownloadManager:
         clicked_button = msg_box.clickedButton()
         if clicked_button == cancel_button:
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             self.download_queue.clear()
             return
         
@@ -916,7 +940,7 @@ class DownloadManager:
         logger.info("下载已全部停止。")
         
         self.main_window.setEnabled(True)
-        self.main_window.ui.start_install_text.setText("开始安装")
+        self.main_window.ui_manager.set_install_button_state("ready")
         
         QtWidgets.QMessageBox.information(
             self.main_window,
@@ -960,7 +984,7 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未在选择的目录中找到支持的游戏\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             return
             
         # 过滤出存在的游戏目录
@@ -971,7 +995,7 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未找到指定游戏的安装目录\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             return
             
         self.main_window.setEnabled(False)
@@ -983,7 +1007,7 @@ class DownloadManager:
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             return
             
         # 填充下载队列
@@ -1104,6 +1128,32 @@ class DownloadManager:
         Args:
             game_dirs: 识别到的游戏目录
         """
-        self.main_window.hide_loading_dialog()
-        self.main_window.setEnabled(True)
-        self.main_window.patch_detector.on_offline_pre_hash_finished(updated_status, game_dirs) 
+        self.main_window.ui_manager.hide_loading_dialog()
+
+        if not game_dirs:
+            self.main_window.setEnabled(True)
+            self.main_window.ui_manager.set_install_button_state("ready")
+            from PySide6.QtWidgets import QMessageBox
+            from config.config import APP_NAME
+            QMessageBox.warning(
+                self.main_window, 
+                f"目录错误 - {APP_NAME}", 
+                "\n未能识别到任何游戏目录。\n\n请确认您选择的是游戏的上级目录，并且该目录中包含NEKOPARA系列游戏文件夹。\n"
+            )
+            return
+
+        self.main_window.ui_manager.show_loading_dialog("正在检查补丁状态...")
+        
+        install_paths = self.get_install_paths()
+        
+        # 使用异步方式进行哈希预检查
+        self.main_window.pre_hash_thread = self.main_window.patch_detector.create_hash_thread("pre", install_paths)
+        self.main_window.pre_hash_thread.pre_finished.connect(
+            lambda updated_status: self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
+        )
+        # 在线程自然结束时清理引用
+        try:
+            self.main_window.pre_hash_thread.finished.connect(lambda: setattr(self.main_window, 'pre_hash_thread', None))
+        except Exception:
+            pass
+        self.main_window.pre_hash_thread.start() 

@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMessageBox
 from PySide6.QtCore import QTimer, QCoreApplication
 
 from utils.logger import setup_logger
+from workers.extraction_thread import ExtractionThread
 
 # 初始化logger
 logger = setup_logger("extraction_handler")
@@ -45,8 +46,8 @@ class ExtractionHandler:
         QCoreApplication.processEvents()
         
         # 创建并启动解压线程
-        self.main_window.extraction_thread = self.main_window.create_extraction_thread(
-            _7z_path, game_folder, plugin_path, game_version, extracted_path
+        self.main_window.extraction_thread = ExtractionThread(
+            _7z_path, game_folder, plugin_path, game_version, self.main_window, extracted_path
         )
         
         # 连接进度信号
@@ -109,7 +110,7 @@ class ExtractionHandler:
                 self.main_window.download_manager.on_extraction_finished(True)
             else:
                 # 用户选择停止，保持窗口启用状态
-                self.main_window.ui.start_install_text.setText("开始安装")
+                self.main_window.ui_manager.set_install_button_state("ready")
                 # 通知DownloadManager停止下载队列
                 self.main_window.download_manager.on_extraction_finished(False)
             return

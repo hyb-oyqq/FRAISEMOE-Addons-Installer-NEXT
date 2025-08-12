@@ -199,7 +199,7 @@ class CloudflareOptimizer:
                 
             # 恢复主窗口状态
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             
             # 显示取消消息
             QtWidgets.QMessageBox.information(
@@ -332,7 +332,7 @@ class CloudflareOptimizer:
             if msg_box.clickedButton() == cancel_button:
                 # 恢复主窗口状态
                 self.main_window.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("开始安装")
+                self.main_window.ui_manager.set_install_button_state("ready")
                 return False
                 
             # 用户点击了继续，重新禁用主窗口
@@ -403,7 +403,7 @@ class CloudflareOptimizer:
                     if msg_box.clickedButton() == cancel_button:
                         # 恢复主窗口状态
                         self.main_window.setEnabled(True)
-                        self.main_window.ui.start_install_text.setText("开始安装")
+                        self.main_window.ui_manager.set_install_button_state("ready")
                         return False
                 else:
                     QtWidgets.QMessageBox.critical(
@@ -412,7 +412,7 @@ class CloudflareOptimizer:
                         "\n修改hosts文件失败，请检查程序是否以管理员权限运行。\n"
                     )
                     # 恢复主窗口状态
-                    self.main_window.ui.start_install_text.setText("开始安装")
+                    self.main_window.ui_manager.set_install_button_state("ready")
                     return False
                 
                 # 用户点击了继续，重新禁用主窗口

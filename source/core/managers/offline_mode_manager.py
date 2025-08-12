@@ -111,41 +111,25 @@ class OfflineModeManager:
         # 要查找的补丁文件名
         patch_files = ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]
         
-        # 尝试多个可能的目录位置，从指定目录开始，然后是其父目录
+        # 只在指定目录中查找，不查找父目录和其他目录
         search_dirs = [directory]
         
-        # 添加可能的父目录
-        current = directory
-        for i in range(3):  # 最多向上查找3层目录
-            parent = os.path.dirname(current)
-            if parent and parent != current:  # 确保不是根目录
-                search_dirs.append(parent)
-                current = parent
-            else:
-                break
-
-        # 添加工作目录（如果与指定目录不同）
-        work_dir = os.getcwd()
-        if work_dir not in search_dirs:
-            search_dirs.append(work_dir)
-            
         if debug_mode:
             logger.debug(f"DEBUG: 将在以下目录中查找补丁文件: {search_dirs}")
         
         found_patches = {}
         
-        # 扫描所有可能的目录查找补丁文件
+        # 扫描目录查找补丁文件
         try:
-            # 首先尝试在指定目录查找
-            for search_dir in search_dirs:
+            # 搜索指定目录
+            search_dir = directory
+            if debug_mode:
+                logger.debug(f"DEBUG: 正在搜索目录: {search_dir}")
+                
+            if not os.path.exists(search_dir):
                 if debug_mode:
-                    logger.debug(f"DEBUG: 正在搜索目录: {search_dir}")
-                    
-                if not os.path.exists(search_dir):
-                    if debug_mode:
-                        logger.debug(f"DEBUG: 目录不存在，跳过: {search_dir}")
-                    continue
-                    
+                    logger.debug(f"DEBUG: 目录不存在，跳过: {search_dir}")
+            else:
                 for file in os.listdir(search_dir):
                     if file.lower() in patch_files:
                         file_path = os.path.join(search_dir, file)
@@ -156,13 +140,6 @@ class OfflineModeManager:
                             logger.info(f"找到离线补丁文件: {patch_name} 路径: {file_path}")
                             if debug_mode:
                                 logger.debug(f"DEBUG: 找到离线补丁文件: {patch_name} 路径: {file_path}")
-                
-                # 如果在当前目录找到了补丁文件，停止继续查找
-                if found_patches:
-                    if debug_mode:
-                        logger.debug(f"DEBUG: 在目录 {search_dir} 找到补丁文件，停止继续搜索")
-                    break
-                    
         except Exception as e:
             logger.error(f"扫描目录时出错: {str(e)}")
                         
@@ -870,7 +847,7 @@ class OfflineModeManager:
                 QMessageBox.StandardButton.Ok
             ).exec()
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装")
+            self.main_window.ui_manager.set_install_button_state("ready")
             
         return True
         
@@ -930,7 +907,7 @@ class OfflineModeManager:
             else:
                 # 恢复UI状态
                 self.main_window.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("开始安装")
+                self.main_window.ui_manager.set_install_button_state("ready")
                 
             return
             
@@ -956,8 +933,9 @@ class OfflineModeManager:
                 pass
 
             # 启动解压线程
-            self.extraction_thread = self.main_window.create_extraction_thread(
-                patch_file, game_folder, plugin_path, game_version
+            from workers.extraction_thread import ExtractionThread
+            self.extraction_thread = ExtractionThread(
+                patch_file, game_folder, plugin_path, game_version, self.main_window
             )
 
             # 连接进度更新到窗口控件
@@ -1062,4 +1040,4 @@ class OfflineModeManager:
             
             # 恢复UI状态
             self.main_window.setEnabled(True)
-            self.main_window.ui.start_install_text.setText("开始安装") 
+            self.main_window.ui_manager.set_install_button_state("ready") 

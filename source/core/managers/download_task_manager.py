@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QRadioButton, QPushButton, Q
 from PySide6.QtGui import QFont
 
 from config.config import DOWNLOAD_THREADS
+from workers.download import DownloadThread
 
 
 class DownloadTaskManager:
@@ -34,7 +35,7 @@ class DownloadTaskManager:
         # 按钮在file_dialog中已设置为禁用状态
         
         # 创建并连接下载线程
-        self.current_download_thread = self.main_window.create_download_thread(url, _7z_path, game_version)
+        self.current_download_thread = DownloadThread(url, _7z_path, game_version, self.main_window)
         self.current_download_thread.progress.connect(self.main_window.progress_window.update_progress)
         self.current_download_thread.finished.connect(
             lambda success, error: self.main_window.download_manager.on_download_finished(
