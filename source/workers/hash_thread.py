@@ -3,6 +3,7 @@ import hashlib
 import py7zr
 import tempfile
 import traceback
+import time # Added for time.time()
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import QApplication
 from utils.logger import setup_logger
@@ -35,10 +36,27 @@ class HashThread(QThread):
         """运行线程"""
         debug_mode = False
         
+        # 设置超时限制（分钟）
+        timeout_minutes = 10
+        max_execution_time = timeout_minutes * 60  # 转换为秒
+        start_execution_time = time.time()
+        
         # 尝试检测是否处于调试模式
         if self.main_window and hasattr(self.main_window, 'debug_manager'):
             debug_mode = self.main_window.debug_manager._is_debug_mode()
             
+        if debug_mode:
+            logger.debug(f"DEBUG: 设置哈希计算超时时间: {timeout_minutes} 分钟")
+            
+        # 在各个关键步骤添加超时检测
+        def check_timeout():
+            elapsed = time.time() - start_execution_time
+            if elapsed > max_execution_time:
+                if debug_mode:
+                    logger.error(f"DEBUG: 哈希计算超时，已执行 {elapsed:.1f} 秒，超过限制的 {max_execution_time} 秒")
+                return True
+            return False
+        
         if self.mode == "pre":
             status_copy = self.installed_status.copy()
             
@@ -64,6 +82,13 @@ class HashThread(QThread):
                     with open(install_path, "rb") as f:
                         while True:
                             if self.isInterruptionRequested():
+                                break
+                            # 检查超时
+                            if check_timeout():
+                                logger.error(f"哈希计算超时，强制终止")
+                                result["passed"] = False
+                                result["game"] = game_version
+                                result["message"] = f"\n{game_version} 哈希计算超时，已超过 {timeout_minutes} 分钟。\n\n请考虑跳过哈希校验或稍后再试。\n"
                                 break
                             chunk = f.read(1024 * 1024)
                             if not chunk:
@@ -112,17 +137,68 @@ class HashThread(QThread):
                         # 当没有预期哈希值时，跳过检查
                         continue
                         
+                    # 检查文件存在和可读性
+                    if not os.path.exists(install_path):
+                        logger.error(f"哈希校验失败 - 文件不存在: {install_path}")
+                        result["passed"] = False
+                        result["game"] = game_version
+                        result["message"] = f"\n{game_version} 安装后的文件不存在，无法校验。\n\n文件路径: {install_path}\n"
+                        break
+                    
+                    # 记录文件大小信息
+                    file_size = os.path.getsize(install_path)
+                    logger.info(f"正在校验 {game_version} 补丁文件: {install_path}, 文件大小: {file_size} 字节")
+                    
+                    # 增加块大小，提高大文件处理性能
+                    # 文件越大，块越大，最大256MB
+                    chunk_size = min(256 * 1024 * 1024, max(16 * 1024 * 1024, file_size // 20))
+                    logger.info(f"  使用块大小: {chunk_size // (1024 * 1024)}MB")
+                    
                     # 分块读取，避免大文件一次性读取内存
                     hash_obj = hashlib.sha256()
+                    bytes_read = 0
+                    start_time = time.time()
+                    last_progress_time = start_time
                     with open(install_path, "rb") as f:
                         while True:
                             if self.isInterruptionRequested():
                                 break
-                            chunk = f.read(1024 * 1024)
+                            # 检查超时
+                            if check_timeout():
+                                logger.error(f"哈希计算超时，强制终止")
+                                result["passed"] = False
+                                result["game"] = game_version
+                                result["message"] = f"\n{game_version} 哈希计算超时，已超过 {timeout_minutes} 分钟。\n\n请考虑跳过哈希校验或稍后再试。\n"
+                                break
+                            chunk = f.read(chunk_size)
                             if not chunk:
                                 break
+                            bytes_read += len(chunk)
                             hash_obj.update(chunk)
+                            
+                            # 每秒更新一次进度
+                            current_time = time.time()
+                            if current_time - last_progress_time >= 1.0:
+                                progress = bytes_read / file_size * 100
+                                elapsed = current_time - start_time
+                                speed = bytes_read / (elapsed if elapsed > 0 else 1) / (1024 * 1024)  # MB/s
+                                logger.info(f"  进度: {progress:.1f}% - 已处理: {bytes_read/(1024*1024):.1f}MB/{file_size/(1024*1024):.1f}MB - 速度: {speed:.1f}MB/s")
+                                last_progress_time = current_time
+                                
+                    # 计算最终的哈希值
                     file_hash = hash_obj.hexdigest()
+                    
+                    # 记录总用时
+                    total_time = time.time() - start_time
+                    logger.info(f"  哈希计算完成，耗时: {total_time:.1f}秒，平均速度: {file_size/(total_time*1024*1024):.1f}MB/s")
+                    
+                    # 详细记录哈希比较结果
+                    logger.info(f"哈希校验结果 - {game_version}:")
+                    logger.info(f"  文件: {install_path}")
+                    logger.info(f"  读取字节数: {bytes_read} / {file_size}")
+                    logger.info(f"  预期哈希: {expected_hash}")
+                    logger.info(f"  实际哈希: {file_hash}")
+                    logger.info(f"  匹配结果: {file_hash == expected_hash}")
                     
                     if debug_mode:
                         logger.debug(f"DEBUG: 哈希后检查 - {game_version}")
@@ -134,7 +210,7 @@ class HashThread(QThread):
                     if file_hash != expected_hash:
                         result["passed"] = False
                         result["game"] = game_version
-                        result["message"] = f"\n{game_version} 安装后的文件校验失败。\n\n文件可能已损坏或被篡改，请重新安装。\n"
+                        result["message"] = f"\n{game_version} 安装后的文件校验失败。\n\n文件可能已损坏或被篡改，请重新安装。\n预期哈希: {expected_hash[:10]}...\n实际哈希: {file_hash[:10]}...\n"
                         if debug_mode:
                             logger.debug(f"DEBUG: 哈希后检查 - {game_version} 哈希不匹配")
                         break
@@ -180,9 +256,23 @@ class OfflineHashVerifyThread(QThread):
         """运行线程"""
         debug_mode = False
         
+        # 设置超时限制（分钟）
+        timeout_minutes = 10
+        max_execution_time = timeout_minutes * 60  # 转换为秒
+        start_execution_time = time.time()
+        
         # 尝试检测是否处于调试模式
         if self.main_window and hasattr(self.main_window, 'debug_manager'):
             debug_mode = self.main_window.debug_manager._is_debug_mode()
+            
+        # 检查超时的函数
+        def check_timeout():
+            elapsed = time.time() - start_execution_time
+            if elapsed > max_execution_time:
+                if debug_mode:
+                    logger.debug(f"DEBUG: 哈希校验超时，已运行 {elapsed:.1f} 秒")
+                return True
+            return False
             
         # 获取预期的哈希值
         expected_hash = self.plugin_hash.get(self.game_version, "")
@@ -359,22 +449,56 @@ class OfflineHashVerifyThread(QThread):
                         try:
                             # 读取文件内容并计算哈希值，同时更新进度
                             file_size = os.path.getsize(patch_file)
-                            chunk_size = 1024 * 1024  # 1MB
+                            
+                            # 根据文件大小动态调整块大小
+                            # 文件越大，块越大，最大256MB
+                            chunk_size = min(256 * 1024 * 1024, max(16 * 1024 * 1024, file_size // 20))
+                            if debug_mode:
+                                logger.debug(f"DEBUG: 文件大小: {file_size} 字节, 使用块大小: {chunk_size // (1024 * 1024)}MB")
+                                
                             hash_obj = hashlib.sha256()
                             
                             with open(patch_file, "rb") as f:
                                 bytes_read = 0
+                                start_time = time.time()
+                                last_progress_time = start_time
+                                
                                 while True:
                                     if self.isInterruptionRequested():
                                         break
+                                    # 检查超时
+                                    if check_timeout():
+                                        logger.error(f"哈希计算超时，强制终止")
+                                        self.progress.emit(100)
+                                        self.finished.emit(
+                                            False, 
+                                            f"{self.game_version} 哈希计算超时，已超过 {timeout_minutes} 分钟。请考虑跳过哈希校验或稍后再试。", 
+                                            ""
+                                        )
+                                        return
                                     chunk = f.read(chunk_size)
                                     if not chunk:
                                         break
                                     hash_obj.update(chunk)
                                     bytes_read += len(chunk)
+                                    
                                     # 计算进度 (70-95%)
                                     progress = 70 + int(25 * bytes_read / file_size)
                                     self.progress.emit(min(95, progress))
+                                    
+                                    # 每秒更新一次日志进度
+                                    current_time = time.time()
+                                    if debug_mode and current_time - last_progress_time >= 1.0:
+                                        elapsed = current_time - start_time
+                                        speed = bytes_read / (elapsed if elapsed > 0 else 1) / (1024 * 1024)  # MB/s
+                                        percent = bytes_read / file_size * 100
+                                        logger.debug(f"DEBUG: 哈希计算进度 - {percent:.1f}% - 已处理: {bytes_read/(1024*1024):.1f}MB/{file_size/(1024*1024):.1f}MB - 速度: {speed:.1f}MB/s")
+                                        last_progress_time = current_time
+                            
+                            # 记录总用时
+                            if debug_mode:
+                                total_time = time.time() - start_time
+                                logger.debug(f"DEBUG: 哈希计算完成，耗时: {total_time:.1f}秒，平均速度: {file_size/(total_time*1024*1024):.1f}MB/s")
                             
                             file_hash = hash_obj.hexdigest()
                             

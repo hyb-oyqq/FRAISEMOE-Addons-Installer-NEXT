@@ -624,6 +624,10 @@ class OfflineModeManager:
         self.main_window.close_hash_msg_box()
             
         if not result["passed"]:
+            # 记录校验失败信息
+            logger.error(f"===== {game_version} 哈希校验失败 =====")
+            logger.error(f"校验失败消息: {result.get('message', '无错误消息')}")
+            
             # 校验失败，删除已解压的文件并提示重新安装
             error_message = result["message"]
             
@@ -637,12 +641,38 @@ class OfflineModeManager:
             if game_version in game_dirs and game_version in GAME_INFO:
                 game_dir = game_dirs[game_version]
                 install_path = os.path.join(game_dir, os.path.basename(GAME_INFO[game_version]["install_path"]))
+                logger.info(f"找到安装路径: {install_path}")
+                
+                # 记录安装路径的文件信息
+                if os.path.exists(install_path):
+                    file_size = os.path.getsize(install_path)
+                    logger.info(f"文件存在，大小: {file_size} 字节")
+                    
+                    # 检查是否为NEKOPARA After，记录签名文件信息
+                    if game_version == "NEKOPARA After":
+                        sig_path = f"{install_path}.sig"
+                        if os.path.exists(sig_path):
+                            sig_size = os.path.getsize(sig_path)
+                            logger.info(f"签名文件存在: {sig_path}, 大小: {sig_size} 字节")
+                        else:
+                            logger.info(f"签名文件不存在: {sig_path}")
+                else:
+                    logger.warning(f"文件不存在: {install_path}")
+            else:
+                logger.warning(f"未找到 {game_version} 的安装路径")
             
             # 如果找到安装路径，尝试删除已解压的文件
             if install_path and os.path.exists(install_path):
                 try:
                     os.remove(install_path)
                     logger.info(f"已删除校验失败的文件: {install_path}")
+                    
+                    # 检查是否为NEKOPARA After，同时删除签名文件
+                    if game_version == "NEKOPARA After":
+                        sig_path = f"{install_path}.sig"
+                        if os.path.exists(sig_path):
+                            os.remove(sig_path)
+                            logger.info(f"已删除签名文件: {sig_path}")
                 except Exception as e:
                     logger.error(f"删除文件失败: {e}")
             
@@ -658,6 +688,7 @@ class OfflineModeManager:
         else:
             # 校验通过，更新安装状态
             self.main_window.installed_status[game_version] = True
+            logger.info(f"===== {game_version} 哈希校验通过 =====")
             
             # 添加到已安装游戏列表
             if game_version not in self.installed_games:

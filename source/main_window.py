@@ -744,6 +744,18 @@ class MainWindow(QMainWindow):
         from workers.extraction_thread import ExtractionThread
         return ExtractionThread(patch_file, game_folder, plugin_path, game_version, self)
 
+    def show_loading_dialog(self, message):
+        """显示加载对话框
+        
+        Args:
+            message: 要显示的消息
+        """
+        self.ui_manager.show_loading_dialog(message)
+        
+    def hide_loading_dialog(self):
+        """隐藏加载对话框"""
+        self.ui_manager.hide_loading_dialog()
+
 
 
  
