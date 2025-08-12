@@ -4,7 +4,7 @@ import datetime
 
 # 配置信息
 app_data = {
-    "APP_VERSION": "1.3.2",
+    "APP_VERSION": "1.4.0",
     "APP_NAME": "FRAISEMOE Addons Installer NEXT",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
