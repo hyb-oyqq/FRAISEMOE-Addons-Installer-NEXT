@@ -614,7 +614,7 @@ class HostsManager:
                 self.original_content = f.read()
             with open(self.backup_path, 'w', encoding='utf-8') as f:
                 f.write(self.original_content)
-            logger.info(f"Hosts文件已备份到: {self.backup_path}")
+            logger.debug(f"Hosts文件已备份到: {self.backup_path}")
             return True
         except IOError as e:
             logger.error(f"备份hosts文件失败: {e}")

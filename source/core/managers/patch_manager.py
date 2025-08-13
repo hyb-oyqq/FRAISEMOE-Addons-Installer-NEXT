@@ -135,7 +135,7 @@ class PatchManager:
                     patch_file_found = True
                     if debug_mode:
                         self.logger.debug(f"DEBUG: 找到补丁文件: {patch_path}，准备删除")
-                    self.logger.info(f"删除补丁文件: {patch_path}")
+                    self.logger.debug(f"删除补丁文件: {patch_path}")
                     
                     os.remove(patch_path)
                     files_removed += 1
@@ -148,7 +148,7 @@ class PatchManager:
                     patch_file_found = True
                     if debug_mode:
                         self.logger.debug(f"DEBUG: 找到被禁用的补丁文件: {disabled_path}，准备删除")
-                    self.logger.info(f"删除被禁用的补丁文件: {disabled_path}")
+                    self.logger.debug(f"删除被禁用的补丁文件: {disabled_path}")
                     
                     os.remove(disabled_path)
                     files_removed += 1
@@ -172,7 +172,7 @@ class PatchManager:
                     if os.path.exists(sig_file_path):
                         if debug_mode:
                             self.logger.debug(f"DEBUG: 找到签名文件: {sig_file_path}，准备删除")
-                        self.logger.info(f"删除签名文件: {sig_file_path}")
+                        self.logger.debug(f"删除签名文件: {sig_file_path}")
                         
                         os.remove(sig_file_path)
                         files_removed += 1
@@ -184,7 +184,7 @@ class PatchManager:
                     if os.path.exists(disabled_sig_path):
                         if debug_mode:
                             self.logger.debug(f"DEBUG: 找到被禁用补丁的签名文件: {disabled_sig_path}，准备删除")
-                        self.logger.info(f"删除被禁用补丁的签名文件: {disabled_sig_path}")
+                        self.logger.debug(f"删除被禁用补丁的签名文件: {disabled_sig_path}")
                         
                         os.remove(disabled_sig_path)
                         files_removed += 1
@@ -205,7 +205,7 @@ class PatchManager:
                 if os.path.exists(patch_folder):
                     if debug_mode:
                         self.logger.debug(f"DEBUG: 找到补丁文件夹: {patch_folder}，准备删除")
-                    self.logger.info(f"删除补丁文件夹: {patch_folder}")
+                    self.logger.debug(f"删除补丁文件夹: {patch_folder}")
                     
                     import shutil
                     shutil.rmtree(patch_folder)
@@ -226,7 +226,7 @@ class PatchManager:
                     if os.path.exists(game_patch_folder):
                         if debug_mode:
                             self.logger.debug(f"DEBUG: 找到game/patch文件夹: {game_patch_folder}，准备删除")
-                        self.logger.info(f"删除game/patch文件夹: {game_patch_folder}")
+                        self.logger.debug(f"删除game/patch文件夹: {game_patch_folder}")
                         
                         import shutil
                         shutil.rmtree(game_patch_folder)
@@ -250,7 +250,7 @@ class PatchManager:
                         if os.path.exists(config_path):
                             if debug_mode:
                                 self.logger.debug(f"DEBUG: 找到配置文件: {config_path}，准备删除")
-                            self.logger.info(f"删除配置文件: {config_path}")
+                            self.logger.debug(f"删除配置文件: {config_path}")
                             
                             os.remove(config_path)
                             files_removed += 1
@@ -263,7 +263,7 @@ class PatchManager:
                         if os.path.exists(script_path):
                             if debug_mode:
                                 self.logger.debug(f"DEBUG: 找到脚本文件: {script_path}，准备删除")
-                            self.logger.info(f"删除脚本文件: {script_path}")
+                            self.logger.debug(f"删除脚本文件: {script_path}")
                             
                             os.remove(script_path)
                             files_removed += 1
@@ -356,7 +356,7 @@ class PatchManager:
             self.logger.debug(f"DEBUG: 要卸载的游戏: {list(game_dirs.keys())}")
         
         self.logger.info(f"开始批量卸载补丁，游戏数量: {len(game_dirs)}")
-        self.logger.info(f"要卸载的游戏: {list(game_dirs.keys())}")
+        self.logger.debug(f"要卸载的游戏: {list(game_dirs.keys())}")
         
         for version, path in game_dirs.items():
             if debug_mode:

@@ -176,7 +176,7 @@ class MultiStageAnimations(QObject):
             widget.setGraphicsEffect(effect)
             widget.move(-widget.width(), item["end_pos"].y())
             widget.show()
-            print("初始化支持栏动画")
+            # 初始化支持栏动画，这是内部处理，不需要日志输出
         
         # 初始化菜单元素（底部外）
         for item in self.menu_widgets:

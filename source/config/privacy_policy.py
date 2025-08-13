@@ -87,7 +87,7 @@ def get_local_privacy_policy():
                     try:
                         date_obj = datetime.strptime(date_str, '%Y年%m月%d日')
                         date_version = date_obj.strftime('%Y.%m.%d')
-                        logger.info(f"成功读取本地隐私协议文件: {path}, 版本: {date_version}")
+                        logger.debug(f"成功读取本地隐私协议文件: {path}, 版本: {date_version}")
                         return content, date_version, ""
                     except ValueError:
                         logger.error(f"本地隐私协议日期格式解析错误: {path}")

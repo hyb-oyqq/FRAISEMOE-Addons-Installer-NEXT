@@ -208,7 +208,7 @@ class ExtractionHandler:
             if install_path and os.path.exists(install_path):
                 try:
                     os.remove(install_path)
-                    logger.info(f"已删除校验失败的文件: {install_path}")
+                    logger.debug(f"已删除校验失败的文件: {install_path}")
                 except Exception as e:
                     logger.error(f"删除文件失败: {e}")
             

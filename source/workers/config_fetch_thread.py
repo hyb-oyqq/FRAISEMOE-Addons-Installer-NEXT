@@ -22,7 +22,7 @@ class ConfigFetchThread(QThread):
     def run(self):
         try:
             if self.debug_mode:
-                logger.info("--- Starting to fetch cloud config ---")
+                logger.debug("--- Starting to fetch cloud config ---")
                 # 完全隐藏URL
                 logger.debug(f"DEBUG: Requesting URL: ***URL protection***")
                 logger.debug(f"DEBUG: Using Headers: {self.headers}")
@@ -72,7 +72,7 @@ class ConfigFetchThread(QThread):
             self.finished.emit(None, error_msg)
         finally:
             if self.debug_mode:
-                logger.info("--- Finished fetching cloud config ---")
+                logger.debug("--- Finished fetching cloud config ---")
                 
     def _create_safe_config_for_logging(self, config_data):
         """创建用于日志记录的安全配置副本，隐藏敏感URL

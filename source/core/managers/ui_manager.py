@@ -494,10 +494,32 @@ class UIManager:
         self.ui.menu.addSeparator()
         self.ui.menu.addMenu(self.dev_menu)  # 添加开发者选项子菜单
         
+        # 创建哈希校验设置子菜单
+        self.hash_settings_menu = QMenu("哈希校验设置", self.main_window)
+        self.hash_settings_menu.setFont(menu_font)
+        self.hash_settings_menu.setStyleSheet(menu_style)
+        
+        # 添加禁用安装前哈希预检查选项
+        self.disable_pre_hash_action = QAction("禁用安装前哈希预检查", self.main_window, checkable=True)
+        self.disable_pre_hash_action.setFont(menu_font)
+        
+        # 从配置中读取当前状态
+        config = getattr(self.main_window, 'config', {})
+        disable_pre_hash = False
+        if isinstance(config, dict):
+            disable_pre_hash = config.get("disable_pre_hash_check", False)
+        
+        self.disable_pre_hash_action.setChecked(disable_pre_hash)
+        self.disable_pre_hash_action.triggered.connect(self.toggle_disable_pre_hash_check)
+        
+        # 添加到哈希校验设置子菜单
+        self.hash_settings_menu.addAction(self.disable_pre_hash_action)
+
         # 添加Debug子菜单到开发者选项菜单
         self.dev_menu.addMenu(self.debug_submenu)
         self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
         self.dev_menu.addMenu(self.ipv6_submenu)  # 添加IPv6支持子菜单
+        self.dev_menu.addMenu(self.hash_settings_menu)  # 添加哈希校验设置子菜单
         
     def _handle_ipv6_toggle(self, enabled):
         """处理IPv6支持切换事件
@@ -915,6 +937,45 @@ class UIManager:
             msg_box = self._create_message_box(
                 "错误", 
                 "\nhosts管理器不可用，无法更新设置。\n"
+            )
+            msg_box.exec()
+
+    def toggle_disable_pre_hash_check(self, checked):
+        """切换禁用安装前哈希预检查的状态
+        
+        Args:
+            checked: 是否禁用安装前哈希预检查
+        """
+        try:
+            # 更新配置
+            if hasattr(self.main_window, 'config'):
+                self.main_window.config['disable_pre_hash_check'] = checked
+                
+                # 保存配置到文件
+                if hasattr(self.main_window, 'save_config'):
+                    self.main_window.save_config(self.main_window.config)
+                
+                # 显示成功提示
+                status = "禁用" if checked else "启用"
+                msg_box = self._create_message_box(
+                    "设置已更新", 
+                    f"\n已{status}安装前哈希预检查。\n\n{'安装时将跳过哈希预检查' if checked else '安装时将进行哈希预检查'}。\n"
+                )
+                msg_box.exec()
+            else:
+                # 如果配置不可用，恢复复选框状态
+                self.disable_pre_hash_action.setChecked(not checked)
+                msg_box = self._create_message_box(
+                    "错误", 
+                    "\n配置管理器不可用，无法更新设置。\n"
+                )
+                msg_box.exec()
+        except Exception as e:
+            # 如果发生异常，恢复复选框状态
+            self.disable_pre_hash_action.setChecked(not checked)
+            msg_box = self._create_message_box(
+                "错误", 
+                f"\n更新设置时发生异常：\n\n{str(e)}\n"
             )
             msg_box.exec()
 

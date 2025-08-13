@@ -18,20 +18,20 @@ class PrivacyManager:
         """初始化隐私协议管理器"""
         # 初始化日志
         self.logger = setup_logger("privacy_manager")
-        self.logger.info("正在初始化隐私协议管理器")
+        self.logger.debug("正在初始化隐私协议管理器")
         # 确保缓存目录存在
         os.makedirs(CACHE, exist_ok=True)
         self.config_file = os.path.join(CACHE, "privacy_config.json")
         self.privacy_config = self._load_privacy_config()
         
         # 获取隐私协议内容和版本
-        self.logger.info("读取本地隐私协议文件")
+        self.logger.debug("读取本地隐私协议文件")
         self.privacy_content, self.current_privacy_version, error = get_local_privacy_policy()
         if error:
             self.logger.warning(f"读取本地隐私协议文件警告: {error}")
             # 使用默认版本作为备用
             self.current_privacy_version = PRIVACY_POLICY_VERSION
-        self.logger.info(f"隐私协议版本: {self.current_privacy_version}")
+        self.logger.debug(f"隐私协议版本: {self.current_privacy_version}")
             
         # 检查隐私协议版本和用户同意状态
         self.privacy_accepted = self._check_privacy_acceptance()
@@ -66,9 +66,9 @@ class PrivacyManager:
         stored_app_version = self.privacy_config.get("app_version", "0.0.0")
         privacy_accepted = self.privacy_config.get("privacy_accepted", False)
         
-        self.logger.info(f"存储的隐私协议版本: {stored_privacy_version}, 当前版本: {self.current_privacy_version}")
-        self.logger.info(f"存储的应用版本: {stored_app_version}, 当前版本: {APP_VERSION}")
-        self.logger.info(f"隐私协议接受状态: {privacy_accepted}")
+        self.logger.debug(f"存储的隐私协议版本: {stored_privacy_version}, 当前版本: {self.current_privacy_version}")
+        self.logger.debug(f"存储的应用版本: {stored_app_version}, 当前版本: {APP_VERSION}")
+        self.logger.debug(f"隐私协议接受状态: {privacy_accepted}")
         
         # 如果隐私协议版本变更，需要重新同意
         if stored_privacy_version != self.current_privacy_version:
@@ -125,7 +125,7 @@ class PrivacyManager:
         """
         # 如果用户已经同意了隐私协议，直接返回True不显示对话框
         if self.privacy_accepted:
-            self.logger.info("用户已同意当前版本的隐私协议，无需再次显示")
+            self.logger.debug("用户已同意当前版本的隐私协议，无需再次显示")
             return True
             
         self.logger.info("首次运行或隐私协议版本变更，显示隐私对话框")

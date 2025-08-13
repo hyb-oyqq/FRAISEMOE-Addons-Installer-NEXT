@@ -144,12 +144,12 @@ class MainWindow(QMainWindow):
         """根据配置设置调试模式."""
         if self.config.get("debug_mode"):
             self.debug_manager.start_logging()
-            logger.info("通过配置启动调试模式")
+            logger.debug("通过配置启动调试模式")
         
         if hasattr(self.ui_manager, 'debug_action') and self.ui_manager.debug_action and self.ui_manager.debug_action.isChecked():
             if not self.debug_manager.logger:
                 self.debug_manager.start_logging()
-                logger.info("通过UI启动调试模式")
+                logger.debug("通过UI启动调试模式")
         
         self.ui_manager.setup_ui()
     

@@ -77,7 +77,7 @@ class DebugManager:
             elif os.path.exists(debug_file):
                 # 删除标记文件
                 os.remove(debug_file)
-                logger.info(f"已删除调试模式标记文件: {debug_file}")
+                logger.debug(f"已删除调试模式标记文件: {debug_file}")
         except Exception as e:
             logger.warning(f"处理调试模式标记文件时发生错误: {e}")
         
@@ -113,7 +113,7 @@ class DebugManager:
                 log_dir = os.path.dirname(LOG_FILE)
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
-                    logger.info(f"已创建日志目录: {log_dir}")
+                    logger.debug(f"已创建日志目录: {log_dir}")
                 
                 # 创建新的日志文件，使用覆盖模式而不是追加模式
                 with open(LOG_FILE, 'w', encoding='utf-8') as f:
@@ -123,13 +123,13 @@ class DebugManager:
                     f.write(f"--- 新调试会话开始于 {os.path.basename(LOG_FILE)} ---\n")
                     f.write(f"--- 应用版本: {APP_NAME} ---\n")
                     f.write(f"--- 日期: {formatted_date} 时间: {formatted_time} ---\n\n")
-                    logger.info(f"已创建日志文件: {os.path.abspath(LOG_FILE)}")
+                    logger.debug(f"已创建日志文件: {os.path.abspath(LOG_FILE)}")
                 
                 # 保存原始的 stdout 并创建Logger实例
                 self.original_stdout = sys.stdout
                 self.logger = Logger(LOG_FILE, self.original_stdout)
                 
-                logger.info(f"--- Debug mode enabled (log file: {os.path.abspath(LOG_FILE)}) ---")
+                logger.debug(f"--- Debug mode enabled (log file: {os.path.abspath(LOG_FILE)}) ---")
             except (IOError, OSError) as e:
                 QtWidgets.QMessageBox.critical(self.main_window, "错误", f"无法创建日志文件: {e}")
                 self.logger = None
@@ -137,7 +137,7 @@ class DebugManager:
     def stop_logging(self):
         """停止日志记录"""
         if self.logger:
-            logger.info("--- Debug mode disabled ---")
+            logger.debug("--- Debug mode disabled ---")
             # 恢复stdout到原始状态
             if hasattr(self, 'original_stdout') and self.original_stdout:
                 sys.stdout = self.original_stdout

@@ -267,25 +267,45 @@ class DownloadManager:
             self.main_window.ui_manager.set_install_button_state("ready")
             return
         
-        # 关闭可能存在的哈希校验窗口
-        self.main_window.close_hash_msg_box()
+        # 检查是否禁用了安装前哈希预检查
+        config = getattr(self.main_window, 'config', {})
+        disable_pre_hash = False
+        if isinstance(config, dict):
+            disable_pre_hash = config.get("disable_pre_hash_check", False)
+        
+        debug_mode = self.is_debug_mode()
+        
+        if disable_pre_hash:
+            if debug_mode:
+                logger.debug("DEBUG: 哈希预检查已被用户禁用，跳过预检查")
+            # 直接跳过哈希预检查，进入安装流程
+            # 创建一个空的安装状态字典，所有游戏都标记为未安装
+            updated_status = {}
+            for game in game_dirs.keys():
+                updated_status[game] = False
             
-        # 显示文件检验窗口
-        self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(
-            check_type="pre",
-            auto_close=True,  # 添加自动关闭参数
-            close_delay=1000  # 1秒后自动关闭
-        )
-        
-        # 获取安装路径
-        install_paths = self.get_install_paths()
-        
-        # 创建并启动哈希线程进行预检查
-        self.main_window.hash_thread = self.main_window.patch_detector.create_hash_thread("pre", install_paths)
-        self.main_window.hash_thread.pre_finished.connect(
-            lambda updated_status: self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
-        )
-        self.main_window.hash_thread.start()
+            # 直接调用预检查完成的处理方法
+            self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
+        else:
+            # 关闭可能存在的哈希校验窗口
+            self.main_window.close_hash_msg_box()
+                
+            # 显示文件检验窗口
+            self.main_window.hash_msg_box = self.main_window.hash_manager.hash_pop_window(
+                check_type="pre",
+                auto_close=True,  # 添加自动关闭参数
+                close_delay=1000  # 1秒后自动关闭
+            )
+            
+            # 获取安装路径
+            install_paths = self.get_install_paths()
+            
+            # 创建并启动哈希线程进行预检查
+            self.main_window.hash_thread = self.main_window.patch_detector.create_hash_thread("pre", install_paths)
+            self.main_window.hash_thread.pre_finished.connect(
+                lambda updated_status: self.on_pre_hash_finished_with_dirs(updated_status, game_dirs)
+            )
+            self.main_window.hash_thread.start()
 
     def on_pre_hash_finished_with_dirs(self, updated_status, game_dirs):
         """优化的哈希预检查完成处理，带有游戏目录信息
@@ -348,7 +368,7 @@ class DownloadManager:
                         already_installed_games.append(game_version)
             else:
                 if debug_mode:
-                    logger.info(f"DEBUG: 用户选择不启用被禁用的补丁，这些游戏将被添加到可安装列表")
+                    logger.debug(f"用户选择不启用被禁用的补丁，这些游戏将被添加到可安装列表")
                 # 用户选择不启用，将这些游戏视为可以安装补丁
                 installable_games.extend(disabled_patch_games)
                 
@@ -439,13 +459,13 @@ class DownloadManager:
                     
                 if is_offline_mode:
                     if debug_mode:
-                        logger.info("DEBUG: 使用离线模式，跳过网络配置获取")
+                        logger.debug("使用离线模式，跳过网络配置获取")
                     self._fill_offline_download_queue(selected_game_dirs)
                 else:
                     # 在线模式下，重新获取云端配置
                     if hasattr(self.main_window, 'fetch_cloud_config'):
                         if debug_mode:
-                            logger.info("DEBUG: 重新获取云端配置以确保URL最新")
+                            logger.debug("重新获取云端配置以确保URL最新")
                         # 重新获取云端配置并继续下载流程
                         from workers.config_fetch_thread import ConfigFetchThread
                         self.main_window.config_manager.fetch_cloud_config(
@@ -531,7 +551,7 @@ class DownloadManager:
         # 如果是离线模式，直接开始下一个下载任务
         if is_offline_mode:
             if debug_mode:
-                logger.info("DEBUG: 离线模式，跳过Cloudflare优化")
+                logger.debug("离线模式，跳过Cloudflare优化")
             self.next_download_task()
         else:
             self._show_cloudflare_option()
@@ -791,7 +811,7 @@ class DownloadManager:
                 
                 if hash_valid:
                     if debug_mode:
-                        logger.info(f"DEBUG: 成功复制并验证补丁文件 {_7z_path}")
+                        logger.debug(f"成功复制并验证补丁文件 {_7z_path}")
                     # 直接进入解压阶段
                     self.extraction_handler.start_extraction(_7z_path, game_folder, plugin_path, game_version)
                 else:

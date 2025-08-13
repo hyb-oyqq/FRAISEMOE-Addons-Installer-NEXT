@@ -138,20 +138,20 @@ class PatchDetector:
             
             if is_patch_installed or hash_check_passed:
                 if debug_mode:
-                    logger.info(f"DEBUG: {game_version} 已安装补丁，不需要再次安装")
-                    logger.info(f"DEBUG: 文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
+                    logger.debug(f"{game_version} 已安装补丁，不需要再次安装")
+                    logger.debug(f"文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
                 already_installed_games.append(game_version)
                 self.main_window.installed_status[game_version] = True
             else:
                 is_disabled, disabled_path = self.check_patch_disabled(game_dir, game_version)
                 if is_disabled:
                     if debug_mode:
-                        logger.info(f"DEBUG: {game_version} 存在被禁用的补丁: {disabled_path}")
+                        logger.debug(f"{game_version} 存在被禁用的补丁: {disabled_path}")
                     disabled_patch_games.append(game_version)
                 else:
                     if debug_mode:
-                        logger.info(f"DEBUG: {game_version} 未安装补丁，可以安装")
-                        logger.info(f"DEBUG: 文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
+                        logger.debug(f"{game_version} 未安装补丁，可以安装")
+                        logger.debug(f"文件检查结果: {is_patch_installed}, 哈希检查结果: {hash_check_passed}")
                     installable_games.append(game_version)
                     
         if debug_mode:

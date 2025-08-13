@@ -105,8 +105,8 @@ class OfflineModeManager:
             
         debug_mode = self._is_debug_mode()
         
-        # 无论是否为调试模式，都记录扫描操作
-        logger.info(f"扫描离线补丁文件，目录: {directory}")
+        # 记录扫描操作
+        logger.debug(f"扫描离线补丁文件，目录: {directory}")
             
         # 要查找的补丁文件名
         patch_files = ["vol.1.7z", "vol.2.7z", "vol.3.7z", "vol.4.7z", "after.7z"]
@@ -149,7 +149,7 @@ class OfflineModeManager:
         if found_patches:
             logger.info(f"共找到 {len(found_patches)} 个离线补丁文件: {list(found_patches.keys())}")
         else:
-            logger.info("未找到任何离线补丁文件")
+            logger.debug("未找到任何离线补丁文件")
             
         return found_patches
         
@@ -208,8 +208,8 @@ class OfflineModeManager:
                 ui_manager.online_mode_action.setChecked(not enabled)
                 ui_manager.offline_mode_action.setChecked(enabled)
         
-        # 无论是否为调试模式，都记录离线模式状态变化
-        logger.info(f"离线模式已{'启用' if enabled else '禁用'}")
+        # 记录离线模式状态变化
+        logger.debug(f"离线模式已{'启用' if enabled else '禁用'}")
         if debug_mode:
             logger.debug(f"DEBUG: 离线模式已{'启用' if enabled else '禁用'}")
             
@@ -642,14 +642,14 @@ class OfflineModeManager:
             if install_path and os.path.exists(install_path):
                 try:
                     os.remove(install_path)
-                    logger.info(f"已删除校验失败的文件: {install_path}")
+                    logger.debug(f"已删除校验失败的文件: {install_path}")
                     
                     # 检查是否为NEKOPARA After，同时删除签名文件
                     if game_version == "NEKOPARA After":
                         sig_path = f"{install_path}.sig"
                         if os.path.exists(sig_path):
                             os.remove(sig_path)
-                            logger.info(f"已删除签名文件: {sig_path}")
+                            logger.debug(f"已删除签名文件: {sig_path}")
                 except Exception as e:
                     logger.error(f"删除文件失败: {e}")
             
@@ -833,7 +833,7 @@ class OfflineModeManager:
         # 开始执行第一个安装任务
         if install_tasks:
             if debug_mode:
-                logger.info(f"DEBUG: 开始离线安装流程，安装游戏数量: {len(install_tasks)}")
+                logger.debug(f"开始离线安装流程，安装游戏数量: {len(install_tasks)}")
             self.process_next_offline_install_task(install_tasks)
             return True
         else:
@@ -886,7 +886,7 @@ class OfflineModeManager:
         if not install_tasks:
             # 所有任务完成，进行后检查
             if debug_mode:
-                logger.info("DEBUG: 所有离线安装任务完成，进行后检查")
+                logger.debug("所有离线安装任务完成，进行后检查")
                 
             # 使用patch_detector进行安装后哈希比较
             self.main_window.patch_detector.after_hash_compare()
