@@ -210,4 +210,54 @@ class ConfigManager:
         Returns:
             str: 错误信息
         """
-        return self.last_error_message 
+        return self.last_error_message
+        
+    def toggle_disable_pre_hash_check(self, main_window, checked):
+        """切换禁用安装前哈希预检查的状态
+        
+        Args:
+            main_window: 主窗口实例
+            checked: 是否禁用安装前哈希预检查
+            
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            # 更新配置
+            if hasattr(main_window, 'config'):
+                main_window.config['disable_pre_hash_check'] = checked
+                
+                # 保存配置到文件
+                if hasattr(main_window, 'save_config'):
+                    main_window.save_config(main_window.config)
+                
+                # 显示成功提示
+                status = "禁用" if checked else "启用"
+                from utils import msgbox_frame
+                msg_box = msgbox_frame(
+                    f"设置已更新 - {self.app_name}",
+                    f"\n已{status}安装前哈希预检查。\n\n{'安装时将跳过哈希预检查' if checked else '安装时将进行哈希预检查'}。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+                return True
+            else:
+                # 如果配置不可用，显示错误
+                from utils import msgbox_frame
+                msg_box = msgbox_frame(
+                    f"错误 - {self.app_name}",
+                    "\n配置管理器不可用，无法更新设置。\n",
+                    QMessageBox.StandardButton.Ok,
+                )
+                msg_box.exec()
+                return False
+        except Exception as e:
+            # 如果发生异常，显示错误
+            from utils import msgbox_frame
+            msg_box = msgbox_frame(
+                f"错误 - {self.app_name}",
+                f"\n更新设置时发生异常：\n\n{str(e)}\n",
+                QMessageBox.StandardButton.Ok,
+            )
+            msg_box.exec()
+            return False 

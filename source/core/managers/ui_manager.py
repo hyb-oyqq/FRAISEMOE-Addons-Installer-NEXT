@@ -461,7 +461,10 @@ class UIManager:
         self.open_log_action.setEnabled(debug_mode)
         
         # 连接打开log文件的事件
-        self.open_log_action.triggered.connect(self.open_log_file)
+        if hasattr(self.main_window, 'debug_manager'):
+            self.open_log_action.triggered.connect(self.main_window.debug_manager.open_log_file)
+        else:
+            self.open_log_action.triggered.connect(lambda: self._create_message_box("错误", "\n调试管理器未初始化。\n").exec())
         
         # 添加到Debug子菜单
         self.debug_submenu.addAction(self.debug_action)
@@ -510,7 +513,7 @@ class UIManager:
             disable_pre_hash = config.get("disable_pre_hash_check", False)
         
         self.disable_pre_hash_action.setChecked(disable_pre_hash)
-        self.disable_pre_hash_action.triggered.connect(self.toggle_disable_pre_hash_check)
+        self.disable_pre_hash_action.triggered.connect(lambda checked: self._handle_pre_hash_toggle(checked))
         
         # 添加到哈希校验设置子菜单
         self.hash_settings_menu.addAction(self.disable_pre_hash_action)
@@ -696,115 +699,7 @@ class UIManager:
             msg_box = self._create_message_box("错误", "\n下载管理器未初始化，无法修改下载线程设置。\n")
             msg_box.exec()
         
-    def open_log_file(self):
-        """打开当前日志文件"""
-        try:
-            # 检查日志文件是否存在
-            if os.path.exists(LOG_FILE):
-                # 获取日志文件大小
-                file_size = os.path.getsize(LOG_FILE)
-                if file_size == 0:
-                    msg_box = self._create_message_box("提示", f"\n当前日志文件 {os.path.basename(LOG_FILE)} 存在但为空。\n\n日志文件位置：{os.path.abspath(LOG_FILE)}")
-                    msg_box.exec()
-                    return
-                
-                # 根据文件大小决定是使用文本查看器还是直接打开
-                if file_size > 1024 * 1024:  # 大于1MB
-                    # 文件较大，显示警告
-                    msg_box = self._create_message_box(
-                        "警告",
-                        f"\n日志文件较大 ({file_size / 1024 / 1024:.2f} MB)，是否仍要打开？\n\n日志文件位置：{os.path.abspath(LOG_FILE)}",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
-                    if msg_box.exec() != QMessageBox.StandardButton.Yes:
-                        return
-                
-                # 使用操作系统默认程序打开日志文件
-                if os.name == 'nt':  # Windows
-                    os.startfile(LOG_FILE)
-                else:  # macOS 和 Linux
-                    import subprocess
-                    subprocess.call(['xdg-open', LOG_FILE])
-            else:
-                # 文件不存在，显示信息
-                # 搜索log文件夹下所有可能的日志文件
-                root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-                log_dir = os.path.join(root_dir, "log")
-                
-                # 如果log文件夹不存在，尝试创建它
-                if not os.path.exists(log_dir):
-                    try:
-                        os.makedirs(log_dir, exist_ok=True)
-                        msg_box = self._create_message_box(
-                            "信息",
-                            f"\n日志文件夹不存在，已创建新的日志文件夹：\n{log_dir}\n\n请在启用调试模式后重试。"
-                        )
-                        msg_box.exec()
-                        return
-                    except Exception as e:
-                        msg_box = self._create_message_box(
-                            "错误",
-                            f"\n创建日志文件夹失败：\n\n{str(e)}"
-                        )
-                        msg_box.exec()
-                        return
-                
-                # 搜索log文件夹中的日志文件
-                try:
-                    log_files = [f for f in os.listdir(log_dir) if f.startswith("log-") and f.endswith(".txt")]
-                except Exception as e:
-                    msg_box = self._create_message_box(
-                        "错误",
-                        f"\n无法读取日志文件夹：\n\n{str(e)}"
-                    )
-                    msg_box.exec()
-                    return
-                
-                if log_files:
-                    # 按照修改时间排序，获取最新的日志文件
-                    log_files.sort(key=lambda x: os.path.getmtime(os.path.join(log_dir, x)), reverse=True)
-                    latest_log = os.path.join(log_dir, log_files[0])
-                    
-                    # 获取最新日志文件的创建时间信息
-                    try:
-                        log_datetime = "-".join(os.path.basename(latest_log)[4:-4].split("-")[:2])
-                        log_date = log_datetime.split("-")[0]
-                        log_time = log_datetime.split("-")[1] if "-" in log_datetime else "未知时间"
-                        date_info = f"日期: {log_date[:4]}-{log_date[4:6]}-{log_date[6:]}"
-                        time_info = f"时间: {log_time[:2]}:{log_time[2:4]}:{log_time[4:]}"
-                    except:
-                        date_info = "日期未知 "
-                        time_info = "时间未知"
-                    
-                    msg_box = self._create_message_box(
-                        "信息",
-                        f"\n当前日志文件 {os.path.basename(LOG_FILE)} 不存在。\n\n"
-                        f"发现最新的日志文件: {os.path.basename(latest_log)}\n"
-                        f"({date_info}{time_info})\n\n"
-                        f"是否打开此文件？",
-                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-                    )
-                    
-                    if msg_box.exec() == QMessageBox.StandardButton.Yes:
-                        if os.name == 'nt':  # Windows
-                            os.startfile(latest_log)
-                        else:  # macOS 和 Linux
-                            import subprocess
-                            subprocess.call(['xdg-open', latest_log])
-                        return
-                
-                # 如果没有找到任何日志文件或用户选择不打开最新的日志文件
-                msg_box = self._create_message_box(
-                    "信息",
-                    f"\n没有找到有效的日志文件。\n\n"
-                    f"预期的日志文件夹：{log_dir}\n\n"
-                    f"请确认调试模式已启用，并执行一些操作后再查看日志。"
-                )
-                msg_box.exec()
-                
-        except Exception as e:
-            msg_box = self._create_message_box("错误", f"\n处理日志文件时出错：\n\n{str(e)}\n\n文件位置：{os.path.abspath(LOG_FILE)}")
-            msg_box.exec()
+
             
     def restore_hosts_backup(self):
         """还原软件备份的hosts文件"""
@@ -921,44 +816,21 @@ class UIManager:
             )
             msg_box.exec()
 
-    def toggle_disable_pre_hash_check(self, checked):
-        """切换禁用安装前哈希预检查的状态
+    def _handle_pre_hash_toggle(self, checked):
+        """处理禁用安装前哈希预检查的切换
         
         Args:
             checked: 是否禁用安装前哈希预检查
         """
-        try:
-            # 更新配置
-            if hasattr(self.main_window, 'config'):
-                self.main_window.config['disable_pre_hash_check'] = checked
-                
-                # 保存配置到文件
-                if hasattr(self.main_window, 'save_config'):
-                    self.main_window.save_config(self.main_window.config)
-                
-                # 显示成功提示
-                status = "禁用" if checked else "启用"
-                msg_box = self._create_message_box(
-                    "设置已更新", 
-                    f"\n已{status}安装前哈希预检查。\n\n{'安装时将跳过哈希预检查' if checked else '安装时将进行哈希预检查'}。\n"
-                )
-                msg_box.exec()
-            else:
-                # 如果配置不可用，恢复复选框状态
+        if hasattr(self.main_window, 'config_manager'):
+            success = self.main_window.config_manager.toggle_disable_pre_hash_check(self.main_window, checked)
+            if not success:
+                # 如果操作失败，恢复复选框状态
                 self.disable_pre_hash_action.setChecked(not checked)
-                msg_box = self._create_message_box(
-                    "错误", 
-                    "\n配置管理器不可用，无法更新设置。\n"
-                )
-                msg_box.exec()
-        except Exception as e:
-            # 如果发生异常，恢复复选框状态
+        else:
+            # 如果配置管理器不可用，恢复复选框状态并显示错误
             self.disable_pre_hash_action.setChecked(not checked)
-            msg_box = self._create_message_box(
-                "错误", 
-                f"\n更新设置时发生异常：\n\n{str(e)}\n"
-            )
-            msg_box.exec()
+            self._create_message_box("错误", "\n配置管理器未初始化。\n").exec()
 
     def show_about_dialog(self):
         """显示关于对话框"""
