@@ -63,7 +63,8 @@ class DownloadManager:
             )
             return
         
-        self.main_window.ui_manager.set_install_button_state("installing")
+        if hasattr(self.main_window, 'window_manager'):
+            self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_INSTALLING)
         
         self.main_window.setEnabled(False)
         
@@ -264,7 +265,8 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未在选择的目录中找到支持的游戏\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
         
         # 检查是否禁用了安装前哈希预检查
@@ -479,7 +481,8 @@ class DownloadManager:
             else:
                 if debug_mode:
                     logger.debug("DEBUG: 用户取消了游戏选择")
-                self.main_window.ui_manager.set_install_button_state("ready")
+                if hasattr(self.main_window, 'window_manager'):
+                    self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
         else:
             # 如果没有可安装的游戏，显示提示
             if already_installed_games:
@@ -492,7 +495,8 @@ class DownloadManager:
                 f"通知 - {APP_NAME}",
                 msg
             )
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             
     def _continue_download_after_config_fetch(self, data, error, selected_game_dirs):
         """云端配置获取完成后继续下载流程
@@ -530,7 +534,8 @@ class DownloadManager:
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
 
         self._fill_download_queue(config, selected_game_dirs)
@@ -703,7 +708,8 @@ class DownloadManager:
         clicked_button = msg_box.clickedButton()
         if clicked_button == cancel_button:
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             self.download_queue.clear()
             return
         
@@ -958,7 +964,8 @@ class DownloadManager:
         logger.info("下载已全部停止。")
         
         self.main_window.setEnabled(True)
-        self.main_window.ui_manager.set_install_button_state("ready")
+        if hasattr(self.main_window, 'window_manager'):
+            self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
         
         QtWidgets.QMessageBox.information(
             self.main_window,
@@ -1002,7 +1009,8 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未在选择的目录中找到支持的游戏\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
             
         # 过滤出存在的游戏目录
@@ -1013,7 +1021,8 @@ class DownloadManager:
                 self.main_window, f"通知 - {APP_NAME}", "\n未找到指定游戏的安装目录\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
             
         self.main_window.setEnabled(False)
@@ -1025,7 +1034,8 @@ class DownloadManager:
                 self.main_window, f"错误 - {APP_NAME}", "\n网络状态异常或服务器故障，请重试\n"
             )
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
             
         # 填充下载队列
@@ -1150,7 +1160,8 @@ class DownloadManager:
 
         if not game_dirs:
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             from PySide6.QtWidgets import QMessageBox
             from config.config import APP_NAME
             QMessageBox.warning(

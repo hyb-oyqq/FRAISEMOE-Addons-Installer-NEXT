@@ -383,7 +383,7 @@ class UIManager:
         if self.ipv6_manager:
             self.ipv6_test_action.triggered.connect(self.ipv6_manager.show_ipv6_details)
         else:
-            self.ipv6_test_action.triggered.connect(self.show_ipv6_manager_not_ready)
+            self.ipv6_test_action.triggered.connect(lambda: self._create_message_box("错误", "\nIPv6管理器尚未初始化，请稍后再试。\n").exec())
         
         # 创建IPv6支持子菜单
         self.ipv6_submenu = QMenu("IPv6支持", self.main_window)
@@ -476,7 +476,7 @@ class UIManager:
         self.switch_source_action = QAction("修改下载源", self.main_window)
         self.switch_source_action.setFont(menu_font)
         self.switch_source_action.setEnabled(True)
-        self.switch_source_action.triggered.connect(self.show_under_development)
+        self.switch_source_action.triggered.connect(lambda: self._create_message_box("提示", "\n该功能正在开发中，敬请期待！\n").exec())
         
         # 添加下载线程设置选项
         self.thread_settings_action = QAction("下载线程设置", self.main_window)
@@ -638,15 +638,12 @@ class UIManager:
         
         reply = msg_box.exec()
         if reply == QMessageBox.StandardButton.Yes:
-            # 用户确认撤回
             try:
-                # 导入隐私管理器
                 from core.managers.privacy_manager import PrivacyManager
                 import sys
                 import subprocess
                 import os
                 
-                # 创建实例并重置隐私协议同意
                 privacy_manager = PrivacyManager()
                 if privacy_manager.reset_privacy_agreement():
                     # 显示重启提示
@@ -656,32 +653,21 @@ class UIManager:
                     )
                     restart_msg.exec()
                     
-                    # 获取当前执行的Python解释器路径和脚本路径
+                    # 重启应用程序
                     python_executable = sys.executable
                     script_path = os.path.abspath(sys.argv[0])
-                    
-                    # 构建重启命令
-                    restart_cmd = [python_executable, script_path]
-                    
-                    # 启动新进程
-                    subprocess.Popen(restart_cmd)
-                    
-                    # 退出当前进程
+                    subprocess.Popen([python_executable, script_path])
                     sys.exit(0)
                 else:
-                    # 显示失败提示
-                    fail_msg = self._create_message_box(
+                    self._create_message_box(
                         "操作失败",
                         "\n撤回隐私协议同意失败。\n\n请检查应用权限或稍后再试。\n"
-                    )
-                    fail_msg.exec()
+                    ).exec()
             except Exception as e:
-                # 显示错误提示
-                error_msg = self._create_message_box(
+                self._create_message_box(
                     "错误",
                     f"\n撤回隐私协议同意时发生错误：\n\n{str(e)}\n"
-                )
-                error_msg.exec()
+                ).exec()
 
     def _create_message_box(self, title, message, buttons=QMessageBox.StandardButton.Ok):
         """创建统一风格的消息框
@@ -700,11 +686,6 @@ class UIManager:
             buttons,
         )
         return msg_box
-        
-    def show_under_development(self):
-        """显示功能正在开发中的提示"""
-        msg_box = self._create_message_box("提示", "\n该功能正在开发中，敬请期待！\n")
-        msg_box.exec()
         
     def show_download_thread_settings(self):
         """显示下载线程设置对话框"""
@@ -1001,10 +982,7 @@ class UIManager:
         msg_box.setTextFormat(Qt.TextFormat.RichText)  # 使用Qt.TextFormat
         msg_box.exec() 
 
-    def show_ipv6_manager_not_ready(self):
-        """显示IPv6管理器未准备好的提示"""
-        msg_box = self._create_message_box("错误", "\nIPv6管理器尚未初始化，请稍后再试。\n")
-        msg_box.exec() 
+ 
 
     def switch_work_mode(self, mode):
         """切换工作模式
@@ -1040,7 +1018,8 @@ class UIManager:
             self.main_window.save_config(self.main_window.config)
             
             # 在离线模式下启用开始安装按钮
-            self.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             
             # 清除版本警告标志
             if hasattr(self.main_window, 'version_warning'):
@@ -1141,32 +1120,4 @@ class UIManager:
             self.loading_dialog.hide()
             self.loading_dialog = None
 
-    def set_install_button_state(self, state):
-        """统一的安装按钮状态管理方法
-        
-        Args:
-            state (str): 按钮状态 - "ready", "installing", "disabled", "completed"
-        """
-        if hasattr(self.main_window, 'window_manager'):
-            if state == "ready":
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
-            elif state == "installing":
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_INSTALLING)
-            elif state == "disabled":
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_ERROR)
-            elif state == "completed":
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_COMPLETED)
-        else:
-            # 降级处理，直接设置按钮状态
-            if state == "ready":
-                self.main_window.ui.start_install_btn.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("开始安装")
-            elif state == "installing":
-                self.main_window.ui.start_install_btn.setEnabled(False)
-                self.main_window.ui.start_install_text.setText("正在安装")
-            elif state == "disabled":
-                self.main_window.ui.start_install_btn.setEnabled(False)
-                self.main_window.ui.start_install_text.setText("!无法安装!")
-            elif state == "completed":
-                self.main_window.ui.start_install_btn.setEnabled(True)
-                self.main_window.ui.start_install_text.setText("安装完成") 
+ 

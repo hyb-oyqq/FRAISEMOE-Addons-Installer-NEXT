@@ -847,7 +847,8 @@ class OfflineModeManager:
                 QMessageBox.StandardButton.Ok
             ).exec()
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             
         return True
         
@@ -907,7 +908,8 @@ class OfflineModeManager:
             else:
                 # 恢复UI状态
                 self.main_window.setEnabled(True)
-                self.main_window.ui_manager.set_install_button_state("ready")
+                if hasattr(self.main_window, 'window_manager'):
+                    self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
                 
             return
             
@@ -1040,4 +1042,5 @@ class OfflineModeManager:
             
             # 恢复UI状态
             self.main_window.setEnabled(True)
-            self.main_window.ui_manager.set_install_button_state("ready") 
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY) 

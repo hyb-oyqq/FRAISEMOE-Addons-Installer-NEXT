@@ -268,7 +268,8 @@ class PatchDetector:
             QMessageBox.critical(self.main_window, f"文件校验失败 - {APP_NAME}", message)
 
         self.main_window.setEnabled(True)
-        self.main_window.ui_manager.set_install_button_state("ready")
+        if hasattr(self.main_window, 'window_manager'):
+            self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
         QTimer.singleShot(100, self.main_window.show_result)
         
     def on_offline_pre_hash_finished(self, updated_status, game_dirs):
@@ -333,7 +334,8 @@ class PatchDetector:
                     "\n未检测到任何需要安装补丁的游戏。\n\n请确保游戏文件夹位于选择的目录中。\n",
                 )
                 
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
             
         from PySide6 import QtWidgets
@@ -367,7 +369,8 @@ class PatchDetector:
         
         result = dialog.exec()
         if result != QtWidgets.QDialog.DialogCode.Accepted or not list_widget.selectedItems():
-            self.main_window.ui_manager.set_install_button_state("ready")
+            if hasattr(self.main_window, 'window_manager'):
+                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
             return
             
         selected_games = [item.text() for item in list_widget.selectedItems()]
