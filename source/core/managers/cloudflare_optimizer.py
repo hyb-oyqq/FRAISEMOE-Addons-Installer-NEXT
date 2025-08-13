@@ -334,7 +334,7 @@ class CloudflareOptimizer:
                 # 恢复主窗口状态
                 self.main_window.setEnabled(True)
                 if hasattr(self.main_window, 'window_manager'):
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
+                    self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
                 return False
                 
             # 用户点击了继续，重新禁用主窗口
@@ -406,7 +406,7 @@ class CloudflareOptimizer:
                         # 恢复主窗口状态
                         self.main_window.setEnabled(True)
                         if hasattr(self.main_window, 'window_manager'):
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
+                            self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
                         return False
                 else:
                     QtWidgets.QMessageBox.critical(
@@ -416,7 +416,7 @@ class CloudflareOptimizer:
                     )
                     # 恢复主窗口状态
                     if hasattr(self.main_window, 'window_manager'):
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
+                        self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
                     return False
                 
                 # 用户点击了继续，重新禁用主窗口

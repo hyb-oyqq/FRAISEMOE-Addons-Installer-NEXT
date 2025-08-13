@@ -111,7 +111,7 @@ class ExtractionHandler:
             else:
                 # 用户选择停止，保持窗口启用状态
                 if hasattr(self.main_window, 'window_manager'):
-                self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
+                    self.main_window.window_manager.change_window_state(self.main_window.window_manager.STATE_READY)
                 # 通知DownloadManager停止下载队列
                 self.main_window.download_manager.on_extraction_finished(False)
             return
