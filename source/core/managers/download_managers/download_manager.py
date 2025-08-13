@@ -14,7 +14,7 @@ from utils import msgbox_frame, HostsManager, resource_path
 from config.config import APP_NAME, PLUGIN, GAME_INFO, UA, CONFIG_URL, DOWNLOAD_THREADS, DEFAULT_DOWNLOAD_THREAD_LEVEL
 from workers import IpOptimizerThread
 from core.managers.cloudflare_optimizer import CloudflareOptimizer
-from core.managers.download_task_manager import DownloadTaskManager
+from .download_task_manager import DownloadTaskManager
 from core.handlers.extraction_handler import ExtractionHandler
 from utils.logger import setup_logger
 from utils.url_censor import censor_url
