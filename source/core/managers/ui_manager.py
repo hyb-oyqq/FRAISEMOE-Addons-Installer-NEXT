@@ -1,15 +1,12 @@
-from PySide6.QtGui import QIcon, QAction, QFont, QCursor, QActionGroup
-from PySide6.QtWidgets import QMessageBox, QMainWindow, QMenu, QPushButton, QDialog, QVBoxLayout, QProgressBar, QLabel
-from PySide6.QtCore import Qt, QRect
-import webbrowser
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QMessageBox
 import os
 import logging
-import traceback
+import subprocess
 
-from utils import load_base64_image, msgbox_frame, resource_path
-from config.config import APP_NAME, APP_VERSION, LOG_FILE
-from core.managers.ipv6_manager import IPv6Manager  # 导入新的IPv6Manager类
-from workers.download import ProgressWindow
+from utils import load_base64_image, resource_path
+from config.config import APP_NAME, APP_VERSION
+from ui.components import FontStyleManager, DialogFactory, ExternalLinksHandler, MenuBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -23,22 +20,24 @@ class UIManager:
         self.main_window = main_window
         # 使用getattr获取ui属性，如果不存在则为None
         self.ui = getattr(main_window, 'ui', None)
-        self.debug_action = None
-        self.turbo_download_action = None
-        self.dev_menu = None
-        self.privacy_menu = None  # 隐私协议菜单
-        self.about_menu = None    # 关于菜单
-        self.about_btn = None     # 关于按钮
-        self.loading_dialog = None # 添加loading_dialog实例变量
         
         # 获取主窗口的IPv6Manager实例
         self.ipv6_manager = getattr(main_window, 'ipv6_manager', None)
         
+        # 初始化UI组件
+        self.font_style_manager = FontStyleManager()
+        self.dialog_factory = DialogFactory(main_window)
+        self.external_links_handler = ExternalLinksHandler(main_window, self.dialog_factory)
+        self.menu_builder = MenuBuilder(main_window, self.font_style_manager, self.external_links_handler, self.dialog_factory)
+        
+        # 保留一些快捷访问属性以保持兼容性
+        self.debug_action = None
+        self.disable_auto_restore_action = None
+        self.disable_pre_hash_action = None
+        
     def setup_ui(self):
         """设置UI元素，包括窗口图标、标题和菜单"""
         # 设置窗口图标
-        import os
-        from utils import resource_path
         icon_path = resource_path(os.path.join("assets", "images", "ICO", "icon.png"))
         if os.path.exists(icon_path):
             self.main_window.setWindowIcon(QIcon(icon_path))
@@ -56,473 +55,41 @@ class UIManager:
         if hasattr(self.main_window, 'ui') and hasattr(self.main_window.ui, 'title_label'):
             self.main_window.ui.title_label.setText(f"{APP_NAME} v{APP_VERSION} {mode_indicator}")
         
-        # 创建关于按钮
-        self._create_about_button()
+        # 使用新的菜单构建器设置所有菜单
+        self.menu_builder.setup_all_menus()
         
-        # 设置菜单
-        self._setup_help_menu()
-        self._setup_about_menu()  # 新增关于菜单
-        self._setup_settings_menu()
+        # 保持对一些重要UI元素的引用以确保兼容性
+        self.debug_action = self.menu_builder.debug_action
+        self.disable_auto_restore_action = self.menu_builder.disable_auto_restore_action  
+        self.disable_pre_hash_action = self.menu_builder.disable_pre_hash_action
     
-    def _create_about_button(self):
-        """创建"关于"按钮"""
-        if not self.ui or not hasattr(self.ui, 'menu_area'):
-            return
-            
-        # 获取菜单字体和样式
-        menu_font = self._get_menu_font()
-        
-        # 创建关于按钮
-        self.about_btn = QPushButton("关于", self.ui.menu_area)
-        self.about_btn.setObjectName(u"about_btn")
-        
-        # 获取帮助按钮的位置和样式
-        help_btn_x = 0
-        help_btn_width = 0
-        if hasattr(self.ui, 'help_btn'):
-            help_btn_x = self.ui.help_btn.x()
-            help_btn_width = self.ui.help_btn.width()
-            
-        # 设置位置在"帮助"按钮右侧
-        self.about_btn.setGeometry(QRect(help_btn_x + help_btn_width + 20, 1, 80, 28))
-        self.about_btn.setFont(menu_font)
-        self.about_btn.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        
-        # 复制帮助按钮的样式
-        if hasattr(self.ui, 'help_btn'):
-            self.about_btn.setStyleSheet(self.ui.help_btn.styleSheet())
-        else:
-            # 默认样式
-            self.about_btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    color: white;
-                    border: none;
-                    text-align: left;
-                    padding-left: 10px;
-                }
-                QPushButton:hover {
-                    background-color: #F47A5B;
-                    border-radius: 4px;
-                }
-                QPushButton:pressed {
-                    background-color: #D25A3C;
-                    border-radius: 4px;
-                }
-            """)
+    # 为了向后兼容性，添加委托方法
+    def create_progress_window(self, title, initial_text="准备中..."):
+        """创建进度窗口（委托给dialog_factory）"""
+        return self.dialog_factory.create_progress_window(title, initial_text)
     
-    def _setup_help_menu(self):
-        """设置"帮助"菜单"""
-        if not self.ui or not hasattr(self.ui, 'menu_2'):
-            return
-
-        # 获取菜单字体
-        menu_font = self._get_menu_font()
-
-        # 创建菜单项 - 移除"项目主页"，添加"常见问题"和"提交错误"
-        faq_action = QAction("常见问题", self.main_window)
-        faq_action.triggered.connect(self.open_faq_page)
-        faq_action.setFont(menu_font)
-        
-        report_issue_action = QAction("提交错误", self.main_window)
-        report_issue_action.triggered.connect(self.open_issues_page)
-        report_issue_action.setFont(menu_font)
-        
-        # 清除现有菜单项并添加新的菜单项
-        self.ui.menu_2.clear()
-        self.ui.menu_2.addAction(faq_action)
-        self.ui.menu_2.addAction(report_issue_action)
-        
-        # 连接按钮点击事件，如果使用按钮式菜单
-        if hasattr(self.ui, 'help_btn'):
-            # 按钮已经连接到显示菜单，不需要额外处理
-            pass
-
-    def _setup_about_menu(self):
-        """设置"关于"菜单"""
-        # 获取菜单字体
-        menu_font = self._get_menu_font()
-        
-        # 创建关于菜单
-        self.about_menu = QMenu("关于", self.main_window)
-        self.about_menu.setFont(menu_font)
-        
-        # 设置菜单样式
-        font_family = menu_font.family()
-        menu_style = self._get_menu_style(font_family)
-        self.about_menu.setStyleSheet(menu_style)
-        
-        # 创建菜单项
-        about_project_action = QAction("关于本项目", self.main_window)
-        about_project_action.setFont(menu_font)
-        about_project_action.triggered.connect(self.show_about_dialog)
-        
-        # 添加项目主页选项（从帮助菜单移动过来）
-        project_home_action = QAction("Github项目主页", self.main_window)
-        project_home_action.setFont(menu_font)
-        project_home_action.triggered.connect(self.open_project_home_page)
-        
-        # 添加加入QQ群选项
-        qq_group_action = QAction("加入QQ群", self.main_window)
-        qq_group_action.setFont(menu_font)
-        qq_group_action.triggered.connect(self.open_qq_group)
-        
-        # 创建隐私协议菜单
-        self._setup_privacy_menu()
-        
-        # 添加到关于菜单
-        self.about_menu.addAction(about_project_action)
-        self.about_menu.addAction(project_home_action)
-        self.about_menu.addAction(qq_group_action)
-        self.about_menu.addSeparator()
-        self.about_menu.addMenu(self.privacy_menu)
-        
-        # 连接按钮点击事件
-        if self.about_btn:
-            self.about_btn.clicked.connect(lambda: self.show_menu(self.about_menu, self.about_btn))
+    def show_loading_dialog(self, message):
+        """显示加载对话框（委托给dialog_factory）"""
+        return self.dialog_factory.show_loading_dialog(message)
     
-    def _setup_privacy_menu(self):
-        """设置"隐私协议"菜单"""
-        # 获取菜单字体
-        menu_font = self._get_menu_font()
-        
-        # 创建隐私协议子菜单
-        self.privacy_menu = QMenu("隐私协议", self.main_window)
-        self.privacy_menu.setFont(menu_font)
-        
-        # 设置与其他菜单一致的样式
-        font_family = menu_font.family()
-        menu_style = self._get_menu_style(font_family)
-        self.privacy_menu.setStyleSheet(menu_style)
-        
-        # 添加子选项
-        view_privacy_action = QAction("查看完整隐私协议", self.main_window)
-        view_privacy_action.setFont(menu_font)
-        view_privacy_action.triggered.connect(self.open_privacy_policy)
-        
-        revoke_privacy_action = QAction("撤回隐私协议", self.main_window)
-        revoke_privacy_action.setFont(menu_font)
-        revoke_privacy_action.triggered.connect(self.revoke_privacy_agreement)
-        
-        # 添加到子菜单
-        self.privacy_menu.addAction(view_privacy_action)
-        self.privacy_menu.addAction(revoke_privacy_action)
-
-    def _get_menu_style(self, font_family):
-        """获取统一的菜单样式"""
-        return f"""
-            QMenu {{
-                background-color: #E96948;
-                color: white;
-                font-family: "{font_family}";
-                font-size: 14px;
-                font-weight: bold;
-                border: 1px solid #F47A5B;
-                padding: 8px;
-                border-radius: 6px;
-                margin-top: 2px;
-            }}
-            QMenu::item {{
-                padding: 6px 20px 6px 15px;
-                background-color: transparent;
-                min-width: 120px;
-                color: white;
-                font-family: "{font_family}";
-                font-size: 14px;
-                font-weight: bold;
-            }}
-            QMenu::item:selected {{
-                background-color: #F47A5B;
-                border-radius: 4px;
-            }}
-            QMenu::separator {{
-                height: 1px;
-                background-color: #F47A5B;
-                margin: 5px 15px;
-            }}
-            QMenu::item:checked {{
-                background-color: #D25A3C;
-                border-radius: 4px;
-            }}
-        """
-
-    def _get_menu_font(self):
-        """获取菜单字体"""
-        font_family = "Arial"  # 默认字体族
-        
-        try:
-            from PySide6.QtGui import QFontDatabase
-            from utils import resource_path
-            
-            # 使用resource_path查找字体文件
-            font_path = resource_path(os.path.join("assets", "fonts", "SmileySans-Oblique.ttf"))
-            
-            # 详细记录字体加载过程
-            if os.path.exists(font_path):
-                logger.info(f"尝试加载字体文件: {font_path}")
-                font_id = QFontDatabase.addApplicationFont(font_path)
-                
-                if font_id != -1:
-                    font_families = QFontDatabase.applicationFontFamilies(font_id)
-                    if font_families:
-                        font_family = font_families[0]
-                        logger.info(f"成功加载字体: {font_family} 从 {font_path}")
-                    else:
-                        logger.warning(f"字体加载成功但无法获取字体族: {font_path}")
-                else:
-                    logger.warning(f"字体加载失败: {font_path} (返回ID: {font_id})")
-                    
-                    # 检查文件大小和是否可读
-                    try:
-                        file_size = os.path.getsize(font_path)
-                        logger.debug(f"字体文件大小: {file_size} 字节")
-                        if file_size == 0:
-                            logger.error(f"字体文件大小为0字节: {font_path}")
-                        
-                        # 尝试打开文件测试可读性
-                        with open(font_path, 'rb') as f:
-                            # 只读取前几个字节测试可访问性
-                            f.read(10)
-                            logger.debug(f"字体文件可以正常打开和读取")
-                    except Exception as file_error:
-                        logger.error(f"字体文件访问错误: {file_error}")
-            else:
-                logger.error(f"找不到字体文件: {font_path}")
-                
-                # 尝试列出assets/fonts目录下的文件
-                try:
-                    fonts_dir = os.path.dirname(font_path)
-                    if os.path.exists(fonts_dir):
-                        files = os.listdir(fonts_dir)
-                        logger.debug(f"字体目录 {fonts_dir} 中的文件: {files}")
-                    else:
-                        logger.debug(f"字体目录不存在: {fonts_dir}")
-                except Exception as dir_error:
-                    logger.error(f"无法列出字体目录内容: {dir_error}")
-            
-            # 创建菜单字体
-            menu_font = QFont(font_family, 14)
-            menu_font.setBold(True)
-            return menu_font
-            
-        except Exception as e:
-            logger.error(f"加载字体过程中发生异常: {e}")
-            logger.error(f"异常详情: {traceback.format_exc()}")
-            # 返回默认字体
-            menu_font = QFont(font_family, 14)
-            menu_font.setBold(True)
-            return menu_font
+    def hide_loading_dialog(self):
+        """隐藏加载对话框（委托给dialog_factory）"""
+        return self.dialog_factory.hide_loading_dialog()
     
-    def _setup_settings_menu(self):
-        """设置"设置"菜单"""
-        if not self.ui or not hasattr(self.ui, 'menu'):
-            return
+    def _create_message_box(self, title, message, buttons=QMessageBox.StandardButton.Ok):
+        """创建消息框（委托给dialog_factory）"""
+        return self.dialog_factory.create_message_box(title, message, buttons)
+    
+    def show_menu(self, menu, button):
+        """显示菜单（委托给menu_builder）"""
+        return self.menu_builder.show_menu(menu, button)
+    
 
-        # 获取菜单字体
-        menu_font = self._get_menu_font()
-        font_family = menu_font.family()
 
-        # 创建工作模式子菜单
-        self.work_mode_menu = QMenu("工作模式", self.main_window)
-        self.work_mode_menu.setFont(menu_font)
-        self.work_mode_menu.setStyleSheet(self._get_menu_style(font_family))
-        
-        # 获取当前离线模式状态
-        is_offline_mode = False
-        if hasattr(self.main_window, 'offline_mode_manager'):
-            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
-        
-        # 创建在线模式和离线模式选项
-        self.online_mode_action = QAction("在线模式", self.main_window, checkable=True)
-        self.online_mode_action.setFont(menu_font)
-        self.online_mode_action.setChecked(not is_offline_mode)  # 根据当前状态设置
-        
-        self.offline_mode_action = QAction("离线模式", self.main_window, checkable=True)
-        self.offline_mode_action.setFont(menu_font)
-        self.offline_mode_action.setChecked(is_offline_mode)  # 根据当前状态设置
-        
-        # 将两个模式选项添加到同一个互斥组
-        mode_group = QActionGroup(self.main_window)
-        mode_group.addAction(self.online_mode_action)
-        mode_group.addAction(self.offline_mode_action)
-        mode_group.setExclusive(True)  # 确保只能选择一个模式
-        
-        # 连接切换事件
-        self.online_mode_action.triggered.connect(lambda: self.switch_work_mode("online"))
-        self.offline_mode_action.triggered.connect(lambda: self.switch_work_mode("offline"))
-        
-        # 添加到工作模式子菜单
-        self.work_mode_menu.addAction(self.online_mode_action)
-        self.work_mode_menu.addAction(self.offline_mode_action)
 
-        # 创建开发者选项子菜单
-        self.dev_menu = QMenu("开发者选项", self.main_window)
-        self.dev_menu.setFont(menu_font)  # 设置与UI_install.py中相同的字体
-        
-        # 使用和主菜单相同的样式
-        menu_style = self._get_menu_style(font_family)
-        self.dev_menu.setStyleSheet(menu_style)
-        
-        # 创建Debug子菜单
-        self.debug_submenu = QMenu("Debug模式", self.main_window)
-        self.debug_submenu.setFont(menu_font)
-        self.debug_submenu.setStyleSheet(menu_style)
-        
-        # 创建hosts文件选项子菜单
-        self.hosts_submenu = QMenu("hosts文件选项", self.main_window)
-        self.hosts_submenu.setFont(menu_font)
-        self.hosts_submenu.setStyleSheet(menu_style)
-        
-        # 添加IPv6支持选项
-        self.ipv6_action = QAction("启用IPv6支持", self.main_window, checkable=True)
-        self.ipv6_action.setFont(menu_font)
-        
-        # 添加IPv6检测按钮，用于显示详细信息
-        self.ipv6_test_action = QAction("测试IPv6连接", self.main_window)
-        self.ipv6_test_action.setFont(menu_font)
-        if self.ipv6_manager:
-            self.ipv6_test_action.triggered.connect(self.ipv6_manager.show_ipv6_details)
-        else:
-            self.ipv6_test_action.triggered.connect(lambda: self._create_message_box("错误", "\nIPv6管理器尚未初始化，请稍后再试。\n").exec())
-        
-        # 创建IPv6支持子菜单
-        self.ipv6_submenu = QMenu("IPv6支持", self.main_window)
-        self.ipv6_submenu.setFont(menu_font)
-        self.ipv6_submenu.setStyleSheet(menu_style)
-        
-        # 检查配置中是否已启用IPv6
-        config = getattr(self.main_window, 'config', {})
-        ipv6_enabled = False
-        if isinstance(config, dict):
-            ipv6_enabled = config.get("ipv6_enabled", False)
-        
-        self.ipv6_action.setChecked(ipv6_enabled)
-        
-        # 连接IPv6支持切换事件
-        self.ipv6_action.triggered.connect(self._handle_ipv6_toggle)
-        
-        # 将选项添加到IPv6子菜单
-        self.ipv6_submenu.addAction(self.ipv6_action)
-        self.ipv6_submenu.addAction(self.ipv6_test_action)
-        
-        # 添加hosts子选项
-        self.restore_hosts_action = QAction("还原软件备份的hosts文件", self.main_window)
-        self.restore_hosts_action.setFont(menu_font)
-        self.restore_hosts_action.triggered.connect(self.restore_hosts_backup)
-        
-        self.clean_hosts_action = QAction("手动删除软件添加的hosts条目", self.main_window)
-        self.clean_hosts_action.setFont(menu_font)
-        self.clean_hosts_action.triggered.connect(self.clean_hosts_entries)
-        
-        # 添加禁用自动还原hosts的选项
-        self.disable_auto_restore_action = QAction("禁用关闭/重启自动还原hosts", self.main_window, checkable=True)
-        self.disable_auto_restore_action.setFont(menu_font)
-        
-        # 从配置中读取当前状态
-        config = getattr(self.main_window, 'config', {})
-        disable_auto_restore = False
-        if isinstance(config, dict):
-            disable_auto_restore = config.get("disable_auto_restore_hosts", False)
-        
-        self.disable_auto_restore_action.setChecked(disable_auto_restore)
-        self.disable_auto_restore_action.triggered.connect(self.toggle_disable_auto_restore_hosts)
-        
-        # 添加打开hosts文件选项
-        self.open_hosts_action = QAction("打开hosts文件", self.main_window)
-        self.open_hosts_action.setFont(menu_font)
-        self.open_hosts_action.triggered.connect(self.open_hosts_file)
-        
-        # 添加到hosts子菜单
-        self.hosts_submenu.addAction(self.disable_auto_restore_action)
-        self.hosts_submenu.addAction(self.restore_hosts_action)
-        self.hosts_submenu.addAction(self.clean_hosts_action)
-        self.hosts_submenu.addAction(self.open_hosts_action)
-        
-        # 创建Debug开关选项
-        self.debug_action = QAction("Debug开关", self.main_window, checkable=True)
-        self.debug_action.setFont(menu_font)
-        
-        # 安全地获取config属性
-        config = getattr(self.main_window, 'config', {})
-        debug_mode = False
-        if isinstance(config, dict):
-            debug_mode = config.get("debug_mode", False)
-        
-        self.debug_action.setChecked(debug_mode)
-        
-        # 安全地连接toggle_debug_mode方法
-        if hasattr(self.main_window, 'toggle_debug_mode'):
-            self.debug_action.triggered.connect(self.main_window.toggle_debug_mode)
-        
-        # 创建打开log文件选项
-        self.open_log_action = QAction("打开log.txt", self.main_window)
-        self.open_log_action.setFont(menu_font)
-        # 初始状态根据debug模式设置启用状态
-        self.open_log_action.setEnabled(debug_mode)
-        
-        # 连接打开log文件的事件
-        if hasattr(self.main_window, 'debug_manager'):
-            self.open_log_action.triggered.connect(self.main_window.debug_manager.open_log_file)
-        else:
-            self.open_log_action.triggered.connect(lambda: self._create_message_box("错误", "\n调试管理器未初始化。\n").exec())
-        
-        # 添加到Debug子菜单
-        self.debug_submenu.addAction(self.debug_action)
-        self.debug_submenu.addAction(self.open_log_action)
-        
-        # 创建下载设置子菜单
-        self.download_settings_menu = QMenu("下载设置", self.main_window)
-        self.download_settings_menu.setFont(menu_font)
-        self.download_settings_menu.setStyleSheet(menu_style)
-        
-        # "修改下载源"按钮移至下载设置菜单
-        self.switch_source_action = QAction("修改下载源", self.main_window)
-        self.switch_source_action.setFont(menu_font)
-        self.switch_source_action.setEnabled(True)
-        self.switch_source_action.triggered.connect(lambda: self._create_message_box("提示", "\n该功能正在开发中，敬请期待！\n").exec())
-        
-        # 添加下载线程设置选项
-        self.thread_settings_action = QAction("下载线程设置", self.main_window)
-        self.thread_settings_action.setFont(menu_font)
-        # 连接到下载线程设置对话框
-        self.thread_settings_action.triggered.connect(self.show_download_thread_settings)
-        
-        # 添加到下载设置子菜单
-        self.download_settings_menu.addAction(self.switch_source_action)
-        self.download_settings_menu.addAction(self.thread_settings_action)
-        
-        # 添加到主菜单
-        self.ui.menu.addMenu(self.work_mode_menu)  # 添加工作模式子菜单
-        self.ui.menu.addMenu(self.download_settings_menu)  # 添加下载设置子菜单
-        self.ui.menu.addSeparator()
-        self.ui.menu.addMenu(self.dev_menu)  # 添加开发者选项子菜单
-        
-        # 创建哈希校验设置子菜单
-        self.hash_settings_menu = QMenu("哈希校验设置", self.main_window)
-        self.hash_settings_menu.setFont(menu_font)
-        self.hash_settings_menu.setStyleSheet(menu_style)
-        
-        # 添加禁用安装前哈希预检查选项
-        self.disable_pre_hash_action = QAction("禁用安装前哈希预检查", self.main_window, checkable=True)
-        self.disable_pre_hash_action.setFont(menu_font)
-        
-        # 从配置中读取当前状态
-        config = getattr(self.main_window, 'config', {})
-        disable_pre_hash = False
-        if isinstance(config, dict):
-            disable_pre_hash = config.get("disable_pre_hash_check", False)
-        
-        self.disable_pre_hash_action.setChecked(disable_pre_hash)
-        self.disable_pre_hash_action.triggered.connect(lambda checked: self._handle_pre_hash_toggle(checked))
-        
-        # 添加到哈希校验设置子菜单
-        self.hash_settings_menu.addAction(self.disable_pre_hash_action)
 
-        # 添加Debug子菜单到开发者选项菜单
-        self.dev_menu.addMenu(self.debug_submenu)
-        self.dev_menu.addMenu(self.hosts_submenu) # 添加hosts文件选项子菜单
-        self.dev_menu.addMenu(self.ipv6_submenu)  # 添加IPv6支持子菜单
-        self.dev_menu.addMenu(self.hash_settings_menu)  # 添加哈希校验设置子菜单
+
+
         
     def _handle_ipv6_toggle(self, enabled):
         """处理IPv6支持切换事件
@@ -584,111 +151,10 @@ class UIManager:
         if not success:
             self.ipv6_action.setChecked(not enabled)
 
-    def show_menu(self, menu, button):
-        """显示菜单
-        
-        Args:
-            menu: 要显示的菜单
-            button: 触发菜单的按钮
-        """
-        # 检查Ui_install中是否定义了show_menu方法
-        if hasattr(self.ui, 'show_menu'):
-            # 如果存在，使用UI中定义的方法
-            self.ui.show_menu(menu, button)
-        else:
-            # 否则，使用默认的弹出方法
-            global_pos = button.mapToGlobal(button.rect().bottomLeft())
-            menu.popup(global_pos)
 
-    def open_project_home_page(self):
-        """打开项目主页"""
-        webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT")
-        
-    def open_github_page(self):
-        """打开项目GitHub页面"""
-        webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT")
-    
-    def open_faq_page(self):
-        """打开常见问题页面"""
-        import locale
-        # 根据系统语言选择FAQ页面
-        system_lang = locale.getdefaultlocale()[0]
-        if system_lang and system_lang.startswith('zh'):
-            webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ.md")
-        else:
-            webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/FAQ-en.md")
-    
-    def open_issues_page(self):
-        """打开GitHub问题页面"""
-        webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/issues")
-    
-    def open_qq_group(self):
-        """打开QQ群链接"""
-        webbrowser.open("https://qm.qq.com/q/g9i04i5eec")
-        
-    def open_privacy_policy(self):
-        """打开完整隐私协议（在GitHub上）"""
-        webbrowser.open("https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/PRIVACY.md")
 
-    def revoke_privacy_agreement(self):
-        """撤回隐私协议同意，并重启软件"""
-        # 创建确认对话框
-        msg_box = self._create_message_box(
-            "确认操作",
-            "\n您确定要撤回隐私协议同意吗？\n\n撤回后软件将立即重启，您需要重新阅读并同意隐私协议。\n",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        
-        reply = msg_box.exec()
-        if reply == QMessageBox.StandardButton.Yes:
-            try:
-                from core.managers.privacy_manager import PrivacyManager
-                import sys
-                import subprocess
-                import os
-                
-                privacy_manager = PrivacyManager()
-                if privacy_manager.reset_privacy_agreement():
-                    # 显示重启提示
-                    restart_msg = self._create_message_box(
-                        "操作成功",
-                        "\n已成功撤回隐私协议同意。\n\n软件将立即重启。\n"
-                    )
-                    restart_msg.exec()
-                    
-                    # 重启应用程序
-                    python_executable = sys.executable
-                    script_path = os.path.abspath(sys.argv[0])
-                    subprocess.Popen([python_executable, script_path])
-                    sys.exit(0)
-                else:
-                    self._create_message_box(
-                        "操作失败",
-                        "\n撤回隐私协议同意失败。\n\n请检查应用权限或稍后再试。\n"
-                    ).exec()
-            except Exception as e:
-                self._create_message_box(
-                    "错误",
-                    f"\n撤回隐私协议同意时发生错误：\n\n{str(e)}\n"
-                ).exec()
 
-    def _create_message_box(self, title, message, buttons=QMessageBox.StandardButton.Ok):
-        """创建统一风格的消息框
 
-        Args:
-            title: 消息框标题
-            message: 消息内容
-            buttons: 按钮类型，默认为确定按钮
-
-        Returns:
-            QMessageBox: 配置好的消息框实例
-        """
-        msg_box = msgbox_frame(
-            f"{title} - {APP_NAME}",
-            message,
-            buttons,
-        )
-        return msg_box
         
     def show_download_thread_settings(self):
         """显示下载线程设置对话框"""
@@ -696,8 +162,7 @@ class UIManager:
             self.main_window.download_manager.show_download_thread_settings()
         else:
             # 如果下载管理器不可用，显示错误信息
-            msg_box = self._create_message_box("错误", "\n下载管理器未初始化，无法修改下载线程设置。\n")
-            msg_box.exec()
+            self.dialog_factory.show_simple_message("错误", "\n下载管理器未初始化，无法修改下载线程设置。\n", "error")
         
 
             
@@ -832,27 +297,7 @@ class UIManager:
             self.disable_pre_hash_action.setChecked(not checked)
             self._create_message_box("错误", "\n配置管理器未初始化。\n").exec()
 
-    def show_about_dialog(self):
-        """显示关于对话框"""
-        about_text = f"""
-            <p><b>{APP_NAME} v{APP_VERSION}</b></p>
-            <p>GitHub: <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT">https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT</a></p>
-            <p>原作: <a href="https://github.com/Yanam1Anna">Yanam1Anna</a></p>
-            <p>此应用根据 <a href="https://github.com/hyb-oyqq/FRAISEMOE-Addons-Installer-NEXT/blob/master/LICENSE">GPL-3.0 许可证</a> 授权。</p>
-            <br>
-            <p><b>感谢:</b></p>
-            <p>- <a href="https://github.com/HTony03">HTony03</a>：对原项目部分源码的重构、逻辑优化和功能实现提供了支持。</p>
-            <p>- <a href="https://github.com/ABSIDIA">钨鸮</a>：对于云端资源存储提供了支持。</p>
-            <p>- <a href="https://github.com/XIU2/CloudflareSpeedTest">XIU2/CloudflareSpeedTest</a>：提供了 IP 优选功能的核心支持。</p>
-            <p>- <a href="https://github.com/hosxy/aria2-fast">hosxy/aria2-fast</a>：提供了修改版aria2c，提高了下载速度和性能。</p>
-        """
-        msg_box = msgbox_frame(
-            f"关于 - {APP_NAME}",
-            about_text,
-            QMessageBox.StandardButton.Ok,
-        )
-        msg_box.setTextFormat(Qt.TextFormat.RichText)  # 使用Qt.TextFormat
-        msg_box.exec() 
+ 
 
  
 
@@ -928,68 +373,5 @@ class UIManager:
             )
             msg_box.exec() 
 
-    def create_progress_window(self, title, initial_text="准备中..."):
-        """创建并返回一个通用的进度窗口.
-        
-        Args:
-            title (str): 窗口标题.
-            initial_text (str): 初始状态文本.
-
-        Returns:
-            QDialog: 配置好的进度窗口实例.
-        """
-        # 如果是下载进度窗口，使用专用的ProgressWindow类
-        if "下载" in title:
-            return ProgressWindow(self.main_window)
-        
-        # 其他情况使用基本的进度窗口
-        progress_window = QDialog(self.main_window)
-        progress_window.setWindowTitle(f"{title} - {APP_NAME}")
-        progress_window.setFixedSize(400, 150)
-        
-        layout = QVBoxLayout()
-        
-        progress_bar = QProgressBar()
-        progress_bar.setRange(0, 100)
-        progress_bar.setValue(0)
-        layout.addWidget(progress_bar)
-        
-        status_label = QLabel(initial_text)
-        layout.addWidget(status_label)
-        
-        progress_window.setLayout(layout)
-        # 将控件附加到窗口对象上，以便外部访问
-        progress_window.progress_bar = progress_bar
-        progress_window.status_label = status_label
-        
-        return progress_window
-
-    def show_loading_dialog(self, message):
-        """显示或更新加载对话框."""
-        if not self.loading_dialog:
-            self.loading_dialog = QDialog(self.main_window)
-            self.loading_dialog.setWindowTitle(f"请稍候 - {APP_NAME}")
-            self.loading_dialog.setFixedSize(300, 100)
-            self.loading_dialog.setModal(True)
-            layout = QVBoxLayout()
-            loading_label = QLabel(message)
-            loading_label.setAlignment(Qt.AlignCenter)
-            layout.addWidget(loading_label)
-            self.loading_dialog.setLayout(layout)
-            # 将label附加到dialog，方便后续更新
-            self.loading_dialog.loading_label = loading_label
-        else:
-            self.loading_dialog.loading_label.setText(message)
-        
-        self.loading_dialog.show()
-        # force UI update
-        from PySide6.QtWidgets import QApplication
-        QApplication.processEvents()
-
-    def hide_loading_dialog(self):
-        """隐藏并销毁加载对话框."""
-        if self.loading_dialog:
-            self.loading_dialog.hide()
-            self.loading_dialog = None
 
  
