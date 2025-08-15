@@ -129,6 +129,9 @@ class HashThread(QThread):
                         logger.debug(f"DEBUG: 哈希后检查 - {game_version} 补丁文件不存在: {install_path}")
                     continue
                     
+                # 设置当前处理的游戏版本
+                result["game"] = game_version
+                    
                 try:
                     expected_hash = self.plugin_hash.get(game_version, "")
                     if not expected_hash:

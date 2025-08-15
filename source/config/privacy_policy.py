@@ -20,6 +20,7 @@ PRIVACY_POLICY_BRIEF = """
 - **系统信息**：程序版本号。
 - **网络信息**：IP 地址、ISP、地理位置（用于使用统计）、下载统计、IPv6 连接测试（通过访问 testipv6.cn）、IPv6 地址获取（通过 ipw.cn）。
 - **文件信息**：游戏安装路径、文件哈希值。
+- **离线模式**：在离线模式下，本应用不会进行任何网络活动，仅使用本地文件进行安装。为实现此功能，应用会扫描其所在目录下的压缩包文件。
 
 ## 系统修改
 - 使用 Cloudflare 加速时会临时修改系统 hosts 文件。
@@ -43,6 +44,7 @@ This application collects and processes the following information:
 - **System info**: Application version.
 - **Network info**: IP address, ISP, geographic location (for usage statistics), download statistics, IPv6 connectivity test (via testipv6.cn), IPv6 address acquisition (via ipw.cn).
 - **File info**: Game installation paths, file hash values.
+- **Offline Mode**: In offline mode, the application will not perform any network activities and will only use local files for installation. To achieve this, the application scans for compressed files in its directory.
 
 ## System Modifications
 - Temporarily modifies system hosts file when using Cloudflare acceleration.
@@ -57,7 +59,7 @@ The complete privacy policy can be found in the program's GitHub repository.
 """
 
 # 默认隐私协议版本 - 本地版本的日期
-PRIVACY_POLICY_VERSION = "2025.08.04"
+PRIVACY_POLICY_VERSION = "2025.08.15"
 
 def get_local_privacy_policy():
     """获取本地打包的隐私协议文件
