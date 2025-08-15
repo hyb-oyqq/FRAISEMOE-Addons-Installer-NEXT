@@ -207,6 +207,10 @@ class MainWindow(QMainWindow):
         else:
             self.window_manager.change_window_state(self.window_manager.STATE_ERROR)
             
+        # 确保工作模式菜单状态与实际状态同步
+        if hasattr(self, 'ui_manager') and hasattr(self.ui_manager, 'sync_work_mode_menu_state'):
+            self.ui_manager.sync_work_mode_menu_state()
+            
     def set_start_button_enabled(self, enabled, installing=False):
         """[过渡方法] 设置按钮状态，将调用委托给WindowManager
         

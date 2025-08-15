@@ -62,6 +62,13 @@ class UIManager:
         self.debug_action = self.menu_builder.debug_action
         self.disable_auto_restore_action = self.menu_builder.disable_auto_restore_action  
         self.disable_pre_hash_action = self.menu_builder.disable_pre_hash_action
+        
+        # 保存对工作模式菜单项的引用，确保能正确同步状态
+        self.online_mode_action = self.menu_builder.online_mode_action
+        self.offline_mode_action = self.menu_builder.offline_mode_action
+        
+        # 在菜单创建完成后，强制同步一次工作模式状态
+        self.sync_work_mode_menu_state()
     
     # 为了向后兼容性，添加委托方法
     def create_progress_window(self, title, initial_text="准备中..."):
@@ -83,6 +90,39 @@ class UIManager:
     def show_menu(self, menu, button):
         """显示菜单（委托给menu_builder）"""
         return self.menu_builder.show_menu(menu, button)
+    
+    def sync_work_mode_menu_state(self):
+        """同步工作模式菜单状态，确保菜单选择状态与实际工作模式一致"""
+        try:
+            # 检查是否有离线模式管理器和菜单项
+            if not hasattr(self.main_window, 'offline_mode_manager') or not self.main_window.offline_mode_manager:
+                return
+                
+            if not hasattr(self, 'online_mode_action') or not hasattr(self, 'offline_mode_action'):
+                return
+                
+            if not self.online_mode_action or not self.offline_mode_action:
+                return
+                
+            # 获取当前离线模式状态
+            is_offline_mode = self.main_window.offline_mode_manager.is_in_offline_mode()
+            
+            # 同步菜单选择状态
+            self.online_mode_action.setChecked(not is_offline_mode)
+            self.offline_mode_action.setChecked(is_offline_mode)
+            
+            # 记录同步操作（仅在调试模式下）
+            if hasattr(self.main_window, 'config') and self.main_window.config.get('debug_mode', False):
+                from utils.logger import setup_logger
+                logger = setup_logger("ui_manager")
+                logger.debug(f"已同步工作模式菜单状态: 离线模式={is_offline_mode}")
+                
+        except Exception as e:
+            # 静默处理异常，避免影响程序正常运行
+            if hasattr(self.main_window, 'config') and self.main_window.config.get('debug_mode', False):
+                from utils.logger import setup_logger
+                logger = setup_logger("ui_manager")
+                logger.debug(f"同步工作模式菜单状态时出错: {e}")
     
 
 

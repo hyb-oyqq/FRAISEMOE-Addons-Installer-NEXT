@@ -204,9 +204,14 @@ class OfflineModeManager:
         # 同步更新UI菜单中的模式选择状态
         if hasattr(self.main_window, 'ui_manager'):
             ui_manager = self.main_window.ui_manager
-            if hasattr(ui_manager, 'online_mode_action') and hasattr(ui_manager, 'offline_mode_action'):
-                ui_manager.online_mode_action.setChecked(not enabled)
-                ui_manager.offline_mode_action.setChecked(enabled)
+            # 使用专门的同步方法确保菜单状态正确更新
+            if hasattr(ui_manager, 'sync_work_mode_menu_state'):
+                ui_manager.sync_work_mode_menu_state()
+            elif hasattr(ui_manager, 'online_mode_action') and hasattr(ui_manager, 'offline_mode_action'):
+                # 兼容旧版本的直接设置方式
+                if ui_manager.online_mode_action and ui_manager.offline_mode_action:
+                    ui_manager.online_mode_action.setChecked(not enabled)
+                    ui_manager.offline_mode_action.setChecked(enabled)
         
         # 记录离线模式状态变化
         logger.debug(f"离线模式已{'启用' if enabled else '禁用'}")
