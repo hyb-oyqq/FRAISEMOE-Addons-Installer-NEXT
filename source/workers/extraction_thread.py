@@ -105,7 +105,9 @@ class ExtractionThread(QThread):
                 debug_logger.debug(f"压缩包内容分析:")
                 debug_logger.debug(f"- 文件总数: {len(file_list)}")
                 for i, f in enumerate(file_list):
-                    debug_logger.debug(f"  {i+1}. {f} - 类型: {'文件夹' if f.endswith('/') or f.endswith('\\') else '文件'}")
+                    is_folder = f.endswith('/') or f.endswith('\\')
+                    file_type = '文件夹' if is_folder else '文件'
+                    debug_logger.debug(f"  {i+1}. {f} - 类型: {file_type}")
 
                 update_progress(20, f"正在分析 {self.game_version} 的补丁文件...")
 
