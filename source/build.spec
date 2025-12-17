@@ -10,10 +10,15 @@ block_cipher = None
 hiddenimports = []
 hiddenimports += collect_submodules('workers')
 hiddenimports += collect_submodules('core')
+hiddenimports += collect_submodules('core.managers')
+hiddenimports += collect_submodules('core.handlers')
 hiddenimports += collect_submodules('ui')
+hiddenimports += collect_submodules('ui.components')
 hiddenimports += collect_submodules('utils')
-hiddenimports += collect_submodules('handlers')
 hiddenimports += collect_submodules('config')
+
+# PySide6 相关隐藏导入
+hiddenimports += ['PySide6.QtCore', 'PySide6.QtGui', 'PySide6.QtWidgets']
 
 a = Analysis(
     ['Main.py'],
@@ -28,7 +33,6 @@ a = Analysis(
         ('workers', 'workers'),
         ('core', 'core'),
         ('utils', 'utils'),
-        ('handlers', 'handlers'),
     ],
     hiddenimports=hiddenimports,
     hookspath=[],
