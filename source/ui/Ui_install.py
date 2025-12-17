@@ -410,7 +410,7 @@ class Ui_MainWindows(object):
         self.start_install_text.setText("开始安装")
         self.start_install_text.setFont(self.custom_font)
         self.start_install_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.start_install_text.setStyleSheet("letter-spacing: 1px;")
+        self.start_install_text.setStyleSheet("color: #333333; letter-spacing: 1px;")
 
         # 点击区域透明按钮
         self.start_install_btn = QPushButton(self.button_container)
@@ -444,7 +444,7 @@ class Ui_MainWindows(object):
         self.toggle_patch_text.setText("禁/启用补丁")
         self.toggle_patch_text.setFont(self.custom_font)
         self.toggle_patch_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.toggle_patch_text.setStyleSheet("letter-spacing: 1px;")
+        self.toggle_patch_text.setStyleSheet("color: #333333; letter-spacing: 1px;")
 
         # 点击区域透明按钮
         self.toggle_patch_btn = QPushButton(self.toggle_patch_container)
@@ -478,7 +478,7 @@ class Ui_MainWindows(object):
         self.uninstall_text.setText("卸载补丁")
         self.uninstall_text.setFont(self.custom_font)
         self.uninstall_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.uninstall_text.setStyleSheet("letter-spacing: 1px;")
+        self.uninstall_text.setStyleSheet("color: #333333; letter-spacing: 1px;")
 
         # 点击区域透明按钮
         self.uninstall_btn = QPushButton(self.uninstall_container)
@@ -513,7 +513,7 @@ class Ui_MainWindows(object):
         self.exit_text.setText("退出程序")
         self.exit_text.setFont(self.custom_font)
         self.exit_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.exit_text.setStyleSheet("letter-spacing: 1px;")
+        self.exit_text.setStyleSheet("color: #333333; letter-spacing: 1px;")
         
         # 点击区域透明按钮
         self.exit_btn = QPushButton(self.exit_container)

@@ -4,12 +4,12 @@ import datetime
 
 # 配置信息
 app_data = {
-    "APP_VERSION": "1.4.0",
+    "APP_VERSION": "1.4.2",
     "APP_NAME": "FRAISEMOE Addons Installer NEXT",
     "TEMP": "TEMP",
     "CACHE": "FRAISEMOE",
     "PLUGIN": "PLUGIN",
-    "CONFIG_URL": "aHR0cHM6Ly9hcGkuMncyLnRvcC9hcGkvb3V5YW5ncWlxaS9uZWtvcGFyYS9kb3dubG9hZF91cmwuanNvbg==",
+    "CONFIG_URL": "aHR0cHM6Ly9uZWtvcGFyYS1hcGkub3ZvZmlzaC5jb20vYXBpL291eWFuZ3FpcWkvbmVrb3BhcmEvZG93bmxvYWRfdXJsLmpzb24=",
     "UA_TEMPLATE": "Mozilla/5.0 (Linux debian12 FraiseMoe2-Accept-Next) Gecko/20100101 Firefox/114.0 FraiseMoe2/{}",
     "game_info": {
         "NEKOPARA Vol.1": {
