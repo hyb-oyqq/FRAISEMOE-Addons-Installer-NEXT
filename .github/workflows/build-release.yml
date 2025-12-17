@@ -34,32 +34,7 @@ jobs:
       - name: Build with PyInstaller
         run: |
           cd source
-          pyinstaller --noconfirm --onefile --windowed --name "FRAISEMOE_Addons_Installer_NEXT" `
-            --icon "assets/images/ICO/icon.ico" `
-            --add-data "assets;assets" `
-            --add-data "data;data" `
-            --add-data "config;config" `
-            --add-data "bin;bin" `
-            --add-data "ui;ui" `
-            --hidden-import "workers" `
-            --hidden-import "workers.extraction_thread" `
-            --hidden-import "workers.config_fetch_thread" `
-            --hidden-import "workers.download" `
-            --hidden-import "workers.hash_thread" `
-            --hidden-import "workers.ip_optimizer" `
-            --hidden-import "core" `
-            --hidden-import "core.managers" `
-            --hidden-import "core.handlers" `
-            --hidden-import "handlers" `
-            --hidden-import "utils" `
-            --hidden-import "ui" `
-            --hidden-import "ui.components" `
-            --collect-submodules "workers" `
-            --collect-submodules "core" `
-            --collect-submodules "ui" `
-            --collect-submodules "utils" `
-            --collect-submodules "handlers" `
-            Main.py
+          pyinstaller --noconfirm build.spec
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
