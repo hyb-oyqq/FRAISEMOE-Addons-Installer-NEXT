@@ -6,9 +6,7 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
-# 获取spec文件所在目录的绝对路径
-SPEC_ROOT = os.path.dirname(os.path.abspath(SPEC))
-ICON_PATH = os.path.join(SPEC_ROOT, 'assets', 'images', 'ICO', 'icon.ico')
+
 
 # 收集所有子模块
 hiddenimports = []
@@ -71,5 +69,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=ICON_PATH,
+    icon=os.path.join('assets', 'images', 'ICO', 'icon.ico'),
 )

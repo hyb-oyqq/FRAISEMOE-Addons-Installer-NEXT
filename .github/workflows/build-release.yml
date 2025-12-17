@@ -31,6 +31,17 @@ jobs:
           $version = "${{ github.ref_name }}"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
       
+      - name: Verify icon file
+        run: |
+          cd source
+          if (Test-Path "assets/images/ICO/icon.ico") {
+            Write-Host "Icon file found"
+            Get-Item "assets/images/ICO/icon.ico"
+          } else {
+            Write-Host "Icon file NOT found!"
+            exit 1
+          }
+      
       - name: Build with PyInstaller
         run: |
           cd source
