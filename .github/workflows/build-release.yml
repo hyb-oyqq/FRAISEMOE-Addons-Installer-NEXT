@@ -1,0 +1,58 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送 v 开头的 tag 时触发，如 v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'source/requirements.txt'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r source/requirements.txt
+      
+      - name: Get version from tag
+        id: get_version
+        run: |
+          $version = "${{ github.ref_name }}"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+      
+      - name: Build with PyInstaller
+        run: |
+          cd source
+          pyinstaller --noconfirm --onefile --windowed --name "FRAISEMOE_Addons_Installer_NEXT" `
+            --add-data "assets;assets" `
+            --add-data "data;data" `
+            --add-data "config;config" `
+            Main.py
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.get_version.outputs.VERSION }}
+          path: source/dist/FRAISEMOE_Addons_Installer_NEXT.exe
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: release-${{ steps.get_version.outputs.VERSION }}
+          files: source/dist/FRAISEMOE_Addons_Installer_NEXT.exe
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
