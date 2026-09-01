@@ -3,60 +3,100 @@ name: Build and Release
 on:
   push:
     tags:
-      - '*'  # 任意 tag 都会触发构建
+      - '*'  # 监听所有 tag，后续用脚本过滤纯数字版本
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
-    
+
     steps:
+      - name: Get and validate version tag
+        id: get_tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          Write-Host "Tag detected: $tag"
+          if ($tag -match '^\d+(\.\d+)*$') {
+            echo "VALID=true" >> $env:GITHUB_OUTPUT
+            echo "VERSION=$tag" >> $env:GITHUB_OUTPUT
+            Write-Host "✅ Valid numeric version tag"
+          } else {
+            echo "VALID=false" >> $env:GITHUB_OUTPUT
+            Write-Host "❌ Skipping: not a pure numeric version (e.g., 1.4.3)"
+            exit 0
+          }
+
       - name: Checkout code
+        if: steps.get_tag.outputs.VALID == 'true'
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
+        if: steps.get_tag.outputs.VALID == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
           cache-dependency-path: 'source/requirements.txt'
-      
+
       - name: Install dependencies
+        if: steps.get_tag.outputs.VALID == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r source/requirements.txt
-      
-      - name: Get version from tag
-        id: get_version
+          pip install pyinstaller
+
+      - name: Download and setup UPX
+        if: steps.get_tag.outputs.VALID == 'true'
+        shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}"
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-      
-      - name: Verify icon file
+          $url = "https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-win64.zip"
+          $output = "${{ runner.temp }}/upx.zip"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Expand-Archive -Path $output -DestinationPath "${{ runner.temp }}/upx"
+          echo "${{ runner.temp }}/upx/upx-4.2.4-win64" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify icon file exists
+        if: steps.get_tag.outputs.VALID == 'true'
         run: |
           cd source
-          if (Test-Path "assets/images/ICO/icon.ico") {
-            Write-Host "Icon file found"
-            Get-Item "assets/images/ICO/icon.ico"
+          $icon = "assets/images/ICO/icon.ico"
+          if (Test-Path $icon) {
+            Write-Host "✅ Icon found"
           } else {
-            Write-Host "Icon file NOT found!"
+            Write-Host "❌ Icon missing!"
             exit 1
           }
-      
-      - name: Build with PyInstaller
+
+      - name: Build executable with PyInstaller
+        if: steps.get_tag.outputs.VALID == 'true'
         run: |
           cd source
-          pyinstaller --noconfirm build.spec
-      
+          pyinstaller --clean --noconfirm build.spec
+
+      - name: Verify output EXE and show size
+        if: steps.get_tag.outputs.VALID == 'true'
+        run: |
+          $exe = "source/dist/FRAISEMOE_Addons_Installer_NEXT.exe"
+          if (Test-Path $exe) {
+            $size = [math]::Round((Get-Item $exe).Length / 1MB, 2)
+            Write-Host "✅ Build successful! Size: $size MB"
+          } else {
+            Write-Host "❌ EXE not found!"
+            exit 1
+          }
+
       - name: Upload artifact
+        if: steps.get_tag.outputs.VALID == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ steps.get_version.outputs.VERSION }}
+          name: FRAISEMOE-Installer-${{ steps.get_tag.outputs.VERSION }}
           path: source/dist/FRAISEMOE_Addons_Installer_NEXT.exe
-      
-      - name: Create Release
+
+      - name: Create GitHub Release
+        if: steps.get_tag.outputs.VALID == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          name: release-${{ steps.get_version.outputs.VERSION }}
+          name: Release ${{ steps.get_tag.outputs.VERSION }}
           files: source/dist/FRAISEMOE_Addons_Installer_NEXT.exe
           draft: false
           prerelease: false
