@@ -168,3 +168,28 @@ def test_hosts_manager_backup_reads_gbk_file(tmp_path, monkeypatch):
     monkeypatch.setattr("utils.helpers.AdminPrivileges.is_admin", lambda self: True)
 
     assert manager.backup() is True
+
+
+def test_clean_hostname_entries_skips_write_when_hostname_absent(tmp_path, monkeypatch):
+    """域名不存在时 clean_hostname_entries 不应写盘（含末尾换行在内的字节内容必须完全不变）。
+
+    钉住 Critical-1 修复：短路判断若直接比较 `new_content == self.original_content`，
+    会被 remove_host_entries 内部 `"\n".join(text.splitlines())` 丢弃末尾换行符的
+    副作用误判为「有变化」，从而在域名不存在时也执行了一次不必要的写入。
+    """
+    hosts = tmp_path / "hosts"
+    original_bytes = "127.0.0.1\tlocalhost\n::1\tlocalhost\n".encode("utf-8")
+    hosts.write_bytes(original_bytes)
+
+    manager = HostsManager(
+        hosts_path=str(hosts), backup_path=str(tmp_path / "hosts.bak")
+    )
+    monkeypatch.setattr("utils.helpers.AdminPrivileges.is_admin", lambda self: True)
+
+    manager.backup()
+    mtime_before = hosts.stat().st_mtime_ns
+
+    assert manager.clean_hostname_entries("example.com") is True
+
+    assert hosts.read_bytes() == original_bytes
+    assert hosts.stat().st_mtime_ns == mtime_before

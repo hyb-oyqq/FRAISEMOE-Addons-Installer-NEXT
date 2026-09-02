@@ -639,7 +639,7 @@ class HostsManager:
             new_content = remove_host_entries(self.original_content, hostname)
 
             # 如果没有变化，不需要写入
-            if new_content == self.original_content:
+            if new_content == "\n".join(self.original_content.splitlines()):
                 logger.info(f"Hosts文件中没有找到 {hostname} 的记录")
                 return True
 
@@ -759,7 +759,7 @@ class HostsManager:
             new_content = strip_marked_block(current_content, f"# Added by {APP_NAME}")
 
             # 检查是否有变化
-            if new_content == current_content:
+            if new_content == "\n".join(current_content.splitlines()):
                 logger.info("Hosts文件中没有找到由本应用添加的记录")
                 return True
 
