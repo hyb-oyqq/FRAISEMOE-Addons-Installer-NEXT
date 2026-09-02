@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QMessageBox
 import sys
 from utils.logger import setup_logger
 from utils.url_censor import censor_url
+from config.validate import validate_cloud_config
 
 # 初始化logger
 logger = setup_logger("config_fetch")
@@ -43,21 +44,11 @@ class ConfigFetchThread(QThread):
             # 首先，总是尝试解析JSON
             config_data = response.json()
 
-            # 检查是否是要求更新的错误信息 - 使用Unicode编码的更新提示文本
-            update_required_msg = "\u8bf7\u4f7f\u7528\u6700\u65b0\u7248\u672c\u7684FraiseMoe2-Next\u8fdb\u884c\u4e0b\u8f7d"
-            if isinstance(config_data, str) and config_data == update_required_msg:
-                self.finished.emit(None, "update_required")
+            validated, validate_error = validate_cloud_config(config_data)
+            if validate_error:
+                self.finished.emit(None, validate_error)
                 return
-            elif isinstance(config_data, dict) and config_data.get("message") == update_required_msg:
-                self.finished.emit(None, "update_required")
-                return
-
-            # 检查是否是有效的配置文件
-            required_keys = [f"vol.{i+1}.data" for i in range(4)] + ["after.data"]
-            missing_keys = [key for key in required_keys if key not in config_data]
-            if missing_keys:
-                self.finished.emit(None, f"missing_keys:{','.join(missing_keys)}")
-                return
+            config_data = validated
 
             self.finished.emit(config_data, "")
         except requests.exceptions.RequestException as e:
