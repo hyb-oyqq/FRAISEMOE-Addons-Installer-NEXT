@@ -1,9 +1,13 @@
 """安装后校验判定。
 
-统一三处 fail-open 判定点：
+已接入两处 fail-open 判定点：
 - core/handlers/extraction_handler.py:146-151
 - core/managers/offline_mode_manager.py:553-566
-- workers/hash_thread.py:127-130
+
+workers/hash_thread.py:127-130 未接入：其 "after" 分支把哈希计算与判定
+耦合在同一循环里，用可变 result dict 记录状态并以 break 提前退出，接入
+前需先拆成"扫描哈希 → 统一判定"两阶段，属真实重构而非机械搬运，交由
+子项目 2 处理。
 
 **照搬已知缺陷：install_paths 为空时返回 PASSED**（现状即「直接认为安装成功」）。
 SKIPPED_NO_PATHS 本轮定义但不返回，供子项目 2 翻转时启用。

@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from utils.hosts_text import (
@@ -74,7 +72,10 @@ def test_read_text_with_fallback_reads_utf8_bom(tmp_path):
 def test_atomic_write_writes_content(tmp_path):
     p = tmp_path / "hosts"
     atomic_write(str(p), "127.0.0.1 localhost\n")
-    assert p.read_text(encoding="utf-8") == "127.0.0.1 localhost\n"
+    # 逐字节比对：atomic_write 以 newline="" 打开文件，写入内容中的 \n 会
+    # 原样落盘而不被转成 \r\n。用 read_text() 会经 universal newlines
+    # 把两者都归一成 \n，钉不住行尾，因此这里改用 read_bytes()。
+    assert p.read_bytes() == b"127.0.0.1 localhost\n"
 
 
 def test_atomic_write_leaves_no_temp_file_behind(tmp_path):

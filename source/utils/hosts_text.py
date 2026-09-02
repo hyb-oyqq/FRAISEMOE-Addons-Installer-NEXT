@@ -77,8 +77,10 @@ def strip_marked_block(text, marker):
 
 
 def read_text_with_fallback(path):
-    """按 utf-8 → gbk → latin-1 顺序尝试读取文本文件。
+    """按 utf-8-sig → gbk → latin-1 顺序尝试读取文本文件。
 
+    utf-8-sig 是 utf-8 解码侧的超集，只是多剥离开头的 BOM，因此不带 BOM 的
+    常规 utf-8 文件同样能被正确读取。
     中文 Windows 上第三方工具常往 hosts 写入 GBK 编码的中文注释，
     硬编码 utf-8 会抛 UnicodeDecodeError（ValueError 子类，不被 except IOError 捕获）。
 
