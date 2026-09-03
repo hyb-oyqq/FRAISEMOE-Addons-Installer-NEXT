@@ -1,0 +1,4 @@
+-r requirements-build.txt
+pytest==8.3.4
+pytest-qt==4.4.0
+pytest-cov==6.0.0

@@ -13,6 +13,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QProgressBar
 from config.config import APP_NAME, CONFIG_FILE
 from utils.logger import setup_logger
+from utils.hosts_text import (
+    add_host_entry,
+    find_ips_for_host,
+    strip_marked_block,
+    remove_host_entries,
+)
 import datetime
 import traceback
 import subprocess
@@ -552,13 +558,18 @@ class AdminPrivileges:
             raise
 
 class HostsManager:
-    def __init__(self):
-        self.hosts_path = os.path.join(os.environ['SystemRoot'], 'System32', 'drivers', 'etc', 'hosts')
-        self.backup_path = os.path.join(os.path.dirname(self.hosts_path), f'hosts.bak.{APP_NAME}')
+    def __init__(self, hosts_path=None, backup_path=None):
+        # 默认值保持原有行为不变，参数仅供测试注入临时路径
+        self.hosts_path = hosts_path or os.path.join(
+            os.environ['SystemRoot'], 'System32', 'drivers', 'etc', 'hosts'
+        )
+        self.backup_path = backup_path or os.path.join(
+            os.path.dirname(self.hosts_path), f'hosts.bak.{APP_NAME}'
+        )
         self.original_content = None
         self.modified = False
-        self.modified_hostnames = set()  # 跟踪被修改的主机名
-        self.auto_restore_disabled = False  # 是否禁用自动还原hosts
+        self.modified_hostnames = set()
+        self.auto_restore_disabled = False
 
     def get_hostname_entries(self, hostname):
         """获取hosts文件中指定域名的所有IP记录
@@ -578,29 +589,9 @@ class HostsManager:
                 except Exception as e:
                     logger.error(f"读取hosts文件失败: {e}")
                     return []
-            
-            # 解析hosts文件中的每一行
-            ip_addresses = []
-            lines = self.original_content.splitlines()
-            
-            for line in lines:
-                # 跳过注释和空行
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                
-                # 分割行内容获取IP和域名
-                parts = line.split()
-                if len(parts) >= 2:  # 至少包含IP和一个域名
-                    ip = parts[0]
-                    domains = parts[1:]
-                    
-                    # 如果当前行包含目标域名
-                    if hostname in domains:
-                        ip_addresses.append(ip)
-            
-            return ip_addresses
-            
+
+            return find_ips_for_host(self.original_content, hostname)
+
         except Exception as e:
             logger.error(f"获取hosts记录失败: {e}")
             return []
@@ -645,19 +636,18 @@ class HostsManager:
             return False
             
         try:
-            lines = self.original_content.splitlines()
-            new_lines = [line for line in lines if hostname not in line]
-            
+            new_content = remove_host_entries(self.original_content, hostname)
+
             # 如果没有变化，不需要写入
-            if len(new_lines) == len(lines):
+            if new_content == "\n".join(self.original_content.splitlines()):
                 logger.info(f"Hosts文件中没有找到 {hostname} 的记录")
                 return True
-                
+
             with open(self.hosts_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(new_lines))
-            
+                f.write(new_content)
+
             # 更新原始内容
-            self.original_content = '\n'.join(new_lines)
+            self.original_content = new_content
             logger.info(f"已从hosts文件中清理 {hostname} 的记录")
             return True
         except IOError as e:
@@ -683,16 +673,14 @@ class HostsManager:
                 self.clean_hostname_entries(hostname)
             
             # 然后添加新记录
-            lines = self.original_content.splitlines()
             new_entry = f"{ip_address}\t{hostname}"
-            lines.append(f"\n# Added by {APP_NAME}")
-            lines.append(new_entry)
-            
+            new_content = add_host_entry(self.original_content, hostname, ip_address, f"# Added by {APP_NAME}")
+
             with open(self.hosts_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(lines))
-            
+                f.write(new_content)
+
             # 更新原始内容
-            self.original_content = '\n'.join(lines)
+            self.original_content = new_content
             self.modified = True
             # 记录被修改的主机名，用于最终清理
             self.modified_hostnames.add(hostname)
@@ -767,34 +755,18 @@ class HostsManager:
             # 读取当前hosts文件内容
             with open(self.hosts_path, 'r', encoding='utf-8') as f:
                 current_content = f.read()
-                
-            lines = current_content.splitlines()
-            new_lines = []
-            skip_next = False
-            
-            for line in lines:
-                # 如果上一行是我们的注释标记，跳过当前行
-                if skip_next:
-                    skip_next = False
-                    continue
-                    
-                # 检查是否是我们添加的注释行
-                if f"# Added by {APP_NAME}" in line:
-                    skip_next = True  # 跳过下一行（实际的hosts记录）
-                    continue
-                    
-                # 保留其他所有行
-                new_lines.append(line)
-                
+
+            new_content = strip_marked_block(current_content, f"# Added by {APP_NAME}")
+
             # 检查是否有变化
-            if len(new_lines) == len(lines):
+            if new_content == "\n".join(current_content.splitlines()):
                 logger.info("Hosts文件中没有找到由本应用添加的记录")
                 return True
-                
+
             # 写回清理后的内容
             with open(self.hosts_path, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(new_lines))
-                
+                f.write(new_content)
+
             logger.info(f"已清理所有由 {APP_NAME} 添加的hosts记录")
             return True
                 

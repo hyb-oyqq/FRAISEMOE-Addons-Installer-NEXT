@@ -5,6 +5,7 @@ import tempfile
 import traceback
 from PySide6.QtCore import QThread, Signal
 from config.config import PLUGIN, GAME_INFO
+from workers.archive_select import select_members
 import time  # 用于时间计算
 import threading
 import queue
@@ -127,58 +128,9 @@ class ExtractionThread(QThread):
                         debug_logger.debug(f"{self.game_version} 不需要签名文件")
                     
                     target_file_in_archive = None
-                    sig_file_in_archive = None
-                    
-                    # 对于NEKOPARA After，增加特殊处理
-                    if self.game_version == "NEKOPARA After":
-                        # 增加专门的检查，同时识别主补丁和签名文件
-                        debug_logger.debug("执行NEKOPARA After特殊补丁文件识别")
-                        
-                        # 查找主补丁和签名文件
-                        for file_path in file_list:
-                            basename = os.path.basename(file_path)
-                            
-                            # 查找主补丁文件
-                            if basename == "afteradult.xp3" and not basename.endswith('.sig'):
-                                target_file_in_archive = file_path
-                                debug_logger.debug(f"找到精确匹配的After主补丁文件: {target_file_in_archive}")
-                                
-                            # 查找签名文件
-                            elif basename == "afteradult.xp3.sig" or basename.endswith('.sig'):
-                                sig_file_in_archive = file_path
-                                debug_logger.debug(f"找到After签名文件: {sig_file_in_archive}")
-                        
-                        # 如果没找到主补丁文件，寻找可能的替代文件
-                        if not target_file_in_archive:
-                            for file_path in file_list:
-                                if "afteradult.xp3" in file_path and not file_path.endswith('.sig'):
-                                    target_file_in_archive = file_path
-                                    debug_logger.debug(f"找到备选After主补丁文件: {target_file_in_archive}")
-                                    break
-                    else:
-                        # 标准处理逻辑
-                        for file_path in file_list:
-                            basename = os.path.basename(file_path)
-                            
-                            # 查找主补丁文件
-                            if basename == target_filename and not basename.endswith('.sig'):
-                                target_file_in_archive = file_path
-                                debug_logger.debug(f"在压缩包中找到主补丁文件: {target_file_in_archive}")
-                            
-                            # 查找签名文件
-                            elif basename == sig_filename:
-                                sig_file_in_archive = file_path
-                                debug_logger.debug(f"在压缩包中找到签名文件: {sig_file_in_archive}")
-                        
-                        # 如果没有找到精确匹配的主补丁文件，使用更宽松的搜索
-                        if not target_file_in_archive:
-                            debug_logger.warning(f"没有找到精确匹配的主补丁文件，尝试更宽松的搜索")
-                            for file_path in file_list:
-                                if target_filename in file_path and not file_path.endswith('.sig'):
-                                    target_file_in_archive = file_path
-                                    debug_logger.info(f"在压缩包中找到可能的主补丁文件: {target_file_in_archive}")
-                                    break
-
+                    selection = select_members(file_list, target_filename, self.game_version)
+                    target_file_in_archive = selection.main
+                    sig_file_in_archive = selection.sig
                     # 如果找不到主补丁文件，使用回退方案：提取全部内容
                     if not target_file_in_archive:
                         debug_logger.warning(f"未能识别正确的主补丁文件，将提取所有文件并尝试查找")

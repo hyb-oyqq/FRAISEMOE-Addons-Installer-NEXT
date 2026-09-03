@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QMessageBox
 from config.config import PLUGIN, PLUGIN_HASH, GAME_INFO
 from utils import msgbox_frame
 from utils.logger import setup_logger
+from core.verification import Verdict, decide_post_install
 
 # 初始化logger
 logger = setup_logger("offline_mode_manager")
@@ -551,17 +552,20 @@ class OfflineModeManager:
                 break
         
         if not install_paths:
-            # 如果找不到安装路径，直接认为安装成功
+            # 判定统一走接缝：本轮接缝照搬返回 PASSED，因此 installed_status
+            # 仍被置为 True，行为不变。子项目 2 只需把接缝改为返回
+            # SKIPPED_NO_PATHS，此处即自动变为 fail-closed。
+            verdict, _ = decide_post_install(install_paths, {}, {})
             logger.warning(f"未找到 {game_version} 的安装路径，跳过哈希校验")
-            self.main_window.installed_status[game_version] = True
-            
+            self.main_window.installed_status[game_version] = verdict is Verdict.PASSED
+
             # 添加到已安装游戏列表
             if game_version not in self.installed_games:
                 self.installed_games.append(game_version)
-                
+
             # 关闭安装进度窗口
             self.main_window.close_hash_msg_box()
-                
+
             # 继续下一个任务
             self.process_next_offline_install_task(install_tasks)
             return

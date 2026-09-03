@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QMessageBox
 from utils.logger import setup_logger
 from config.config import APP_NAME
 from utils import msgbox_frame
+from core.uninstall_plan import derive_uninstall_plan
 
 class PatchManager:
     """补丁管理器，用于处理补丁的安装和卸载"""
@@ -106,169 +107,19 @@ class PatchManager:
             return False if not silent else {"success": False, "message": error_msg, "files_removed": 0}
         
         try:
+            plan = derive_uninstall_plan(game_dir, self.game_info, game_version)
+
             files_removed = 0
-            
-            # 获取可能的补丁文件路径
-            install_path_base = os.path.basename(self.game_info[game_version]["install_path"])
-            patch_file_path = os.path.join(game_dir, install_path_base)
-            
-            if debug_mode:
-                self.logger.debug(f"DEBUG: 基础补丁文件路径: {patch_file_path}")
-            
-            # 尝试查找补丁文件，支持不同大小写
-            patch_files_to_check = [
-                patch_file_path,
-                patch_file_path.lower(),
-                patch_file_path.upper(),
-                patch_file_path.replace("_", ""),
-                patch_file_path.replace("_", "-"),
-            ]
-            
-            if debug_mode:
-                self.logger.debug(f"DEBUG: 查找以下可能的补丁文件路径: {patch_files_to_check}")
-            
-            # 查找并删除补丁文件，包括启用和禁用的
-            patch_file_found = False
-            for patch_path in patch_files_to_check:
-                # 检查常规补丁文件
-                if os.path.exists(patch_path):
-                    patch_file_found = True
-                    if debug_mode:
-                        self.logger.debug(f"DEBUG: 找到补丁文件: {patch_path}，准备删除")
-                    self.logger.debug(f"删除补丁文件: {patch_path}")
-                    
-                    os.remove(patch_path)
+            for path in plan.files:
+                if os.path.exists(path):
+                    self.logger.debug(f"删除文件: {path}")
+                    os.remove(path)
                     files_removed += 1
-                    if debug_mode:
-                        self.logger.debug(f"DEBUG: 已删除补丁文件: {patch_path}")
-                
-                # 检查被禁用的补丁文件（带.fain后缀）
-                disabled_path = f"{patch_path}.fain"
-                if os.path.exists(disabled_path):
-                    patch_file_found = True
-                    if debug_mode:
-                        self.logger.debug(f"DEBUG: 找到被禁用的补丁文件: {disabled_path}，准备删除")
-                    self.logger.debug(f"删除被禁用的补丁文件: {disabled_path}")
-                    
-                    os.remove(disabled_path)
+            for path in plan.dirs:
+                if os.path.exists(path):
+                    self.logger.debug(f"删除目录: {path}")
+                    shutil.rmtree(path)
                     files_removed += 1
-                    if debug_mode:
-                        self.logger.debug(f"DEBUG: 已删除被禁用的补丁文件: {disabled_path}")
-            
-            if not patch_file_found:
-                if debug_mode:
-                    self.logger.debug(f"DEBUG: 未找到补丁文件，检查了以下路径: {patch_files_to_check}")
-                    self.logger.debug(f"DEBUG: 也检查了禁用的补丁文件（.fain后缀）")
-                self.logger.warning(f"未找到 {game_version} 的补丁文件")
-                
-            # 检查是否有额外的签名文件 (.sig)
-            if game_version == "NEKOPARA After":
-                if debug_mode:
-                    self.logger.debug(f"DEBUG: {game_version} 需要检查额外的签名文件")
-                
-                for patch_path in patch_files_to_check:
-                    # 检查常规签名文件
-                    sig_file_path = f"{patch_path}.sig"
-                    if os.path.exists(sig_file_path):
-                        if debug_mode:
-                            self.logger.debug(f"DEBUG: 找到签名文件: {sig_file_path}，准备删除")
-                        self.logger.debug(f"删除签名文件: {sig_file_path}")
-                        
-                        os.remove(sig_file_path)
-                        files_removed += 1
-                        if debug_mode:
-                            self.logger.debug(f"DEBUG: 已删除签名文件: {sig_file_path}")
-                    
-                    # 检查被禁用补丁的签名文件
-                    disabled_sig_path = f"{patch_path}.fain.sig"
-                    if os.path.exists(disabled_sig_path):
-                        if debug_mode:
-                            self.logger.debug(f"DEBUG: 找到被禁用补丁的签名文件: {disabled_sig_path}，准备删除")
-                        self.logger.debug(f"删除被禁用补丁的签名文件: {disabled_sig_path}")
-                        
-                        os.remove(disabled_sig_path)
-                        files_removed += 1
-                        if debug_mode:
-                            self.logger.debug(f"DEBUG: 已删除被禁用补丁的签名文件: {disabled_sig_path}")
-            
-            # 删除patch文件夹
-            if debug_mode:
-                self.logger.debug(f"DEBUG: 检查并删除patch文件夹")
-                
-            patch_folders_to_check = [
-                os.path.join(game_dir, "patch"),
-                os.path.join(game_dir, "Patch"),
-                os.path.join(game_dir, "PATCH"),
-            ]
-            
-            for patch_folder in patch_folders_to_check:
-                if os.path.exists(patch_folder):
-                    if debug_mode:
-                        self.logger.debug(f"DEBUG: 找到补丁文件夹: {patch_folder}，准备删除")
-                    self.logger.debug(f"删除补丁文件夹: {patch_folder}")
-                    
-                    import shutil
-                    shutil.rmtree(patch_folder)
-                    files_removed += 1
-                    if debug_mode:
-                        self.logger.debug(f"DEBUG: 已删除补丁文件夹: {patch_folder}")
-            
-            # 删除game/patch文件夹
-            if debug_mode:
-                self.logger.debug(f"DEBUG: 检查并删除game/patch文件夹")
-                
-            game_folders = ["game", "Game", "GAME"]
-            patch_folders = ["patch", "Patch", "PATCH"]
-            
-            for game_folder in game_folders:
-                for patch_folder in patch_folders:
-                    game_patch_folder = os.path.join(game_dir, game_folder, patch_folder)
-                    if os.path.exists(game_patch_folder):
-                        if debug_mode:
-                            self.logger.debug(f"DEBUG: 找到game/patch文件夹: {game_patch_folder}，准备删除")
-                        self.logger.debug(f"删除game/patch文件夹: {game_patch_folder}")
-                        
-                        import shutil
-                        shutil.rmtree(game_patch_folder)
-                        files_removed += 1
-                        if debug_mode:
-                            self.logger.debug(f"DEBUG: 已删除game/patch文件夹: {game_patch_folder}")
-            
-            # 删除配置文件
-            if debug_mode:
-                self.logger.debug(f"DEBUG: 检查并删除配置文件和脚本文件")
-                
-            config_files = ["config.json", "Config.json", "CONFIG.JSON"]
-            script_files = ["scripts.json", "Scripts.json", "SCRIPTS.JSON"]
-            
-            for game_folder in game_folders:
-                game_path = os.path.join(game_dir, game_folder)
-                if os.path.exists(game_path):
-                    # 删除配置文件
-                    for config_file in config_files:
-                        config_path = os.path.join(game_path, config_file)
-                        if os.path.exists(config_path):
-                            if debug_mode:
-                                self.logger.debug(f"DEBUG: 找到配置文件: {config_path}，准备删除")
-                            self.logger.debug(f"删除配置文件: {config_path}")
-                            
-                            os.remove(config_path)
-                            files_removed += 1
-                            if debug_mode:
-                                self.logger.debug(f"DEBUG: 已删除配置文件: {config_path}")
-                    
-                    # 删除脚本文件
-                    for script_file in script_files:
-                        script_path = os.path.join(game_path, script_file)
-                        if os.path.exists(script_path):
-                            if debug_mode:
-                                self.logger.debug(f"DEBUG: 找到脚本文件: {script_path}，准备删除")
-                            self.logger.debug(f"删除脚本文件: {script_path}")
-                            
-                            os.remove(script_path)
-                            files_removed += 1
-                            if debug_mode:
-                                self.logger.debug(f"DEBUG: 已删除脚本文件: {script_path}")
             
             # 更新安装状态
             self.installed_status[game_version] = False
