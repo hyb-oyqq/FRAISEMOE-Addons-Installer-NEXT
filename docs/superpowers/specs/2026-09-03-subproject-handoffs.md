@@ -85,15 +85,21 @@
 
 ### 标签注入仍未修复
 
-`.github/workflows/build-release.yml:31` 的 `$version = "${{ github.ref_name }}"` 仍是直接插值进 PowerShell。子项目 1 只在该行加了非法字符替换以修复 artifact 命名，**未**改用 `env:` 传值——注入问题属子项目 4 范围。
+工作流中 `$tag = "${{ github.ref_name }}"` 仍是直接插值进 PowerShell（上游重写后位于 `Get and validate version tag` 步骤内）。注入问题属子项目 4 范围。
+
+上游的纯数字 tag 校验（`$tag -match '^\d+(\.\d+)*$'`）**不构成防护**——该校验发生在插值**之后**，字符串已经被 PowerShell 解析过了。
 
 已实测确认 `git check-ref-format` 接受 `$(Get-Date)` 与 `v1.0";calc;"` 两种形式，前者在 PowerShell 双引号内会直接执行子表达式。
 
-### `workflow_dispatch` 的真实试跑从未执行
+### 「手动试跑不发版」的能力需要重做
 
-子项目 1 只做了 YAML 静态验证。真实手动触发需要把分支推送到公开仓库，超出当时的授权范围。
+子项目 1 的 Task 10 曾加过 `workflow_dispatch` 触发器，但合入 master 时与上游 `addd028` 的工作流重写冲突，**已按用户决定整体放弃**。
 
-已知的一个边界：手动触发时若从下拉框选择 **tag** 而非分支，`github.ref` 仍为 `refs/tags/*`，release 步骤仍会执行——这是该场景下用户主动选择的语义，非缺陷。
+上游新版把每个步骤都门控在 `if: steps.get_tag.outputs.VALID == 'true'` 上，而 `VALID` 只在 tag 为纯数字时为真。因此单纯加回 `workflow_dispatch` 是无效的——手动从分支触发时 `github.ref_name` 是分支名，校验不通过，后续步骤全部跳过，跑了等于没跑。
+
+要恢复该能力，需要改动上游的校验逻辑本身：手动触发时跳过纯数字校验，但仍跳过 release 步骤。这是对发布管道的设计改动，请与仓库维护者确认后再做。
+
+该能力原本是 spec §12 用来兜「依赖拆分漏包」风险的机制，目前该风险无自动化兜底。
 
 ---
 
